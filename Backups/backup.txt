@@ -1,0 +1,340 @@
+let dados = {};
+let mesesDOM = [];
+let chart;
+
+const nomesMeses = [
+  "JAN","FEV","MAR","ABR","MAI","JUN",
+  "JUL","AGO","SET","OUT","NOV","DEZ"
+];
+
+const nomesMesesFull = [
+  "Janeiro","Fevereiro","Março","Abril","Maio","Junho",
+  "Julho","Agosto","Setembro","Outubro","Novembro","Dezembro"
+];
+
+const seletorAno = document.getElementById("ano");
+const areaAno = document.getElementById("areaAno");
+
+// ---------------- SAVE ----------------
+function salvarDados() {
+  localStorage.setItem("financas", JSON.stringify(dados));
+}
+
+function carregarDados() {
+  const salvo = localStorage.getItem("financas");
+  if (salvo) dados = JSON.parse(salvo);
+}
+
+// ---------------- EXPORT / IMPORT ----------------
+function exportarAno() {
+  const ano = seletorAno.value;
+  const conteudo = JSON.stringify(dados[ano], null, 2);
+
+  const blob = new Blob([conteudo], { type: "text/plain" });
+  const url = URL.createObjectURL(blob);
+
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `financas_${ano}.txt`;
+  a.click();
+
+  URL.revokeObjectURL(url);
+}
+
+function importarAno(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+
+  const reader = new FileReader();
+
+  reader.onload = function(e) {
+    try {
+      const ano = seletorAno.value;
+      dados[ano] = JSON.parse(e.target.result);
+      salvarDados();
+      carregarAno();
+    } catch {
+      alert("Arquivo inválido");
+    }
+  };
+
+  reader.readAsText(file);
+}
+
+// ---------------- UTIL ----------------
+function formatar(valor) {
+  return (Number(valor) || 0).toLocaleString("pt-BR", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2
+  });
+}
+
+function parseValor(valor) {
+  if (!valor) return 0;
+  return Number(valor.replace(/\./g, "").replace(",", ".")) || 0;
+}
+
+// ---------------- INIT ----------------
+carregarDados();
+
+for (let ano = 2026; ano <= 2030; ano++) {
+  if (!dados[ano]) dados[ano] = { meses: [] };
+
+  const opt = document.createElement("option");
+  opt.value = ano;
+  opt.textContent = ano;
+  seletorAno.appendChild(opt);
+}
+
+seletorAno.addEventListener("change", carregarAno);
+carregarAno();
+
+// ---------------- UI ----------------
+function carregarAno() {
+  const ano = seletorAno.value;
+
+  areaAno.innerHTML = "";
+  mesesDOM = [];
+
+  const controls = document.createElement("div");
+
+  const btnExport = document.createElement("button");
+  btnExport.innerText = "EXPORTAR ANO";
+  btnExport.onclick = exportarAno;
+
+  const inputImport = document.createElement("input");
+  inputImport.type = "file";
+  inputImport.onchange = importarAno;
+
+  controls.append(btnExport, inputImport);
+  areaAno.appendChild(controls);
+
+  const btn = document.createElement("button");
+  btn.innerText = "+ ADICIONAR MÊS";
+  btn.onclick = () => adicionarMes(ano);
+  areaAno.appendChild(btn);
+
+  const container = document.createElement("div");
+  container.id = "containerMeses";
+  areaAno.appendChild(container);
+
+  const meses = dados[ano].meses;
+
+  for (let i = meses.length - 1; i >= 0; i--) {
+    criarMesDOM(ano, i, meses[i]);
+  }
+
+  atualizarTudo(ano);
+  atualizarGrafico(ano);
+}
+
+// ---------------- MESES ----------------
+function adicionarMes(ano) {
+  const novoMes = {
+    despesas: [],
+    empresa: [],
+    salario: 3902.29,
+    conta: 0
+  };
+
+  dados[ano].meses.push(novoMes);
+  salvarDados();
+  carregarAno();
+}
+
+// ---------------- DOM ----------------
+function criarMesDOM(ano, index, data) {
+  const mes = document.createElement("div");
+  mes.className = "mes";
+
+  mes.innerHTML = `
+    <h3>${nomesMesesFull[index]} ${ano}</h3>
+
+    <div class="container">
+      <div class="coluna despesas"></div>
+      <div class="coluna dinheiro"></div>
+    </div>
+
+    <div class="totalFinal">
+      TOTAL: R$ <span class="saldo">0,00</span>
+    </div>
+  `;
+
+  const colDesp = mes.querySelector(".despesas");
+  const colDin = mes.querySelector(".dinheiro");
+
+  colDesp.innerHTML = `
+    <h4>DESPESAS</h4>
+    <div class="lista"></div>
+    <button class="addDesp">+ ADICIONAR</button>
+    <p>Total: R$ <span class="totalDespesas">0,00</span></p>
+  `;
+
+  const listaDesp = colDesp.querySelector(".lista");
+  data.despesas.forEach(d => criarItem(listaDesp, d, "despesa"));
+
+  colDesp.querySelector(".addDesp").onclick = () => {
+    const novo = { nome: "", valor: 0, checked: false };
+    data.despesas.push(novo);
+    criarItem(listaDesp, novo, "despesa");
+    atualizarTudo(ano);
+  };
+
+  colDin.innerHTML = `
+    <h4>DINHEIROS</h4>
+    Salário: <input class="salario"><br><br>
+    Conta: <input class="conta"><br>
+
+    <h5>PLANETÁRIO</h5>
+    <div class="lista"></div>
+    <button class="addEmp">+ ADICIONAR</button>
+
+    <p>Total: R$ <span class="totalDinheiro">0,00</span></p>
+  `;
+
+  const listaEmp = colDin.querySelector(".lista");
+  data.empresa.forEach(d => criarItem(listaEmp, d, "empresa"));
+
+  colDin.querySelector(".addEmp").onclick = () => {
+    const novo = { nome: "", valor: 0, checked: false };
+    data.empresa.push(novo);
+    criarItem(listaEmp, novo, "empresa");
+    atualizarTudo(ano);
+  };
+
+  const salarioInput = colDin.querySelector(".salario");
+  const contaInput = colDin.querySelector(".conta");
+
+  salarioInput.value = formatar(data.salario);
+  contaInput.value = formatar(data.conta);
+
+  salarioInput.addEventListener("input", e => {
+    data.salario = parseValor(e.target.value);
+    atualizarTudo(seletorAno.value);
+  });
+
+  contaInput.addEventListener("input", e => {
+    data.conta = parseValor(e.target.value);
+    atualizarTudo(seletorAno.value);
+  });
+
+  salarioInput.addEventListener("blur", () => {
+    salarioInput.value = formatar(data.salario);
+  });
+
+  contaInput.addEventListener("blur", () => {
+    contaInput.value = formatar(data.conta);
+  });
+
+  document.getElementById("containerMeses").appendChild(mes);
+  mesesDOM.unshift(mes);
+}
+
+// ---------------- ITEMS ----------------
+function criarItem(lista, itemData, tipo) {
+  const div = document.createElement("div");
+
+  const check = document.createElement("input");
+  check.type = "checkbox";
+  check.checked = itemData.checked;
+
+  const nome = document.createElement("input");
+  nome.value = itemData.nome;
+
+  const valor = document.createElement("input");
+  valor.value = formatar(itemData.valor);
+
+  const remover = document.createElement("button");
+  remover.innerText = "x";
+
+  check.addEventListener("change", () => {
+    itemData.checked = check.checked;
+    atualizarTudo(seletorAno.value);
+  });
+
+  valor.addEventListener("input", e => {
+    itemData.valor = parseValor(e.target.value);
+    atualizarTudo(seletorAno.value);
+  });
+
+  valor.addEventListener("blur", () => {
+    valor.value = formatar(itemData.valor);
+  });
+
+  remover.onclick = () => {
+    const index = Array.from(lista.children).indexOf(div);
+    const ano = seletorAno.value;
+    const mesIndex = mesesDOM.indexOf(div.closest(".mes"));
+    const mesData = dados[ano].meses[mesIndex];
+
+    if (tipo === "despesa") mesData.despesas.splice(index, 1);
+    else mesData.empresa.splice(index, 1);
+
+    lista.removeChild(div);
+    atualizarTudo(ano);
+  };
+
+  div.append(check, nome, valor, remover);
+  lista.appendChild(div);
+}
+
+// ---------------- CÁLCULO (FIX FINAL) ----------------
+function atualizarTudo(ano) {
+  const mesesData = dados[ano].meses;
+
+  mesesData.forEach((data, i) => {
+    const mesDOM = mesesDOM[mesesData.length - 1 - i];
+
+    const totalDespesas = data.despesas
+      .filter(d => d.checked)
+      .reduce((acc, d) => acc + d.valor, 0);
+
+    const totalEmpresa = data.empresa
+      .filter(d => d.checked)
+      .reduce((acc, d) => acc + d.valor, 0);
+
+    const totalDinheiro =
+      (Number(data.salario) || 0) +
+      (Number(data.conta) || 0) +
+      totalEmpresa;
+
+    const saldo = totalDinheiro - totalDespesas;
+
+    // 🔥 GARANTE UPDATE VISUAL SEMPRE
+    const totalDespEl = mesDOM.querySelector(".totalDespesas");
+    const totalDinEl = mesDOM.querySelector(".totalDinheiro");
+    const saldoEl = mesDOM.querySelector(".saldo");
+
+    if (totalDespEl) totalDespEl.innerText = formatar(totalDespesas);
+    if (totalDinEl) totalDinEl.innerText = formatar(totalDinheiro);
+    if (saldoEl) saldoEl.innerText = formatar(saldo);
+  });
+
+  salvarDados();
+  atualizarGrafico(ano);
+}
+
+// ---------------- GRÁFICO ----------------
+function atualizarGrafico(ano) {
+  const meses = dados[ano].meses;
+
+  const valores = meses.map(m => {
+    const despesas = m.despesas.filter(d => d.checked).reduce((a,b)=>a+b.valor,0);
+    const empresa = m.empresa.filter(d => d.checked).reduce((a,b)=>a+b.valor,0);
+    return (m.salario + m.conta + empresa) - despesas;
+  });
+
+  const labels = meses.map((_, i) => nomesMeses[i]);
+
+  const options = {
+    chart: { type: 'bar', height: 350 },
+    series: [{ data: valores }],
+    xaxis: { categories: labels }
+  };
+
+  if (chart) chart.updateOptions(options);
+  else {
+    chart = new ApexCharts(document.querySelector("#grafico"), options);
+    chart.render();
+  }
+}

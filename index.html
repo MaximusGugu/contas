@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <title>Contas</title>
+  <script src="https://cdn.jsdelivr.net/npm/apexcharts"></script>
+  <link rel="stylesheet" href="style.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,100..1000;1,9..40,100..1000&display=swap" rel="stylesheet">
+</head>
+<body>
+
+<h1>CONTAS</h1>
+
+<select id="ano"></select>
+<button onclick="exportarAno()">EXPORTAR</button>
+<input type="file" onchange="importarAno(event)">
+
+<div id="grafico"></div>
+
+<hr>
+
+<div id="areaAno"></div>
+
+<script src="app.js"></script>
+</body>
+</html>

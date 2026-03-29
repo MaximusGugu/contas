@@ -1,0 +1,108 @@
+/* Fonte Google DM Sans */
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,100..1000;1,9..40,100..1000&display=swap');
+
+body {
+  font-family: 'DM Sans', sans-serif;
+  font-optical-sizing: auto;
+  font-weight: 400;
+  padding: 20px;
+  background: #f2f2f2;
+}
+
+#grafico {
+  margin: 20px 0;
+}
+
+.mes {
+  background: white;
+  border-radius: 15px;
+  margin-bottom: 20px;
+  position: relative;
+  overflow: hidden;
+  box-shadow: 0 4px 10px rgba(0,0,0,0.15);
+}
+
+.mesHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 20px;
+  cursor: pointer;
+  font-weight: 500;
+  font-size: 16px;
+  background: #eee;
+}
+
+.mesHeader span {
+  margin-right: 10px;
+}
+
+.removeMes {
+  color: white;
+  background: red;
+  border: none;
+  border-radius: 50%;
+  width: 22px;
+  height: 22px;
+  text-align: center;
+  line-height: 20px;
+  cursor: pointer;
+  font-weight: bold;
+}
+
+.mesBody {
+  padding: 20px;
+  transition: max-height 0.3s ease, padding 0.3s ease;
+}
+
+.mes.collapsed .mesBody {
+  max-height: 0;
+  padding: 0 20px;
+}
+
+.container {
+  display: flex;
+  gap: 20px;
+}
+
+.coluna {
+  flex:1;
+  background: #fafafa;
+  padding: 15px;
+  border-radius: 10px;
+}
+
+.item {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 5px;
+}
+
+.item button {
+  border-radius: 5px;
+  padding: 2px 6px;
+}
+
+.totalFinal {
+  text-align: center;
+  font-size: 20px;
+  margin-top: 20px;
+}
+
+.addMesBox {
+  display: flex;
+  justify-content: center;   /* centraliza horizontalmente */
+  padding: 15px;
+  margin-bottom: 20px;
+  border-radius: 50px;       /* cantos totalmente arredondados */
+}
+
+.addMesBox button {
+  padding: 10px 20px;
+  border: none;
+  border-radius: 50px;       /* cantos arredondados também no botão */
+  background: #007BFF;       /* azul */
+  color: white;              
+  font-weight: bold;
+  cursor: pointer;
+}
