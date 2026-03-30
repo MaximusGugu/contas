@@ -1,12 +1,23 @@
 /* Fonte Google DM Sans */
 @import url('https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,100..1000;1,9..40,100..1000&display=swap');
 
+/* CORES PLANETÁRIO */
+:root {
+  --P01: #D78341;
+  --P02: #FFF8E7;
+  --P03: #3C5558;
+  --P04: #586E5F;
+  --P05: #070504;
+  --P06: #191615;
+  --P07: #392B22;
+}
+
 body {
   font-family: 'DM Sans', sans-serif;
   font-optical-sizing: auto;
   font-weight: 400;
   padding: 20px;
-  background: #f2f2f2;
+  background: var(--P02);
     max-width: 1080px;  /* largura máxima */
   margin: auto;
 }
@@ -16,7 +27,7 @@ body {
 }
 
 .mes {
-  background: white;
+  background: var(--P04);
   border-radius: 15px;
   margin-bottom: 20px;
   position: relative;
@@ -32,11 +43,23 @@ body {
   cursor: pointer;
   font-weight: 500;
   font-size: 16px;
-  background: #eee;
+  background: var(--P01);
+  color: var(--P02)
 }
 
 .mesHeader span {
   margin-right: 10px;
+}
+
+/* CORES RESULTADO */
+.positivo {
+  color: #2ecc71; /* verde */
+  font-weight: bold;
+}
+
+.negativo {
+  color: #e74c3c; /* vermelho */
+  font-weight: bold;
 }
 
 .removeMes {
@@ -50,6 +73,22 @@ body {
   line-height: 20px;
   cursor: pointer;
   font-weight: bold;
+}
+
+.duplicarMes {
+  color: var(--P04);
+  background: var(--P02);
+  border: none;
+  border-radius: 50%;
+  width: 22px;
+  height: 22px;
+  cursor: pointer;
+  margin-right: 10px;
+}
+
+.duplicarMes svg {
+  width: 15px;
+  height: 15px;
 }
 
 .mesBody {
@@ -69,7 +108,7 @@ body {
 
 .coluna {
   flex:1;
-  background: #fafafa;
+  background: var(--P02);
   padding: 15px;
   border-radius: 10px;
 }
@@ -89,6 +128,7 @@ body {
   text-align: center;
   font-size: 20px;
   margin-top: 20px;
+  color: var(--P02)
 }
 
 .addMesBox {
@@ -103,8 +143,46 @@ body {
   padding: 10px 20px;
   border: none;
   border-radius: 50px;       /* cantos arredondados também no botão */
-  background: #007BFF;       /* azul */
+  background: var(--P03);       /* azul */
   color: white;              
   font-weight: bold;
   cursor: pointer;
+}
+
+.removeItem {
+  color: white;
+  background: var(--P01);
+  border: none;
+  border-radius: 50%;
+  width: 35px;
+  height: 35px;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  cursor: pointer;
+  font-weight: bold;
+  padding: 0;
+}
+
+/* INPUTS */
+
+.inputPadrao {
+  border: 2px solid transparent;
+  width: 15em;
+  height: 2.5em;
+  padding-left: 0.8em;
+  outline: none;
+  overflow: hidden;
+  background-color: #F3F3F3;
+  border-radius: 10px;
+  transition: all 0.5s;
+}
+
+.inputPadrao:hover,
+.inputPadrao:focus {
+  border: 2px solid var(--P04);
+  box-shadow: 0px 0px 0px 3px rgb(74, 157, 236, 20%);
+  background-color: white;
 }

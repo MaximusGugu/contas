@@ -176,7 +176,12 @@ function criarMesDOM(ano, index, data) {
   mesTotal.className = "mesTotal";
 
   const duplicarBtn = document.createElement("button");
-  duplicarBtn.innerText = "⧉";
+  duplicarBtn.className = "duplicarMes";
+  duplicarBtn.innerHTML = `
+  <svg viewBox="0 0 24 24" width="16" height="16">
+    <path d="M8 8h12v12H8zM4 4h12v2H6v10H4z"/>
+  </svg>
+`;
   duplicarBtn.title = "Duplicar mês";
   duplicarBtn.onclick = (e) => {
     e.stopPropagation();
@@ -189,6 +194,7 @@ function criarMesDOM(ano, index, data) {
   const removeBtn = document.createElement("button");
   removeBtn.className = "removeMes";
   removeBtn.innerText = "×";
+  removeBtn.title = "Remover mês";
   removeBtn.onclick = (e) => {
     e.stopPropagation();
     dados[ano].meses.splice(index,1);
@@ -211,7 +217,7 @@ function criarMesDOM(ano, index, data) {
       <div class="coluna despesas">
         <h4>DESPESAS</h4>
         <div class="listaDesp"></div>
-        <button class="addDesp">+</button>
+        <button class="addDesp" title="Adicionar">+</button>
         <button class="copyDesp" title="Copiar">📝</button>
         <button class="pasteDesp" title="Colar">📋</button>
         <p>Total: R$ <span class="totalDespesas">0,00</span></p>
@@ -300,6 +306,9 @@ function criarMesDOM(ano, index, data) {
   const sal = mesBody.querySelector(".salario");
   const con = mesBody.querySelector(".conta");
 
+  sal.classList.add("inputPadrao");
+  con.classList.add("inputPadrao");
+
   sal.value = formatar(data.salario);
   con.value = formatar(data.conta);
 
@@ -316,6 +325,9 @@ function criarItem(lista, d, dataArray) {
 
   div.innerHTML = `<input type="checkbox"><input class="nome"><input class="valor"><button>x</button>`;
   const [check,nome,valor,btn] = div.children;
+  btn.classList.add("removeItem");
+  nome.classList.add("inputPadrao");
+  valor.classList.add("inputPadrao");
 
   check.checked = d.checked;
   nome.value = d.nome;
@@ -340,20 +352,36 @@ function atualizarTudo(ano) {
   mesesDOM.forEach(({dom, index}) => {
     const data = dados[ano].meses[index];
 
-    let despesas = data.despesas.filter(d=>d.checked).reduce((a,b)=>a+b.valor,0);
-    let empresa = data.empresa?.filter(d=>d.checked).reduce((a,b)=>a+b.valor,0)||0;
+    let despesas = data.despesas
+      .filter(d => d.checked)
+      .reduce((a,b) => a + b.valor, 0);
+
+    let empresa = data.empresa?.filter(d => d.checked)
+      .reduce((a,b) => a + b.valor, 0) || 0;
+
     let dinheiro = data.salario + data.conta + empresa;
     let saldo = dinheiro - despesas;
 
+    // elementos
+    const totalDespesasEl = dom.querySelector(".totalDespesas");
+    const totalDinheiroEl = dom.querySelector(".totalDinheiro");
     const saldoEl = dom.querySelector(".saldo");
+    const mesTotalEl = dom.querySelector(".mesTotal");
 
-    dom.querySelector(".totalDespesas").textContent = formatar(despesas);
-    dom.querySelector(".totalDinheiro").textContent = formatar(dinheiro);
+    // valores
+    totalDespesasEl.textContent = formatar(despesas);
+    totalDinheiroEl.textContent = formatar(dinheiro);
     saldoEl.textContent = formatar(saldo);
-    dom.querySelector(".mesTotal").textContent = formatar(saldo);
+    mesTotalEl.textContent = formatar(saldo);
 
-    // 🔥 cor automática
-    saldoEl.style.color = saldo >= 0 ? "green" : "red";
+    // cores (positivo / negativo)
+if (saldo >= 0) {
+  saldoEl.classList.add("positivo");
+  saldoEl.classList.remove("negativo");
+} else {
+  saldoEl.classList.add("negativo");
+  saldoEl.classList.remove("positivo");
+}
   });
 
   salvarDados();
@@ -377,7 +405,8 @@ function atualizarGrafico(ano) {
     chart = new ApexCharts(document.querySelector("#grafico"), {
       chart: { type: "bar", height: 300 },
       series: [{ name: "Balanço", data: valores }],
-      xaxis: { categories: meses.map((_, i) => nomesMesesFull[i].slice(0,3).toUpperCase()) }
+      xaxis: { categories: meses.map((_, i) => nomesMesesFull[i].slice(0,3).toUpperCase()) },
+      colors: [getComputedStyle(document.documentElement).getPropertyValue('--P03')]
     });
     chart.render();
   }
