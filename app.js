@@ -208,9 +208,6 @@ function adicionarMes(ano) {
     despesas: [
       { nome: "Aluguel", valor: 0, checked: true },
       { nome: "Cartão de Crédito", valor: 0, checked: true },
-      { nome: "Vuon Card", valor: 0, checked: true },
-      { nome: "Fort", valor: 0, checked: true },
-      { nome: "Santander", valor: 0, checked: true },
       { nome: "Academia", valor: 0, checked: true }
     ],
     empresa: [],
