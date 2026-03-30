@@ -93,12 +93,30 @@ body {
 
 .mesBody {
   padding: 20px;
-  transition: max-height 0.3s ease, padding 0.3s ease;
+  overflow: hidden;
+   max-height: 1000px; /* valor alto suficiente */
+    opacity: 1;
+  transition:
+    max-height 0.5s cubic-bezier(0.4, 0, 0.2, 1),
+    padding 0.3s ease,
+    opacity 0.3s ease;
 }
 
 .mes.collapsed .mesBody {
   max-height: 0;
-  padding: 0 20px;
+  padding-top: 0;
+  padding-bottom: 0;
+  opacity: 0;  
+}
+
+.mes.collapsed .mesHeader {
+  opacity: 0.85;
+}
+
+.mes.collapsed .mesHeader:hover {
+  opacity: 1;
+  background: #c06d32;
+  transform: scale(1.01);
 }
 
 .container {
@@ -131,6 +149,28 @@ body {
 .rodapeColuna {
   margin: 10px 0 0 0; /* top right bottom left */
   font-weight: bold;
+}
+
+.topoColuna {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+.acoesTopo {
+  display: flex;
+  gap: 5px;
+}
+
+.acoesTopo button {
+  border: none;
+  background: var(--P01);
+  color: white;
+  border-radius: 6px;
+  padding: 4px 6px;
+  cursor: pointer;
+  font-size: 12px;
 }
 
 .item {
