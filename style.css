@@ -147,8 +147,16 @@ body {
 }
 
 .rodapeColuna {
-  margin: 10px 0 0 0; /* top right bottom left */
-  font-weight: bold;
+  margin: 10px 0 0 0;
+  padding: 10px;
+
+  background: var(--P03);
+  color: white;
+
+  border-radius: 8px;
+
+  display: flex;
+  justify-content: space-between; /* "Total" de um lado, valor do outro */
 }
 
 .topoColuna {
