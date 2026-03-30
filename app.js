@@ -2,7 +2,7 @@ let dados = {};
 let mesesDOM = [];
 let chart;
 
-// Variáveis temporárias para copiar/colar
+// copiar/colar
 let copiaDespesas = null;
 let copiaEmpresa = null;
 
@@ -24,9 +24,44 @@ function carregarDados() {
   if (salvo) dados = JSON.parse(salvo);
 }
 
-// ---------------- SAVE COLLAPSE STATE ----------------
+// ---------------- EXPORT ----------------
+function exportarAno() {
+  const ano = seletorAno.value;
+
+  const blob = new Blob(
+    [JSON.stringify(dados[ano], null, 2)],
+    { type: "application/json" }
+  );
+
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = `financas_${ano}.json`;
+  a.click();
+}
+
+// ---------------- IMPORT ----------------
+function importarAno(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+
+  const reader = new FileReader();
+
+  reader.onload = () => {
+    try {
+      dados[seletorAno.value] = JSON.parse(reader.result);
+      salvarDados();
+      carregarAno();
+    } catch {
+      alert("Arquivo inválido");
+    }
+  };
+
+  reader.readAsText(file);
+}
+
+// ---------------- COLLAPSE ----------------
 function salvarEstados() {
-  const estados = mesesDOM.map(({dom}, i) => dom.classList.contains("collapsed"));
+  const estados = mesesDOM.map(({dom}) => dom.classList.contains("collapsed"));
   localStorage.setItem("estadosAccordion", JSON.stringify(estados));
 }
 
@@ -34,32 +69,7 @@ function carregarEstados() {
   const estados = JSON.parse(localStorage.getItem("estadosAccordion")||"[]");
   mesesDOM.forEach(({dom}, i) => {
     if (estados[i]) dom.classList.add("collapsed");
-    else dom.classList.remove("collapsed");
   });
-}
-
-// ---------------- EXPORT ----------------
-function exportarAno() {
-  const ano = seletorAno.value;
-  const blob = new Blob([JSON.stringify(dados[ano])], {type:"text/plain"});
-  const a = document.createElement("a");
-  a.href = URL.createObjectURL(blob);
-  a.download = `ano_${ano}.txt`;
-  a.click();
-}
-
-// ---------------- IMPORT ----------------
-function importarAno(e) {
-  const file = e.target.files[0];
-  const reader = new FileReader();
-
-  reader.onload = () => {
-    dados[seletorAno.value] = JSON.parse(reader.result);
-    salvarDados();
-    carregarAno();
-  };
-
-  reader.readAsText(file);
 }
 
 // ---------------- UTIL ----------------
@@ -94,7 +104,6 @@ function carregarAno() {
   mesesDOM = [];
 
   const wrapper = document.createElement("div");
-  wrapper.id = "mainContent";
 
   const btnWrapper = document.createElement("div");
   btnWrapper.className = "addMesBox";
@@ -126,10 +135,11 @@ function carregarAno() {
 // ---------------- MES ----------------
 function adicionarMes(ano) {
   const meses = dados[ano].meses;
+
   const ultimoSaldo = meses.length
     ? ((meses[meses.length - 1].salario + meses[meses.length - 1].conta
-        + meses[meses.length - 1].empresa?.reduce((a,b)=>a+b.valor,0) || 0)
-        - meses[meses.length - 1].despesas?.reduce((a,b)=>a+b.valor,0) || 0)
+        + (meses[meses.length - 1].empresa?.reduce((a,b)=>a+b.valor,0)||0))
+        - (meses[meses.length - 1].despesas?.reduce((a,b)=>a+b.valor,0)||0))
     : 0;
 
   dados[ano].meses.push({
@@ -159,14 +169,22 @@ function criarMesDOM(ano, index, data) {
 
   const mesHeader = document.createElement("div");
   mesHeader.className = "mesHeader";
-  mesHeader.innerHTML = `<span class="mesNome">${nomesMesesFull[index]} ${ano}</span>`;
 
   const headerRight = document.createElement("div");
-  headerRight.className = "headerRight";
 
   const mesTotal = document.createElement("span");
   mesTotal.className = "mesTotal";
-  mesTotal.innerText = "R$ 0,00";
+
+  const duplicarBtn = document.createElement("button");
+  duplicarBtn.innerText = "⧉";
+  duplicarBtn.title = "Duplicar mês";
+  duplicarBtn.onclick = (e) => {
+    e.stopPropagation();
+    const copia = JSON.parse(JSON.stringify(data));
+    dados[ano].meses.splice(index+1, 0, copia);
+    salvarDados();
+    carregarAno();
+  };
 
   const removeBtn = document.createElement("button");
   removeBtn.className = "removeMes";
@@ -179,19 +197,23 @@ function criarMesDOM(ano, index, data) {
   };
 
   headerRight.appendChild(mesTotal);
+  headerRight.appendChild(duplicarBtn);
   headerRight.appendChild(removeBtn);
+
+  mesHeader.innerHTML = `<span>${nomesMesesFull[index]} ${ano}</span>`;
   mesHeader.appendChild(headerRight);
 
   const mesBody = document.createElement("div");
   mesBody.className = "mesBody";
+
   mesBody.innerHTML = `
     <div class="container">
       <div class="coluna despesas">
         <h4>DESPESAS</h4>
         <div class="listaDesp"></div>
         <button class="addDesp">+</button>
-        <button class="copyDesp">📝</button>
-        <button class="pasteDesp">📋</button>
+        <button class="copyDesp" title="Copiar">📝</button>
+        <button class="pasteDesp" title="Colar">📋</button>
         <p>Total: R$ <span class="totalDespesas">0,00</span></p>
       </div>
 
@@ -203,8 +225,8 @@ function criarMesDOM(ano, index, data) {
         <h5>PLANETÁRIO</h5>
         <div class="listaEmp"></div>
         <button class="addEmp">+</button>
-        <button class="copyEmp">📝</button>
-        <button class="pasteEmp">📋</button>
+        <button class="copyEmp" title="Copiar">📝</button>
+        <button class="pasteEmp" title="Colar">📋</button>
 
         <p>Total: R$ <span class="totalDinheiro">0,00</span></p>
       </div>
@@ -226,27 +248,51 @@ function criarMesDOM(ano, index, data) {
   const listaDesp = mesBody.querySelector(".listaDesp");
   const listaEmp = mesBody.querySelector(".listaEmp");
 
-  data.despesas.forEach(d => criarItem(listaDesp, d, data.despesas));
-  data.empresa?.forEach(d => criarItem(listaEmp, d, data.empresa));
+  function renderList(lista, arr) {
+    lista.innerHTML = "";
+    arr.forEach(d => criarItem(lista, d, arr));
+  }
 
-  // copiar/colar despesas
-  mesBody.querySelector(".copyDesp").onclick = () => { copiaDespesas = JSON.parse(JSON.stringify(data.despesas)); };
+  renderList(listaDesp, data.despesas);
+  renderList(listaEmp, data.empresa);
+
+  // adicionar
+  mesBody.querySelector(".addDesp").onclick = () => {
+    const novo = {nome:"",valor:0,checked:false};
+    data.despesas.push(novo);
+    renderList(listaDesp, data.despesas);
+    atualizarTudo(ano);
+  };
+
+  mesBody.querySelector(".addEmp").onclick = () => {
+    const novo = {nome:"",valor:0,checked:false};
+    data.empresa.push(novo);
+    renderList(listaEmp, data.empresa);
+    atualizarTudo(ano);
+  };
+
+  // copiar
+  mesBody.querySelector(".copyDesp").onclick = () => {
+    copiaDespesas = JSON.parse(JSON.stringify(data.despesas));
+  };
+
+  mesBody.querySelector(".copyEmp").onclick = () => {
+    copiaEmpresa = JSON.parse(JSON.stringify(data.empresa));
+  };
+
+  // colar (SUBSTITUI)
   mesBody.querySelector(".pasteDesp").onclick = () => {
-    if(copiaDespesas) {
-      copiaDespesas.forEach(d => {
-        const novo = {...d}; data.despesas.push(novo); criarItem(listaDesp, novo, data.despesas);
-      });
+    if(copiaDespesas){
+      data.despesas = JSON.parse(JSON.stringify(copiaDespesas));
+      renderList(listaDesp, data.despesas);
       atualizarTudo(ano);
     }
   };
 
-  // copiar/colar empresa
-  mesBody.querySelector(".copyEmp").onclick = () => { copiaEmpresa = JSON.parse(JSON.stringify(data.empresa)); };
   mesBody.querySelector(".pasteEmp").onclick = () => {
-    if(copiaEmpresa) {
-      copiaEmpresa.forEach(d => {
-        const novo = {...d}; data.empresa.push(novo); criarItem(listaEmp, novo, data.empresa);
-      });
+    if(copiaEmpresa){
+      data.empresa = JSON.parse(JSON.stringify(copiaEmpresa));
+      renderList(listaEmp, data.empresa);
       atualizarTudo(ano);
     }
   };
@@ -279,7 +325,7 @@ function criarItem(lista, d, dataArray) {
   nome.oninput = () => d.nome = nome.value;
   valor.oninput = e => { d.valor = parseValor(e.target.value); atualizarTudo(seletorAno.value); };
 
-  btn.onclick = () => { 
+  btn.onclick = () => {
     const index = dataArray.indexOf(d);
     if(index > -1) dataArray.splice(index,1);
     lista.removeChild(div);
@@ -299,10 +345,15 @@ function atualizarTudo(ano) {
     let dinheiro = data.salario + data.conta + empresa;
     let saldo = dinheiro - despesas;
 
+    const saldoEl = dom.querySelector(".saldo");
+
     dom.querySelector(".totalDespesas").textContent = formatar(despesas);
     dom.querySelector(".totalDinheiro").textContent = formatar(dinheiro);
-    dom.querySelector(".saldo").textContent = formatar(saldo);
+    saldoEl.textContent = formatar(saldo);
     dom.querySelector(".mesTotal").textContent = formatar(saldo);
+
+    // 🔥 cor automática
+    saldoEl.style.color = saldo >= 0 ? "green" : "red";
   });
 
   salvarDados();
@@ -320,8 +371,9 @@ function atualizarGrafico(ano) {
     return Number(((m.salario + m.conta + empresa) - despesas).toFixed(2));
   });
 
-  if (chart) chart.updateSeries([{ name: "Balanço", data: valores }]);
-  else {
+  if (chart) {
+    chart.updateSeries([{ name: "Balanço", data: valores }]);
+  } else {
     chart = new ApexCharts(document.querySelector("#grafico"), {
       chart: { type: "bar", height: 300 },
       series: [{ name: "Balanço", data: valores }],
