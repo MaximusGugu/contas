@@ -104,13 +104,33 @@ body {
 .container {
   display: flex;
   gap: 20px;
+  align-items: stretch; /* garante mesma altura */
 }
 
 .coluna {
   flex:1;
+  min-width: 0;
   background: var(--P02);
   padding: 15px;
   border-radius: 10px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  min-height: 100px; /* pode ajustar */
+}
+
+.coluna h4 {
+  margin-top: 0;
+  margin-bottom: 10px; /* ajusta como quiser */
+}
+
+.conteudoColuna {
+  flex: 1;
+}
+
+.rodapeColuna {
+  margin: 10px 0 0 0; /* top right bottom left */
+  font-weight: bold;
 }
 
 .item {
@@ -185,4 +205,8 @@ body {
   border: 2px solid var(--P04);
   box-shadow: 0px 0px 0px 3px rgb(74, 157, 236, 20%);
   background-color: white;
+}
+
+.salario {
+  margin-bottom: 10px;
 }

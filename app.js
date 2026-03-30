@@ -215,27 +215,36 @@ function criarMesDOM(ano, index, data) {
   mesBody.innerHTML = `
     <div class="container">
       <div class="coluna despesas">
+        <div class="conteudoColuna">
         <h4>DESPESAS</h4>
         <div class="listaDesp"></div>
         <button class="addDesp" title="Adicionar">+</button>
         <button class="copyDesp" title="Copiar">📝</button>
         <button class="pasteDesp" title="Colar">📋</button>
-        <p>Total: R$ <span class="totalDespesas">0,00</span></p>
+        </div>
+        <p class="rodapeColuna">
+          Total: R$ <span class="totalDespesas">0,00</span>
+        </p>
       </div>
 
-      <div class="coluna dinheiro">
-        <h4>DINHEIROS</h4>
-        Salário: <input class="salario"><br>
-        Conta: <input class="conta"><br>
+    <div class="coluna dinheiro">
+      <h4>DINHEIROS</h4>
 
-        <h5>PLANETÁRIO</h5>
-        <div class="listaEmp"></div>
-        <button class="addEmp">+</button>
-        <button class="copyEmp" title="Copiar">📝</button>
-        <button class="pasteEmp" title="Colar">📋</button>
+      <div class="conteudoColuna">
+      Salário: <input class="salario"><br>
+      Conta: <input class="conta"><br>
 
-        <p>Total: R$ <span class="totalDinheiro">0,00</span></p>
-      </div>
+      <h5>PLANETÁRIO</h5>
+      <div class="listaEmp"></div>
+      <button class="addEmp">+</button>
+      <button class="copyEmp" title="Copiar">📝</button>
+      <button class="pasteEmp" title="Colar">📋</button>
+    </div>
+
+  <p class="rodapeColuna">
+    Total: R$ <span class="totalDinheiro">0,00</span>
+  </p>
+</div>
     </div>
 
     <div class="totalFinal">
