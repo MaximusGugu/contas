@@ -81,6 +81,17 @@ function parseValor(v) {
   return Number(v.replace(/\./g,"").replace(",", "."))||0;
 }
 
+const hoje = new Date();
+
+let mesAtual = hoje.getMonth() + 1; // próximo mês
+let anoAtual = hoje.getFullYear();
+
+// se passar de dezembro
+if (mesAtual > 11) {
+  mesAtual = 0;
+  anoAtual++;
+}
+
 // ---------------- INIT ----------------
 carregarDados();
 
@@ -127,7 +138,6 @@ function carregarAno() {
     mesesDOM.push({ dom: mesDOM, index: i });
   }
 
-  carregarEstados();
   atualizarTudo(ano);
   atualizarGrafico(ano);
 }
@@ -144,16 +154,15 @@ function adicionarMes(ano) {
 
   dados[ano].meses.push({
     despesas: [
-      { nome: "Aluguel", valor: 1519, checked: true },
-      { nome: "Crédito Nubank", valor: 0, checked: true },
-      { nome: "Crédito Planetário", valor: 0, checked: true },
-      { nome: "Fort", valor: 1000, checked: true },
-      { nome: "Santander", valor: 385.25, checked: true },
-      { nome: "DAS", valor: 81.90, checked: true },
-      { nome: "Academia", valor: 130, checked: true }
+      { nome: "Aluguel", valor: 0, checked: true },
+      { nome: "Cartão de Crédito", valor: 0, checked: true },
+      { nome: "Vuon Card", valor: 0, checked: true },
+      { nome: "Fort", valor: 0, checked: true },
+      { nome: "Santander", valor: 0, checked: true },
+      { nome: "Academia", valor: 0, checked: true }
     ],
     empresa: [],
-    salario: 3902.29,
+    salario: 0,
     conta: ultimoSaldo
   });
 
@@ -167,6 +176,14 @@ function criarMesDOM(ano, index, data) {
   const mes = document.createElement("div");
   mes.className = "mes";
 
+  // destaque + controle aberto/fechado
+  if (Number(ano) === anoAtual && index === mesAtual) {
+    mes.classList.add("mesAtual");
+    mes.classList.remove("collapsed"); // aberto
+  } else {
+    mes.classList.add("collapsed"); // fechado
+  }
+
   const mesHeader = document.createElement("div");
   mesHeader.className = "mesHeader";
 
@@ -178,11 +195,10 @@ function criarMesDOM(ano, index, data) {
   const duplicarBtn = document.createElement("button");
   duplicarBtn.className = "duplicarMes";
   duplicarBtn.innerHTML = `
-  <svg viewBox="0 0 24 24" width="16" height="16">
-    <path d="M8 8h12v12H8zM4 4h12v2H6v10H4z"/>
-  </svg>
-`;
-  duplicarBtn.title = "Duplicar mês";
+    <svg viewBox="0 0 24 24" width="16" height="16">
+      <path d="M8 8h12v12H8zM4 4h12v2H6v10H4z"/>
+    </svg>
+  `;
   duplicarBtn.onclick = (e) => {
     e.stopPropagation();
     const copia = JSON.parse(JSON.stringify(data));
@@ -194,7 +210,6 @@ function criarMesDOM(ano, index, data) {
   const removeBtn = document.createElement("button");
   removeBtn.className = "removeMes";
   removeBtn.innerText = "×";
-  removeBtn.title = "Remover mês";
   removeBtn.onclick = (e) => {
     e.stopPropagation();
     dados[ano].meses.splice(index,1);
@@ -219,18 +234,19 @@ function criarMesDOM(ano, index, data) {
     <div class="topoColuna">
       <h4>DESPESAS</h4>
       <div class="acoesTopo">
-        <button class="copyDesp" title="Copiar">📝</button>
-        <button class="pasteDesp" title="Colar">📋</button>
+        <button class="copyDesp">📝</button>
+        <button class="pasteDesp">📋</button>
       </div>
     </div>
 
     <div class="conteudoColuna">
       <div class="listaDesp"></div>
-      <button class="addDesp" title="Adicionar">+</button>
+      <button class="addDesp">+</button>
     </div>
 
     <p class="rodapeColuna">
-      Total: R$ <span class="totalDespesas">0,00</span>
+      <span>Total:</span>
+      <span class="valorTotal">R$ <span class="totalDespesas">0,00</span></span>
     </p>
   </div>
 
@@ -239,8 +255,8 @@ function criarMesDOM(ano, index, data) {
     <div class="topoColuna">
       <h4>DINHEIROS</h4>
       <div class="acoesTopo">
-        <button class="copyEmp" title="Copiar">📝</button>
-        <button class="pasteEmp" title="Colar">📋</button>
+        <button class="copyEmp">📝</button>
+        <button class="pasteEmp">📋</button>
       </div>
     </div>
 
@@ -254,15 +270,15 @@ function criarMesDOM(ano, index, data) {
     </div>
 
     <p class="rodapeColuna">
-      Total: R$ <span class="totalDinheiro">0,00</span>
+      <span>Total:</span>
+      <span class="valorTotal">R$ <span class="totalDinheiro">0,00</span></span>
     </p>
   </div>
 </div>
-    </div>
 
-    <div class="totalFinal">
-      TOTAL: R$ <span class="saldo">0,00</span>
-    </div>
+<div class="totalFinal">
+  TOTAL: R$ <span class="saldo">0,00</span>
+</div>
   `;
 
   mes.appendChild(mesHeader);
@@ -270,7 +286,6 @@ function criarMesDOM(ano, index, data) {
 
   mesHeader.onclick = () => {
     mes.classList.toggle("collapsed");
-    salvarEstados();
   };
 
   const listaDesp = mesBody.querySelector(".listaDesp");
@@ -308,7 +323,7 @@ function criarMesDOM(ano, index, data) {
     copiaEmpresa = JSON.parse(JSON.stringify(data.empresa));
   };
 
-  // colar (SUBSTITUI)
+  // colar
   mesBody.querySelector(".pasteDesp").onclick = () => {
     if(copiaDespesas){
       data.despesas = JSON.parse(JSON.stringify(copiaDespesas));

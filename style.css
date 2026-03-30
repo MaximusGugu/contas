@@ -119,6 +119,11 @@ body {
   transform: scale(1.01);
 }
 
+.mesAtual {
+  border: 2px solid var(--P03);
+  box-shadow: 0 0 10px rgba(0,0,0,0.2);
+}
+
 .container {
   display: flex;
   gap: 20px;
@@ -157,6 +162,11 @@ body {
 
   display: flex;
   justify-content: space-between; /* "Total" de um lado, valor do outro */
+}
+
+.valorTotal {
+  display: flex;
+  gap: 4px; /* controla espaço entre R$ e número */
 }
 
 .topoColuna {
