@@ -74,11 +74,63 @@ function carregarEstados() {
 
 // ---------------- UTIL ----------------
 function formatar(v) {
-  return (Number(v)||0).toLocaleString("pt-BR",{minimumFractionDigits:2});
+  const numero = (Number(v) || 0).toLocaleString("pt-BR", {
+    minimumFractionDigits: 2
+  });
+
+  return "R$\u00A0" + numero;
 }
 
+/* FORMATA OS VALORES */
+
 function parseValor(v) {
-  return Number(v.replace(/\./g,"").replace(",", "."))||0;
+  if (!v) return 0;
+
+  // remove tudo que não for número ou vírgula
+  v = v.replace(/[^\d,]/g, "");
+
+  // se tiver mais de uma vírgula, mantém só a última
+  const partes = v.split(",");
+  if (partes.length > 2) {
+    v = partes.slice(0, -1).join("") + "," + partes[partes.length - 1];
+  }
+
+  return Number(v.replace(",", ".")) || 0;
+}
+
+function aplicarComportamentoInput(input, getValor, setValor, ano) {
+
+  let valorAnterior; // guarda valor antes do foco
+
+  // ao focar → guarda o valor atual e limpa o input
+  input.addEventListener("focus", () => {
+    valorAnterior = input.value; // salva valor atual
+    input.value = "";            // limpa para digitar
+  });
+
+  // ao sair OU apertar Enter → confirma
+  function confirmar() {
+    const valorDigitado = parseValor(input.value);
+
+    if (input.value.trim() === "") {
+      // se o usuário não digitou nada, volta o valor antigo
+      input.value = valorAnterior;
+    } else {
+      // se digitou algo, salva e formata
+      setValor(valorDigitado);
+      input.value = formatar(valorDigitado);
+    }
+
+    atualizarTudo(ano);
+  }
+
+  input.addEventListener("blur", confirmar);
+
+  input.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") {
+      input.blur(); // força o blur → chama confirmar
+    }
+  });
 }
 
 const hoje = new Date();
@@ -261,8 +313,17 @@ function criarMesDOM(ano, index, data) {
     </div>
 
     <div class="conteudoColuna">
-      Salário: <input class="salario"><br>
-      Conta: <input class="conta"><br>
+      <div class="linhaInputs">
+        <div class="campo">
+          <label>Salário</label>
+          <input class="salario">
+      </div>
+
+      <div class="campo">
+        <label>Conta</label>
+        <input class="conta">
+      </div>
+    </div>
 
       <h5>OUTROS</h5>
       <div class="listaEmp"></div>
@@ -300,19 +361,37 @@ function criarMesDOM(ano, index, data) {
   renderList(listaEmp, data.empresa);
 
   // adicionar
-  mesBody.querySelector(".addDesp").onclick = () => {
-    const novo = {nome:"",valor:0,checked:false};
-    data.despesas.push(novo);
-    renderList(listaDesp, data.despesas);
-    atualizarTudo(ano);
-  };
+mesBody.querySelector(".addDesp").onclick = () => {
+  const novo = {nome:"",valor:0,checked:true};
+  data.despesas.push(novo);
 
-  mesBody.querySelector(".addEmp").onclick = () => {
-    const novo = {nome:"",valor:0,checked:false};
-    data.empresa.push(novo);
-    renderList(listaEmp, data.empresa);
-    atualizarTudo(ano);
-  };
+  renderList(listaDesp, data.despesas);
+  atualizarTudo(ano);
+
+  // foco automático no último input de nome
+  const inputs = listaDesp.querySelectorAll(".nome");
+  const ultimo = inputs[inputs.length - 1];
+
+  if (ultimo) {
+    ultimo.focus();
+  }
+};
+
+mesBody.querySelector(".addEmp").onclick = () => {
+  const novo = {nome:"",valor:0,checked:true};
+  data.empresa.push(novo);
+
+  renderList(listaEmp, data.empresa);
+  atualizarTudo(ano);
+
+  // foco automático
+  const inputs = listaEmp.querySelectorAll(".nome");
+  const ultimo = inputs[inputs.length - 1];
+
+  if (ultimo) {
+    ultimo.focus();
+  }
+};
 
   // copiar
   mesBody.querySelector(".copyDesp").onclick = () => {
@@ -349,8 +428,19 @@ function criarMesDOM(ano, index, data) {
   sal.value = formatar(data.salario);
   con.value = formatar(data.conta);
 
-  sal.oninput = e => { data.salario = parseValor(e.target.value); atualizarTudo(ano); };
-  con.oninput = e => { data.conta = parseValor(e.target.value); atualizarTudo(ano); };
+  aplicarComportamentoInput(
+  sal,
+  () => data.salario,
+  (v) => data.salario = v,
+  ano
+  );
+
+aplicarComportamentoInput(
+  con,
+  () => data.conta,
+  (v) => data.conta = v,
+  ano
+  );
 
   return mes;
 }
@@ -360,7 +450,12 @@ function criarItem(lista, d, dataArray) {
   const div = document.createElement("div");
   div.className = "item";
 
-  div.innerHTML = `<input type="checkbox"><input class="nome"><input class="valor"><button>x</button>`;
+  div.innerHTML = `
+  <input type="checkbox">
+  <input class="nome" placeholder="Descrição">
+  <input class="valor" placeholder="0,00">
+  <button>x</button>
+`;
   const [check,nome,valor,btn] = div.children;
   btn.classList.add("removeItem");
   nome.classList.add("inputPadrao");
@@ -372,7 +467,12 @@ function criarItem(lista, d, dataArray) {
 
   check.onchange = () => { d.checked = check.checked; atualizarTudo(seletorAno.value); };
   nome.oninput = () => d.nome = nome.value;
-  valor.oninput = e => { d.valor = parseValor(e.target.value); atualizarTudo(seletorAno.value); };
+  aplicarComportamentoInput(
+  valor,
+  () => d.valor,
+  (v) => d.valor = v,
+  seletorAno.value
+);
 
   btn.onclick = () => {
     const index = dataArray.indexOf(d);
