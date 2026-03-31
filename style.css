@@ -202,6 +202,17 @@ body {
   gap: 4px;
 }
 
+.topo {
+  display: flex;
+  justify-content: space-between; /* separa esquerda/direita */
+  align-items: center;            /* alinha na vertical */
+  margin-bottom: 20px;
+}
+
+.topo h1 {
+  margin: 0;
+}
+
 .topoColuna {
   display: flex;
   justify-content: space-between;
@@ -251,13 +262,29 @@ body {
 }
 
 .addMesBox button {
-  padding: 10px 20px;
-  border: none;
-  border-radius: 50px;
-  background: var(--P03);
-  color: white;
-  font-weight: bold;
+  padding: 12.5px 30px;
+  border: 0;
+  border-radius: 100px;
+  background-color: var(--P03);
+  color: #ffffff;
+  font-weight: Bold;
+  transition: all 0.1s;
+  -webkit-transition: all 0.1s;
   cursor: pointer;
+}
+
+.addMesBox button:hover {
+  background-color: var(--P04);
+  box-shadow: 0 0 20px #6fc5ff50;
+  transform: scale(1.03);
+}
+
+.addMesBox button:active {
+  background-color: var(--P03);
+  transition: all 0.25s;
+  -webkit-transition: all 0.25s;
+  box-shadow: none;
+  transform: scale(0.98);
 }
 
 .removeItem {
@@ -383,6 +410,60 @@ body {
 
 .addDesp:hover {
   opacity: 0.85;
+}
+
+/* BOTÕES DE LOGIN */
+
+.btn {
+  padding: 10px 16px;
+  border: none;
+  border-radius: 8px;
+  background: #4CAF50;
+  color: white;
+  font-weight: bold;
+  cursor: pointer;
+  transition: 0.2s;
+}
+
+.btn:hover {
+  opacity: 0.85;
+}
+
+/* botão google */
+.btn.google {
+  padding: 12.5px 30px;
+  border: 0;
+  border-radius: 100px;
+  background-color: #2ba8fb;
+  color: #ffffff;
+  font-weight: Bold;
+  transition: all 0.1s;
+  -webkit-transition: all 0.1s;
+}
+
+.btn.google:hover {
+  background-color: #6fc5ff;
+  box-shadow: 0 0 20px #6fc5ff50;
+  transform: scale(1.03);
+}
+
+.btn.google:active {
+  background-color: #3d94cf;
+  transition: all 0.25s;
+  -webkit-transition: all 0.25s;
+  box-shadow: none;
+  transform: scale(0.98);
+}
+
+/* botão sair */
+.btn.sair {
+  background: #e53935;
+}
+
+#loginBox {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 10px;
 }
 
 /* MOBILE */

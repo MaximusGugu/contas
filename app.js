@@ -1,3 +1,93 @@
+// ================= FIREBASE =================
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+import { 
+  getAuth, 
+  signInWithEmailAndPassword, 
+  onAuthStateChanged,
+  GoogleAuthProvider, 
+  signInWithPopup,
+  signOut
+} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+
+import { 
+  getFirestore, 
+  doc, 
+  setDoc, 
+  getDoc 
+} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyBb12Oevy0LkVc876iCh-xYegQWfqCgC3I",
+  authDomain: "financas-mensais-96fb1.firebaseapp.com",
+  projectId: "financas-mensais-96fb1",
+  storageBucket: "financas-mensais-96fb1.firebasestorage.app",
+  messagingSenderId: "547572033284",
+  appId: "1:547572033284:web:e7d7cab9098b90579d1251"
+};
+
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getFirestore(app);
+
+const provider = new GoogleAuthProvider();
+
+let usuarioLogado = null;
+
+// ================= LOGIN =================
+window.loginFirebase = async function(email, senha){
+  try {
+    await signInWithEmailAndPassword(auth, email, senha);
+    alert("Logado!");
+  } catch(e){
+    alert(e.message);
+  }
+};
+
+// ================= LOGOUT =================
+window.logoutFirebase = async function(){
+  try {
+    await signOut(auth);
+
+    // limpa dados locais
+    dados = {};
+    parcelasMemoria = [];
+    localStorage.removeItem("financas");
+
+    // UI
+    document.getElementById("loginBox").style.display = "block";
+    document.getElementById("areaAno").innerHTML = "";
+    document.getElementById("grafico").innerHTML = "";
+
+    usuarioLogado = null;
+
+  } catch(e){
+    alert(e.message);
+  }
+};
+
+// ================= FIRESTORE =================
+async function salvarFirebase(){
+  if(!usuarioLogado) return;
+
+  await setDoc(doc(db, "financas", usuarioLogado.uid), {
+    dados,
+    parcelasMemoria
+  });
+}
+
+async function carregarFirebase(){
+  if(!usuarioLogado) return;
+
+  const ref = doc(db, "financas", usuarioLogado.uid);
+  const snap = await getDoc(ref);
+
+  if(snap.exists()){
+    const data = snap.data();
+    dados = data.dados || {};
+    parcelasMemoria = data.parcelasMemoria || [];
+  }
+}
+
 let dados = {};
 let mesesDOM = [];
 let chart;
@@ -64,6 +154,7 @@ function aplicarParcelas() {
 // ---------------- SAVE ----------------
 function salvarDados() {
   localStorage.setItem("financas", JSON.stringify(dados));
+  salvarFirebase(); // 🔥 ADICIONADO
 }
 
 function carregarDados() {
@@ -72,17 +163,40 @@ function carregarDados() {
 }
 
 // ---------------- EXPORT ----------------
+// Exportar apenas o ano selecionado
 function exportarAno() {
   const ano = seletorAno.value;
 
+  // Garante que sai sempre { "meses": [...] }
+  const exportObj = {
+    meses: dados[ano]?.meses || []
+  };
+
   const blob = new Blob(
-    [JSON.stringify(dados[ano], null, 2)],
+    [JSON.stringify(exportObj, null, 2)],
     { type: "application/json" }
   );
 
   const a = document.createElement("a");
   a.href = URL.createObjectURL(blob);
   a.download = `financas_${ano}.json`;
+  a.click();
+}
+
+function exportarTudo() {
+  const exportObj = {
+    dados: dados,
+    parcelasMemoria: parcelasMemoria
+  };
+
+  const blob = new Blob(
+    [JSON.stringify(exportObj, null, 2)],
+    { type: "application/json" }
+  );
+
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = `financas_backup.json`;
   a.click();
 }
 
@@ -93,18 +207,55 @@ function importarAno(e) {
 
   const reader = new FileReader();
 
-  reader.onload = () => {
+  reader.onload = async () => {
     try {
-      dados[seletorAno.value] = JSON.parse(reader.result);
-      salvarDados();
+      let importado = JSON.parse(reader.result);
+      const ano = seletorAno.value;
+
+      // BACKUP COMPLETO
+      if (importado.dados) {
+        dados = importado.dados;
+        parcelasMemoria = importado.parcelasMemoria || [];
+      } 
+      // ANO ÚNICO
+      else {
+        if (Array.isArray(importado)) {
+          importado = { meses: importado };
+        }
+
+        if (!importado.meses) {
+          throw new Error("Formato inválido");
+        }
+
+        dados[ano] = importado;
+      }
+
+      aplicarParcelas();
+
+      localStorage.setItem("financas", JSON.stringify(dados));
+
+      if (usuarioLogado) {
+        await setDoc(doc(db, "financas", usuarioLogado.uid), {
+          dados,
+          parcelasMemoria
+        });
+      }
+
       carregarAno();
-    } catch {
+
+      alert("Importado com sucesso!");
+
+    } catch (err) {
+      console.error(err);
       alert("Arquivo inválido");
     }
   };
 
   reader.readAsText(file);
 }
+
+// conecta o input à função de importação
+document.getElementById("inputImport").addEventListener("change", importarAno);
 
 // ---------------- COLLAPSE ----------------
 function salvarEstados() {
@@ -240,6 +391,28 @@ function carregarAno() {
   atualizarTudo(ano);
   atualizarGrafico(ano);
 }
+
+// ================= EXPORTAR TUDO =================
+document.getElementById("exportarTudoBtn").addEventListener("click", () => {
+  if (!dados || Object.keys(dados).length === 0) {
+    alert("Não há dados para exportar!");
+    return;
+  }
+
+  // Estrutura compatível com o import
+  const exportData = {
+    dados: dados, // mantém todos os anos
+    parcelasMemoria: parcelasMemoria
+  };
+
+  const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: "application/json" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = `financas_backup.json`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+});
 
 // ---------------- MES ----------------
 function adicionarMes(ano) {
@@ -638,3 +811,82 @@ function atualizarGrafico(ano) {
     chart.render();
   }
 }
+
+// LOGIN //
+
+window.fazerLogin = function() {
+  const email = document.getElementById("email").value;
+  const senha = document.getElementById("senha").value;
+
+  loginFirebase(email, senha);
+};
+
+// LOGIN COM GOOGLE
+window.loginGoogle = async function(){
+  try {
+    await signInWithPopup(auth, provider);
+  } catch(e){
+    alert(e.message);
+  }
+};
+
+// LOGOUT
+
+window.logoutFirebase = async function(){
+  try {
+    await signOut(auth);
+
+    // limpa dados locais
+    dados = {};
+    parcelasMemoria = [];
+    localStorage.removeItem("financas");
+
+    // mostra login de novo
+    document.getElementById("loginBox").style.display = "block";
+
+    // limpa tela
+    document.getElementById("areaAno").innerHTML = "";
+    document.getElementById("grafico").innerHTML = "";
+
+    usuarioLogado = null;
+
+  } catch(e){
+    alert(e.message);
+  }
+};
+
+// BOTÃO LOGOUT SUMIR //
+
+document.getElementById("logoutBtn").onclick = logoutFirebase;
+
+onAuthStateChanged(auth, async (user) => {
+  const logoutBtn = document.getElementById("logoutBtn");
+
+  if(user){
+    usuarioLogado = user;
+
+    console.log("LOGADO:", user.uid); // 👈 DEBUG
+
+    document.getElementById("loginBox").style.display = "none";
+    logoutBtn.style.display = "block";
+
+    dados = {};
+    parcelasMemoria = [];
+
+    await carregarFirebase();
+
+    console.log("DADOS FIREBASE:", dados); // 👈 DEBUG
+
+    salvarDados();
+    carregarAno();
+
+  } else {
+    console.log("DESLOGADO");
+
+    usuarioLogado = null;
+
+    document.getElementById("loginBox").style.display = "block";
+    logoutBtn.style.display = "none";
+  }
+});
+

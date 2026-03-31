@@ -11,11 +11,17 @@
 </head>
 <body>
 
-<h1>CONTAS MENSAIS</h1>
+<div class="topo">
+  <h1>CONTAS MENSAIS</h1>
+ <div id="loginBox"><button class="btn google" onclick="loginGoogle()">Login com Google</button></div>
+ <button id="logoutBtn" class="btn sair" style="display:none;">Sair</button>
+</div>
 
 <select id="ano"></select>
-<button onclick="exportarAno()">EXPORTAR</button>
-<input type="file" onchange="importarAno(event)">
+
+<button id="exportarTudoBtn">EXPORTAR TUDO</button>
+
+<input type="file" id="inputImport">
 
 <div id="grafico"></div>
 
@@ -23,7 +29,7 @@
 
 <div id="areaAno"></div>
 
-<script src="app.js"></script>
+<script type="module" src="app.js"></script>
 
 <footer class="siteFooter">
   <p>© 2026 <a href="https://www.behance.net/gustavojsantos">Gustavo Santos</a></p>
