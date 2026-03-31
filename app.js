@@ -1,6 +1,7 @@
 let dados = {};
 let mesesDOM = [];
 let chart;
+let parcelasMemoria = [];
 
 // copiar/colar
 let copiaDespesas = null;
@@ -13,6 +14,52 @@ const nomesMesesFull = [
 
 const seletorAno = document.getElementById("ano");
 const areaAno = document.getElementById("areaAno");
+
+// ---------------- PARCELAS -----------------
+
+function criarParcelamento(ano, mesIndex, nome, valorTotal, parcelas) {
+  const valorParcela = Number((valorTotal / parcelas).toFixed(2));
+
+  const pacote = {
+    id: Date.now(),
+    nome,
+    valorParcela,
+    parcelas,
+    inicio: mesIndex,
+    ano
+  };
+
+  parcelasMemoria.push(pacote);
+
+  aplicarParcelas();
+  salvarDados();
+}
+
+function aplicarParcelas() {
+  parcelasMemoria.forEach(p => {
+
+    const meses = dados[p.ano].meses;
+
+    for (let i = 0; i < p.parcelas; i++) {
+      const index = p.inicio + i;
+
+      if (!meses[index]) continue;
+
+      const nomeParcela = `${p.nome} [${i+1}/${p.parcelas}]`;
+
+      const jaExiste = meses[index].despesas.some(d => d.nome === nomeParcela);
+
+      if (!jaExiste) {
+        meses[index].despesas.push({
+          nome: nomeParcela,
+          valor: p.valorParcela,
+          checked: true,
+          parcelaId: p.id
+        });
+      }
+    }
+  });
+}
 
 // ---------------- SAVE ----------------
 function salvarDados() {
@@ -208,6 +255,9 @@ function adicionarMes(ano) {
     despesas: [
       { nome: "Aluguel", valor: 0, checked: true },
       { nome: "Cartão de Crédito", valor: 0, checked: true },
+      { nome: "Vuon Card", valor: 0, checked: true },
+      { nome: "Fort", valor: 0, checked: true },
+      { nome: "Santander", valor: 0, checked: true },
       { nome: "Academia", valor: 0, checked: true }
     ],
     empresa: [],
@@ -215,6 +265,7 @@ function adicionarMes(ano) {
     conta: ultimoSaldo
   });
 
+  aplicarParcelas();
   salvarDados();
   carregarAno();
 }
@@ -290,12 +341,15 @@ function criarMesDOM(ano, index, data) {
 
     <div class="conteudoColuna">
       <div class="listaDesp"></div>
-      <button class="addDesp">+</button>
+      <div class="acoesDesp">
+  <button class="addDesp">+ Despesa</button>
+  <button class="addParcela">+ Parcelamento</button>
+</div>
     </div>
 
     <p class="rodapeColuna">
       <span>Total:</span>
-      <span class="valorTotal">R$ <span class="totalDespesas">0,00</span></span>
+      <span class="valorTotal"><span class="totalDespesas">0,00</span></span>
     </p>
   </div>
 
@@ -329,7 +383,7 @@ function criarMesDOM(ano, index, data) {
 
     <p class="rodapeColuna">
       <span>Total:</span>
-      <span class="valorTotal">R$ <span class="totalDinheiro">0,00</span></span>
+      <span class="valorTotal"><span class="totalDinheiro">0,00</span></span>
     </p>
   </div>
 </div>
@@ -357,7 +411,7 @@ function criarMesDOM(ano, index, data) {
   renderList(listaDesp, data.despesas);
   renderList(listaEmp, data.empresa);
 
-  // adicionar
+// adicionar despesa normal
 mesBody.querySelector(".addDesp").onclick = () => {
   const novo = {nome:"",valor:0,checked:true};
   data.despesas.push(novo);
@@ -365,13 +419,36 @@ mesBody.querySelector(".addDesp").onclick = () => {
   renderList(listaDesp, data.despesas);
   atualizarTudo(ano);
 
-  // foco automático no último input de nome
   const inputs = listaDesp.querySelectorAll(".nome");
   const ultimo = inputs[inputs.length - 1];
 
-  if (ultimo) {
-    ultimo.focus();
+  if (ultimo) ultimo.focus();
+};
+
+// adicionar PARCELA
+mesBody.querySelector(".addParcela").onclick = () => {
+
+  const nome = prompt("Nome da despesa:");
+  if (!nome) return;
+
+  const valorInput = prompt("Valor total:");
+  if (!valorInput) return;
+
+  const parcelasInput = prompt("Número de parcelas:");
+  if (!parcelasInput) return;
+
+  const valor = parseValor(valorInput);
+  const parcelas = Number(parcelasInput);
+
+  if (!valor || !parcelas || parcelas <= 0) {
+    alert("Valores inválidos");
+    return;
   }
+
+  criarParcelamento(ano, index, nome, valor, parcelas);
+
+  salvarDados();
+  carregarAno();
 };
 
 mesBody.querySelector(".addEmp").onclick = () => {
@@ -471,14 +548,30 @@ function criarItem(lista, d, dataArray) {
   seletorAno.value
 );
 
-  btn.onclick = () => {
+btn.onclick = () => {
+
+  // se for parcela → remove todas
+  if (d.parcelaId) {
+
+    // remove da memória
+    parcelasMemoria = parcelasMemoria.filter(p => p.id !== d.parcelaId);
+
+    // remove de todos os meses
+    dados[seletorAno.value].meses.forEach(m => {
+      m.despesas = m.despesas.filter(x => x.parcelaId !== d.parcelaId);
+    });
+
+  } else {
+    // comportamento normal
     const index = dataArray.indexOf(d);
     if(index > -1) dataArray.splice(index,1);
-    lista.removeChild(div);
-    atualizarTudo(seletorAno.value);
-  };
+  }
 
-  lista.appendChild(div);
+  atualizarTudo(seletorAno.value);
+  carregarAno();
+};
+
+lista.appendChild(div);
 }
 
 // ---------------- CALCULO ----------------
