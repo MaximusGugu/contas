@@ -2,7 +2,7 @@
 <html lang="pt-BR">
 <head>
   <meta charset="UTF-8">
-  <title>Contas</title>
+  <title>Contas Mensais - Login</title>
   <script src="https://cdn.jsdelivr.net/npm/apexcharts"></script>
   <link rel="stylesheet" href="style.css">
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -11,29 +11,52 @@
 </head>
 <body>
 
-<div class="topo">
-  <h1>CONTAS MENSAIS</h1>
- <div id="loginBox"><button class="btn google" onclick="loginGoogle()">Login com Google</button></div>
- <button id="logoutBtn" class="btn sair" style="display:none;">Sair</button>
-</div>
+  <!-- TELA DE AUTENTICAÇÃO -->
+  <div id="authContainer" class="auth-wrapper">
+    <div class="auth-card">
+      <h1>CONTAS MENSAIS</h1>
+      <div class="auth-inputs">
+        <input type="email" id="email" placeholder="Email" class="inputPadrao">
+        <input type="password" id="senha" placeholder="Senha" class="inputPadrao">
+      </div>
+      
+      <div id="loginActions">
+        <button class="btn" id="loginBtn">ENTRAR</button>
+        <p class="auth-toggle">Não tem uma conta? <a href="#" id="showSignup">Cadastre-se</a></p>
+      </div>
 
-<select id="ano"></select>
+      <div id="signupActions" style="display: none;">
+        <button class="btn" id="cadastroBtn" style="background-color: var(--P01);">CRIAR CONTA</button>
+        <p class="auth-toggle">Já tem conta? <a href="#" id="showLogin">Fazer Login</a></p>
+      </div>
+    </div>
+  </div>
 
-<button id="exportarTudoBtn">EXPORTAR TUDO</button>
+  <!-- TELA DO APLICATIVO (ESCONDIDA POR PADRÃO) -->
+  <div id="appContainer" style="display: none;">
+    <div class="topo">
+      <h1>CONTAS MENSAIS</h1>
+      <button id="logoutBtn" class="btn sair">Sair</button>
+    </div>
 
-<input type="file" id="inputImport">
+    <div class="controles-topo">
+      <select id="ano" class="inputPadrao" style="width: auto;"></select>
+      <button id="exportarTudoBtn" class="btn-secundario">EXPORTAR JSON</button>
+      <label for="inputImport" class="btn-secundario">IMPORTAR JSON</label>
+      <input type="file" id="inputImport" style="display: none;">
+      <button id="salvarNuvemBtn" class="btn" style="background-color: var(--P03);">☁️ SALVAR NA NUVEM</button>
+    </div>
 
-<div id="grafico"></div>
+    <div id="grafico"></div>
+    <hr>
+    <div id="areaAno"></div>
+  </div>
 
-<hr>
+  <footer class="siteFooter">
+    <p>© 2026 <a href="https://www.behance.net/gustavojsantos">Gustavo Santos</a></p>
+  </footer>
 
-<div id="areaAno"></div>
-
-<script type="module" src="app.js"></script>
-
-<footer class="siteFooter">
-  <p>© 2026 <a href="https://www.behance.net/gustavojsantos">Gustavo Santos</a></p>
-</footer>
-
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
+  <script type="module" src="app.js"></script>
 </body>
 </html>

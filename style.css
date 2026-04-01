@@ -26,6 +26,7 @@ body {
   margin: 20px 0;
 }
 
+/* ================= ESTRUTURA DO MÊS ================= */
 .mes {
   background: var(--P03);
   border-radius: 15px;
@@ -47,58 +48,65 @@ body {
   color: var(--P02);
 }
 
+/* Container que segura o Total + Botões no lado direito */
+.mesHeader > div {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
 .mesHeader span {
-  margin-right: 10px;
+  margin-right: 5px;
 }
 
-/* CORES RESULTADO */
-.positivo {
-  color: #2ecc71;
-  font-weight: bold;
+/* ================= BOTÕES DO CABEÇALHO ================= */
+.removeMes, .duplicarMes {
+  width: 24px;
+  height: 24px;
+  border: none;
+  border-radius: 50%;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  margin: 0;
+  transition: transform 0.1s;
 }
 
-.negativo {
-  color: #e74c3c;
-  font-weight: bold;
+.removeMes:hover, .duplicarMes:hover {
+  transform: scale(1.1);
 }
 
 .removeMes {
   color: white;
-  background: red;
-  border: none;
-  border-radius: 50%;
-  width: 22px;
-  height: 22px;
-  text-align: center;
-  line-height: 20px;
-  cursor: pointer;
+  background: #e74c3c;
   font-weight: bold;
+  font-size: 14px;
+  line-height: 1;
 }
 
 .duplicarMes {
-  color: var(--P04);
   background: var(--P02);
-  border: none;
-  border-radius: 50%;
-  width: 22px;
-  height: 22px;
-  cursor: pointer;
-  margin-right: 10px;
+  color: var(--P04);
 }
 
 .duplicarMes svg {
-  width: 15px;
-  height: 15px;
+  width: 14px;
+  height: 14px;
+  display: block;
 }
 
+/* ================= ESTADOS (ABERTO/FECHADO) ================= */
 .mesBody {
   padding: 20px;
   overflow: hidden;
-  max-height: 1000px;
+  /* Reduzi para 1000px: quanto mais perto da altura real, mais rápida a resposta */
+  max-height: 1000px; 
   opacity: 1;
   transition:
-    max-height 0.5s cubic-bezier(0.4, 0, 0.2, 1),
-    padding 0.3s ease,
+    max-height 0.3s ease-in-out,
+    padding 0.4s ease-in-out,
     opacity 0.3s ease;
 }
 
@@ -106,7 +114,12 @@ body {
   max-height: 0;
   padding-top: 0;
   padding-bottom: 0;
-  opacity: 0;  
+  opacity: 0;
+  /* Mesma velocidade para fechar */
+  transition:
+    max-height 0.3s ease-in-out,
+    padding 0.4s ease-in-out,
+    opacity 0.2s ease;
 }
 
 .mes.collapsed .mesHeader {
@@ -116,44 +129,37 @@ body {
 .mes.collapsed .mesHeader:hover {
   opacity: 1;
   background: #c06d32;
-  transform: scale(1.01);
+  transform: scale(1.005);
 }
 
-/* MÊS ATUAL */
+/* ================= MÊS ATUAL ================= */
 .mesAtual {
   border: 2px solid var(--P03);
-  background-color: var(--P03); /* fechado → verde P03 */
+  background-color: var(--P03);
   box-shadow: 0 0 10px rgba(0,0,0,0.2);
 }
 
-/* Cabeçalho mês atual */
 .mesAtual .mesHeader {
-  background-color: var(--P01); /* aberto → laranja P01 */
+  background-color: var(--P01);
   color: var(--P02);
-  font-weight: bold; /* bold sempre */
+  font-weight: bold;
   transition: background 0.3s, color 0.3s;
 }
 
-/* Mês atual fechado */
 .mesAtual.collapsed {
-  background-color: var(--P03); /* verde */
-  border-color: var(--P03);
+  background-color: var(--P03);
 }
 
 .mesAtual.collapsed .mesHeader {
   background-color: var(--P03);
-  color: var(--P02);
-  font-weight: bold; /* bold sempre */
 }
 
-/* Hover do mês atual */
 .mesAtual .mesHeader:hover {
-  background-color: var(--P04); /* hover P04 */
-  color: var(--P02);
-  transform: scale(1.01);
+  background-color: var(--P04);
+  transform: scale(1.005);
 }
 
-/* OUTROS CSS EXISTENTES MANTIDOS */
+/* ================= CONTEÚDO E COLUNAS ================= */
 .container {
   display: flex;
   gap: 20px;
@@ -161,7 +167,7 @@ body {
 }
 
 .coluna {
-  flex:1;
+  flex: 1;
   min-width: 0;
   background: var(--P02);
   padding: 15px;
@@ -175,6 +181,7 @@ body {
 .coluna h4 {
   margin-top: 0;
   margin-bottom: 10px;
+  color: var(--P05);
 }
 
 .conteudoColuna {
@@ -191,26 +198,30 @@ body {
   justify-content: space-between;
 }
 
-.valor,
-.salario,
-.conta {
+.valor, .salario, .conta {
   text-align: right;
 }
 
-.valorTotal {
-  display: flex;
-  gap: 4px;
-}
+/* CORES RESULTADO */
+.positivo { color: #2ecc71; font-weight: bold; }
+.negativo { color: #e74c3c; font-weight: bold; }
 
+/* ================= CABEÇALHO TOPO ================= */
 .topo {
   display: flex;
-  justify-content: space-between; /* separa esquerda/direita */
-  align-items: center;            /* alinha na vertical */
+  justify-content: space-between;
+  align-items: center;
   margin-bottom: 20px;
 }
 
 .topo h1 {
   margin: 0;
+  color: var(--P03);
+}
+
+#loginBox {
+  display: flex;
+  gap: 10px;
 }
 
 .topoColuna {
@@ -235,15 +246,27 @@ body {
   font-size: 12px;
 }
 
+/* ================= ITENS DA LISTA ================= */
 .item {
   display: flex;
   gap: 10px;
   margin-bottom: 5px;
+  align-items: center;
 }
 
-.item button {
-  border-radius: 5px;
-  padding: 2px 6px;
+.removeItem {
+  color: white;
+  background: var(--P01);
+  border: none;
+  border-radius: 50%;
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-weight: bold;
+  flex-shrink: 0;
 }
 
 .totalFinal {
@@ -253,79 +276,22 @@ body {
   color: var(--P02);
 }
 
-.addMesBox {
-  display: flex;
-  justify-content: center;
-  padding: 15px;
-  margin-bottom: 20px;
-  border-radius: 50px;
-}
-
-.addMesBox button {
-  padding: 12.5px 30px;
-  border: 0;
-  border-radius: 100px;
-  background-color: var(--P03);
-  color: #ffffff;
-  font-weight: Bold;
-  transition: all 0.1s;
-  -webkit-transition: all 0.1s;
-  cursor: pointer;
-}
-
-.addMesBox button:hover {
-  background-color: var(--P04);
-  box-shadow: 0 0 20px #6fc5ff50;
-  transform: scale(1.03);
-}
-
-.addMesBox button:active {
-  background-color: var(--P03);
-  transition: all 0.25s;
-  -webkit-transition: all 0.25s;
-  box-shadow: none;
-  transform: scale(0.98);
-}
-
-.removeItem {
-  color: white;
-  background: var(--P01);
-  border: none;
-  border-radius: 50%;
-  width: 35px;
-  height: 35px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  font-weight: bold;
-  padding: 0;
-}
-
-/* INPUTS PADRÃO */
+/* ================= INPUTS PADRÃO ================= */
 .inputPadrao {
   border: 2px solid transparent;
   height: 2.5em;
   padding-left: 0.8em;
   outline: none;
-  overflow: hidden;
   background-color: #F8EED7;
   border-radius: 10px;
-  transition: all 0.5s;
+  transition: all 0.3s;
   box-sizing: border-box;
   width: 100%;
 }
 
-.inputPadrao:hover,
-.inputPadrao:focus {
+.inputPadrao:hover, .inputPadrao:focus {
   border: 2px solid var(--P04);
-  box-shadow: 0px 0px 0px 3px rgb(74, 157, 236, 20%);
   background-color: white;
-}
-
-.inputPadrao::placeholder {
-  color: #999;
-  opacity: 1;
 }
 
 .linhaInputs {
@@ -340,79 +306,90 @@ body {
   flex: 1;
 }
 
-.campo.salario {
-  flex: 2;
+.campo label {
+  font-size: 12px;
+  margin-bottom: 4px;
+  font-weight: bold;
+  color: var(--P03);
 }
 
-.campo.conta {
-  flex: 1;
+/* ================= BOTÕES GERAIS ================= */
+.addMesBox {
+  display: flex;
+  justify-content: center;
+  padding: 15px;
+  margin-bottom: 20px;
 }
 
-.salario,
-.conta {
-  text-align: right;
-}
-
-.siteFooter {
+.addMesBox button {
+  padding: 12px 30px;
+  border: 0;
+  border-radius: 100px;
   background-color: var(--P03);
-  color: var(--P02);
-  text-align: center;
-  padding: 15px 10px;
-  border-radius: 10px;
-  margin-top: 30px;
-  font-size: 14px;
-  font-weight: 500;
-  box-shadow: 0 -2px 5px rgba(0,0,0,0.1);
+  color: #ffffff;
+  font-weight: bold;
+  cursor: pointer;
+  transition: all 0.2s;
 }
 
-.siteFooter a,
-.siteFooter a:visited,
-.siteFooter a:active,
-.siteFooter a:hover {
-  color: var(--P02);
-  text-decoration: none;
-  font-weight: 500;
-  transition: color 0.3s;
-}
-
-.siteFooter a:hover {
-  color: #FFD783;
+.addMesBox button:hover {
+  background-color: var(--P04);
+  transform: scale(1.03);
 }
 
 .acoesDesp {
   display: flex;
   gap: 6px;
+  margin-top: 10px;
 }
 
-.addParcela {
-  font-size: 12px;
-  padding: 4px 8px;
+/* ================= BOTÕES DE ADIÇÃO (Despesa, Parcela, Outros) ================= */
+
+.addDesp, .addParcela, .addEmp {
+  font-size: 11px;
+  padding: 8px 12px;
   border-radius: 6px;
   border: none;
-  background: var(--P03);
+  background: var(--P03); /* Cor original verde P03 */
   color: white;
   cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: bold;
 }
 
-.addParcela:hover {
-  opacity: 0.85;
+/* Gap para o botão de 'Outros' (Dinheiros) */
+.addEmp {
+  margin-top: 10px;
+  width: 100%;
+  font-size: 18px;
+  height: 35px;
 }
 
-.addDesp {
-  font-size: 12px;
-  padding: 4px 8px;
-  border-radius: 6px;
-  border: none;
-  background: var(--P03);
-  color: white;
-  cursor: pointer;
+/* Hover unificado para os três botões */
+.addDesp:hover, 
+.addParcela:hover, 
+.addEmp:hover {
+  background-color: var(--P04) !important; /* Verde musgo */
+  color: white !important;
+  transform: scale(1.02);
+  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
 }
 
-.addDesp:hover {
-  opacity: 0.85;
+.addDesp:active, 
+.addParcela:active, 
+.addEmp:active {
+  transform: scale(0.98);
 }
 
-/* BOTÕES DE LOGIN */
+/* Ajuste no container de botões de despesa para não ficarem grudados */
+.acoesDesp {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+}
 
 .btn {
   padding: 10px 16px;
@@ -422,70 +399,115 @@ body {
   color: white;
   font-weight: bold;
   cursor: pointer;
-  transition: 0.2s;
 }
 
-.btn:hover {
-  opacity: 0.85;
+.btn.sair { background: #e53935; }
+
+/* ================= FOOTER ================= */
+.siteFooter {
+  background-color: var(--P03);
+  color: var(--P02);
+  text-align: center;
+  padding: 15px 10px;
+  border-radius: 10px;
+  margin-top: 30px;
+  font-size: 14px;
 }
 
-/* botão google */
-.btn.google {
-  padding: 12.5px 30px;
-  border: 0;
-  border-radius: 100px;
-  background-color: #2ba8fb;
-  color: #ffffff;
-  font-weight: Bold;
-  transition: all 0.1s;
-  -webkit-transition: all 0.1s;
-}
+.siteFooter a { color: var(--P02); text-decoration: none; }
 
-.btn.google:hover {
-  background-color: #6fc5ff;
-  box-shadow: 0 0 20px #6fc5ff50;
-  transform: scale(1.03);
-}
-
-.btn.google:active {
-  background-color: #3d94cf;
-  transition: all 0.25s;
-  -webkit-transition: all 0.25s;
-  box-shadow: none;
-  transform: scale(0.98);
-}
-
-/* botão sair */
-.btn.sair {
-  background: #e53935;
-}
-
-#loginBox {
-  display: flex;
-  gap: 10px;
-  margin-bottom: 10px;
-}
-
-/* MOBILE */
-
+/* ================= MOBILE ================= */
 @media (max-width: 768px) {
-
   .container {
-    display: flex;
     flex-direction: column;
-    gap: 12px;
-    width: 100%;
   }
-
-  .coluna {
-    width: 100%;
-    max-width: 100%;
-    box-sizing: border-box;
+  .topo {
+    flex-direction: column;
+    gap: 15px;
   }
-
-  .mesBody {
-    padding: 15px; /* reduz um pouco pra não estourar */
-  }
-
 }
 
+.controles-topo {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+  margin-bottom: 20px;
+}
+
+.btn-secundario {
+  padding: 8px 14px;
+  border: 2px solid var(--P03);
+  background: white;
+  color: var(--P03);
+  border-radius: 8px;
+  font-weight: bold;
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.btn-secundario:hover {
+  background: var(--P03);
+  color: white;
+}
+
+/* ESTILO DA TELA DE LOGIN */
+.auth-wrapper {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 80vh;
+}
+
+.auth-card {
+  background: var(--P03);
+  padding: 40px;
+  border-radius: 20px;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+  width: 100%;
+  max-width: 400px;
+  text-align: center;
+  color: var(--P02);
+}
+
+.auth-card h1 {
+  margin-bottom: 30px;
+  font-size: 28px;
+  color: var(--P01);
+}
+
+.auth-inputs {
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+  margin-bottom: 25px;
+}
+
+.auth-toggle {
+  margin-top: 20px;
+  font-size: 14px;
+  color: var(--P02);
+}
+
+.auth-toggle a {
+  color: var(--P01);
+  text-decoration: none;
+  font-weight: bold;
+}
+
+.auth-toggle a:hover {
+  text-decoration: underline;
+}
+
+/* BOTÃO DE LOGIN GRANDE */
+#loginBtn, #cadastroBtn {
+  width: 100%;
+  padding: 15px;
+  font-size: 16px;
+  letter-spacing: 1px;
+}
+
+/* AJUSTE NO FOOTER PARA NÃO FICAR COLADO */
+.siteFooter {
+  margin-top: 50px;
+}

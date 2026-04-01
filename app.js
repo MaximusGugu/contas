@@ -1,20 +1,10 @@
-// ================= FIREBASE =================
+// ================= CONFIGURAÇÃO FIREBASE =================
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import { 
-  getAuth, 
-  signInWithEmailAndPassword, 
-  onAuthStateChanged,
-  GoogleAuthProvider, 
-  signInWithPopup,
-  signOut
+  getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, 
+  onAuthStateChanged, signOut 
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
-
-import { 
-  getFirestore, 
-  doc, 
-  setDoc, 
-  getDoc 
-} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+import { getFirestore, doc, setDoc, getDoc } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
 const firebaseConfig = {
   apiKey: "AIzaSyBb12Oevy0LkVc876iCh-xYegQWfqCgC3I",
@@ -29,864 +19,441 @@ const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
 
-const provider = new GoogleAuthProvider();
-
+// ================= VARIÁVEIS GLOBAIS =================
 let usuarioLogado = null;
-
-// ================= LOGIN =================
-window.loginFirebase = async function(email, senha){
-  try {
-    await signInWithEmailAndPassword(auth, email, senha);
-    alert("Logado!");
-  } catch(e){
-    alert(e.message);
-  }
-};
-
-// ================= LOGOUT =================
-window.logoutFirebase = async function(){
-  try {
-    await signOut(auth);
-
-    // limpa dados locais
-    dados = {};
-    parcelasMemoria = [];
-    localStorage.removeItem("financas");
-
-    // UI
-    document.getElementById("loginBox").style.display = "block";
-    document.getElementById("areaAno").innerHTML = "";
-    document.getElementById("grafico").innerHTML = "";
-
-    usuarioLogado = null;
-
-  } catch(e){
-    alert(e.message);
-  }
-};
-
-// ================= FIRESTORE =================
-async function salvarFirebase(){
-  if(!usuarioLogado) return;
-
-  await setDoc(doc(db, "financas", usuarioLogado.uid), {
-    dados,
-    parcelasMemoria
-  });
-}
-
-async function carregarFirebase(){
-  if(!usuarioLogado) return;
-
-  const ref = doc(db, "financas", usuarioLogado.uid);
-  const snap = await getDoc(ref);
-
-  if(snap.exists()){
-    const data = snap.data();
-    dados = data.dados || {};
-    parcelasMemoria = data.parcelasMemoria || [];
-  }
-}
-
+let senhaDoUsuario = ""; 
 let dados = {};
-let mesesDOM = [];
-let chart;
 let parcelasMemoria = [];
+let mesesDOM = [];
+let chart = null;
+const hoje = new Date();
 
-// copiar/colar
-let copiaDespesas = null;
-let copiaEmpresa = null;
-
-const nomesMesesFull = [
-  "Janeiro","Fevereiro","Março","Abril","Maio","Junho",
-  "Julho","Agosto","Setembro","Outubro","Novembro","Dezembro"
-];
-
+const nomesMesesFull = ["Janeiro","Fevereiro","Março","Abril","Maio","Junho","Julho","Agosto","Setembro","Outubro","Novembro","Dezembro"];
 const seletorAno = document.getElementById("ano");
 const areaAno = document.getElementById("areaAno");
 
-// ---------------- PARCELAS -----------------
+// ================= CRIPTOGRAFIA =================
+const encoder = new TextEncoder();
+const decoder = new TextDecoder();
 
-function criarParcelamento(ano, mesIndex, nome, valorTotal, parcelas) {
-  const valorParcela = Number((valorTotal / parcelas).toFixed(2));
-
-  const pacote = {
-    id: Date.now(),
-    nome,
-    valorParcela,
-    parcelas,
-    inicio: mesIndex,
-    ano
+async function encryptData(obj, senha) {
+  const dadosBytes = encoder.encode(JSON.stringify(obj));
+  const keyMaterial = await crypto.subtle.importKey("raw", encoder.encode(senha), "PBKDF2", false, ["deriveKey"]);
+  const salt = crypto.getRandomValues(new Uint8Array(16));
+  const key = await crypto.subtle.deriveKey(
+    { name: "PBKDF2", salt, iterations: 250000, hash: "SHA-256" },
+    keyMaterial, { name: "AES-GCM", length: 256 }, false, ["encrypt"]
+  );
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const encrypted = await crypto.subtle.encrypt({ name: "AES-GCM", iv }, key, dadosBytes);
+  return {
+    encrypted: btoa(String.fromCharCode(...new Uint8Array(encrypted))),
+    iv: btoa(String.fromCharCode(...iv)),
+    salt: btoa(String.fromCharCode(...salt))
   };
+}
 
-  parcelasMemoria.push(pacote);
+async function decryptData(encryptedObj, senha) {
+  try {
+    const iv = Uint8Array.from(atob(encryptedObj.iv), c => c.charCodeAt(0));
+    const salt = Uint8Array.from(atob(encryptedObj.salt), c => c.charCodeAt(0));
+    const data = Uint8Array.from(atob(encryptedObj.encrypted), c => c.charCodeAt(0));
+    const keyMaterial = await crypto.subtle.importKey("raw", encoder.encode(senha), "PBKDF2", false, ["deriveKey"]);
+    const key = await crypto.subtle.deriveKey(
+      { name: "PBKDF2", salt, iterations: 250000, hash: "SHA-256" },
+      keyMaterial, { name: "AES-GCM", length: 256 }, false, ["decrypt"]
+    );
+    const decrypted = await crypto.subtle.decrypt({ name: "AES-GCM", iv }, key, data);
+    return JSON.parse(decoder.decode(decrypted));
+  } catch (e) { throw new Error("Senha incorreta."); }
+}
 
-  aplicarParcelas();
-  salvarDados();
+// ================= FIREBASE =================
+async function salvarFirebase() {
+  if (!usuarioLogado || !senhaDoUsuario) return;
+  try {
+    const btn = document.getElementById("salvarNuvemBtn");
+    btn.innerText = "⌛ SALVANDO...";
+    const pacote = await encryptData({ dados, parcelasMemoria }, senhaDoUsuario);
+    await setDoc(doc(db, "financas", usuarioLogado.uid), pacote);
+    btn.innerText = "✅ SALVO NA NUVEM";
+    setTimeout(() => btn.innerText = "☁️ SALVAR NA NUVEM", 2000);
+  } catch (e) { console.error("Erro ao salvar!"); }
+}
+
+async function carregarFirebase(senha) {
+  if (!usuarioLogado) return;
+  try {
+    const snap = await getDoc(doc(db, "financas", usuarioLogado.uid));
+    if (snap.exists() && snap.data().encrypted) {
+      const res = await decryptData(snap.data(), senha);
+      dados = res.dados || {};
+      parcelasMemoria = res.parcelasMemoria || [];
+      localStorage.setItem("financas", JSON.stringify(dados));
+    }
+  } catch (e) { alert("Erro de descriptografia."); }
+  carregarAno();
+}
+
+// ================= IMPORT / EXPORT =================
+window.exportarTudo = function() {
+  const blob = new Blob([JSON.stringify({ dados, parcelasMemoria }, null, 2)], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `backup_financas.json`;
+  a.click();
+};
+
+window.importarDados = function(e) {
+  const arquivo = e.target.files[0];
+  if (!arquivo) return;
+  const leitor = new FileReader();
+  leitor.onload = async (event) => {
+    try {
+      const json = JSON.parse(event.target.result);
+      if (json.dados) {
+        dados = json.dados;
+        parcelasMemoria = json.parcelasMemoria || [];
+      } else if (json.meses) {
+          const anoAlvo = seletorAno.value;
+          dados[anoAlvo] = { meses: json.meses };
+      }
+      salvarDadosLocal();
+      carregarAno();
+      alert("Importado com sucesso! Clique em SALVAR NA NUVEM.");
+    } catch (err) { alert("Erro ao ler JSON."); }
+  };
+  leitor.readAsText(arquivo);
+};
+
+// ================= AUTH =================
+window.loginFirebase = async function(email, senha) {
+  try {
+    const cred = await signInWithEmailAndPassword(auth, email, senha);
+    usuarioLogado = cred.user;
+    senhaDoUsuario = senha;
+    await carregarFirebase(senha);
+  } catch (e) { alert("Erro no login."); }
+};
+
+window.cadastrarFirebase = async function(email, senha) {
+  try {
+    const cred = await createUserWithEmailAndPassword(auth, email, senha);
+    usuarioLogado = cred.user;
+    senhaDoUsuario = senha;
+    dados = {}; parcelasMemoria = [];
+    await salvarFirebase();
+    carregarAno();
+  } catch (e) { alert("Erro no cadastro."); }
+};
+
+window.logoutFirebase = async function() {
+  await signOut(auth);
+  usuarioLogado = null; senhaDoUsuario = ""; dados = {}; parcelasMemoria = [];
+  localStorage.clear();
+  location.reload();
+};
+
+// ================= LÓGICA DE DADOS =================
+function salvarDadosLocal() {
+  localStorage.setItem("financas", JSON.stringify(dados));
 }
 
 function aplicarParcelas() {
   parcelasMemoria.forEach(p => {
-
+    if (!dados[p.ano]) return;
     const meses = dados[p.ano].meses;
-
     for (let i = 0; i < p.parcelas; i++) {
-      const index = p.inicio + i;
-
-      if (!meses[index]) continue;
-
-      const nomeParcela = `${p.nome} [${i+1}/${p.parcelas}]`;
-
-      const jaExiste = meses[index].despesas.some(d => d.nome === nomeParcela);
-
-      if (!jaExiste) {
-        meses[index].despesas.push({
-          nome: nomeParcela,
-          valor: p.valorParcela,
-          checked: true,
-          parcelaId: p.id
-        });
+      const idx = p.inicio + i;
+      if (!meses[idx]) continue;
+      const nomeP = `${p.nome} [${i+1}/${p.parcelas}]`;
+      if (!meses[idx].despesas.some(d => d.nome === nomeP)) {
+        meses[idx].despesas.push({ nome: nomeP, valor: p.valorParcela, checked: true, parcelaId: p.id });
       }
     }
   });
 }
 
-// ---------------- SAVE ----------------
-function salvarDados() {
-  localStorage.setItem("financas", JSON.stringify(dados));
-  salvarFirebase(); // 🔥 ADICIONADO
-}
-
-function carregarDados() {
-  const salvo = localStorage.getItem("financas");
-  if (salvo) dados = JSON.parse(salvo);
-}
-
-// ---------------- EXPORT ----------------
-// Exportar apenas o ano selecionado
-function exportarAno() {
-  const ano = seletorAno.value;
-
-  // Garante que sai sempre { "meses": [...] }
-  const exportObj = {
-    meses: dados[ano]?.meses || []
-  };
-
-  const blob = new Blob(
-    [JSON.stringify(exportObj, null, 2)],
-    { type: "application/json" }
-  );
-
-  const a = document.createElement("a");
-  a.href = URL.createObjectURL(blob);
-  a.download = `financas_${ano}.json`;
-  a.click();
-}
-
-function exportarTudo() {
-  const exportObj = {
-    dados: dados,
-    parcelasMemoria: parcelasMemoria
-  };
-
-  const blob = new Blob(
-    [JSON.stringify(exportObj, null, 2)],
-    { type: "application/json" }
-  );
-
-  const a = document.createElement("a");
-  a.href = URL.createObjectURL(blob);
-  a.download = `financas_backup.json`;
-  a.click();
-}
-
-// ---------------- IMPORT ----------------
-function importarAno(e) {
-  const file = e.target.files[0];
-  if (!file) return;
-
-  const reader = new FileReader();
-
-  reader.onload = async () => {
-    try {
-      let importado = JSON.parse(reader.result);
-      const ano = seletorAno.value;
-
-      // BACKUP COMPLETO
-      if (importado.dados) {
-        dados = importado.dados;
-        parcelasMemoria = importado.parcelasMemoria || [];
-      } 
-      // ANO ÚNICO
-      else {
-        if (Array.isArray(importado)) {
-          importado = { meses: importado };
-        }
-
-        if (!importado.meses) {
-          throw new Error("Formato inválido");
-        }
-
-        dados[ano] = importado;
-      }
-
-      aplicarParcelas();
-
-      localStorage.setItem("financas", JSON.stringify(dados));
-
-      if (usuarioLogado) {
-        await setDoc(doc(db, "financas", usuarioLogado.uid), {
-          dados,
-          parcelasMemoria
-        });
-      }
-
-      carregarAno();
-
-      alert("Importado com sucesso!");
-
-    } catch (err) {
-      console.error(err);
-      alert("Arquivo inválido");
-    }
-  };
-
-  reader.readAsText(file);
-}
-
-// conecta o input à função de importação
-document.getElementById("inputImport").addEventListener("change", importarAno);
-
-// ---------------- COLLAPSE ----------------
-function salvarEstados() {
-  const estados = mesesDOM.map(({dom}) => dom.classList.contains("collapsed"));
-  localStorage.setItem("estadosAccordion", JSON.stringify(estados));
-}
-
-function carregarEstados() {
-  const estados = JSON.parse(localStorage.getItem("estadosAccordion")||"[]");
-  mesesDOM.forEach(({dom}, i) => {
-    if (estados[i]) dom.classList.add("collapsed");
-  });
-}
-
-// ---------------- UTIL ----------------
-function formatar(v) {
-  const numero = (Number(v) || 0).toLocaleString("pt-BR", {
-    minimumFractionDigits: 2
-  });
-
-  return "R$\u00A0" + numero;
-}
-
-/* FORMATA OS VALORES */
-
-function parseValor(v) {
-  if (!v) return 0;
-
-  // remove tudo que não for número ou vírgula
-  v = v.replace(/[^\d,]/g, "");
-
-  // se tiver mais de uma vírgula, mantém só a última
-  const partes = v.split(",");
-  if (partes.length > 2) {
-    v = partes.slice(0, -1).join("") + "," + partes[partes.length - 1];
-  }
-
-  return Number(v.replace(",", ".")) || 0;
-}
-
-function aplicarComportamentoInput(input, getValor, setValor, ano) {
-
-  let valorAnterior; // guarda valor antes do foco
-
-  // ao focar → guarda o valor atual e limpa o input
-  input.addEventListener("focus", () => {
-    valorAnterior = input.value; // salva valor atual
-    input.value = "";            // limpa para digitar
-  });
-
-  // ao sair OU apertar Enter → confirma
-  function confirmar() {
-    const valorDigitado = parseValor(input.value);
-
-    if (input.value.trim() === "") {
-      // se o usuário não digitou nada, volta o valor antigo
-      input.value = valorAnterior;
-    } else {
-      // se digitou algo, salva e formata
-      setValor(valorDigitado);
-      input.value = formatar(valorDigitado);
-    }
-
-    atualizarTudo(ano);
-  }
-
-  input.addEventListener("blur", confirmar);
-
-  input.addEventListener("keydown", (e) => {
-    if (e.key === "Enter") {
-      input.blur(); // força o blur → chama confirmar
-    }
-  });
-}
-
-const hoje = new Date();
-
-let mesAtual = hoje.getMonth() + 1; // próximo mês
-let anoAtual = hoje.getFullYear();
-
-// se passar de dezembro
-if (mesAtual > 11) {
-  mesAtual = 0;
-  anoAtual++;
-}
-
-// ---------------- INIT ----------------
-carregarDados();
-
-for (let ano = 2026; ano <= 2030; ano++) {
-  if (!dados[ano]) dados[ano] = { meses: [] };
-
-  const opt = document.createElement("option");
-  opt.value = ano;
-  opt.textContent = ano;
-  seletorAno.appendChild(opt);
-}
-
-seletorAno.onchange = carregarAno;
-carregarAno();
-
-// ---------------- UI ----------------
 function carregarAno() {
   const ano = seletorAno.value;
-
+  if (!dados[ano]) dados[ano] = { meses: [] };
   areaAno.innerHTML = "";
   mesesDOM = [];
-
-  const wrapper = document.createElement("div");
-
-  const btnWrapper = document.createElement("div");
-  btnWrapper.className = "addMesBox";
-
-  const btn = document.createElement("button");
-  btn.innerText = "+ ADICIONAR MÊS";
-  btn.onclick = () => adicionarMes(ano);
-
-  btnWrapper.appendChild(btn);
-  wrapper.appendChild(btnWrapper);
-
-  const container = document.createElement("div");
-  wrapper.appendChild(container);
-  areaAno.appendChild(wrapper);
-
+  
+  const addBox = document.createElement("div"); 
+  addBox.className = "addMesBox";
+  const btnAdd = document.createElement("button"); 
+  
+  // LOGICA DO BOTÃO MUDAR PARA NOVO ANO
+  const isYearFull = dados[ano].meses.length >= 12;
+  btnAdd.innerText = isYearFull ? "COMEÇAR NOVO ANO" : "+ ADICIONAR MÊS";
+  
+  btnAdd.onclick = () => adicionarMes(ano);
+  addBox.appendChild(btnAdd); 
+  areaAno.appendChild(addBox);
+  
+  const container = document.createElement("div"); 
+  areaAno.appendChild(container);
+  
   const meses = dados[ano].meses;
-
   for (let i = meses.length - 1; i >= 0; i--) {
-    const mesDOM = criarMesDOM(ano, i, meses[i]);
-    container.appendChild(mesDOM);
-    mesesDOM.push({ dom: mesDOM, index: i });
+    const mDOM = criarMesDOM(ano, i, meses[i]);
+    container.appendChild(mDOM); 
+    mesesDOM.push({ dom: mDOM, index: i });
   }
-
   atualizarTudo(ano);
-  atualizarGrafico(ano);
 }
 
-// ================= EXPORTAR TUDO =================
-document.getElementById("exportarTudoBtn").addEventListener("click", () => {
-  if (!dados || Object.keys(dados).length === 0) {
-    alert("Não há dados para exportar!");
-    return;
-  }
-
-  // Estrutura compatível com o import
-  const exportData = {
-    dados: dados, // mantém todos os anos
-    parcelasMemoria: parcelasMemoria
-  };
-
-  const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: "application/json" });
-  const a = document.createElement("a");
-  a.href = URL.createObjectURL(blob);
-  a.download = `financas_backup.json`;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-});
-
-// ---------------- MES ----------------
 function adicionarMes(ano) {
-  const meses = dados[ano].meses;
+  let anoAtual = Number(ano);
+  let meses = dados[anoAtual].meses;
 
-  const ultimoSaldo = meses.length
-    ? ((meses[meses.length - 1].salario + meses[meses.length - 1].conta
-        + (meses[meses.length - 1].empresa?.reduce((a,b)=>a+b.valor,0)||0))
-        - (meses[meses.length - 1].despesas?.reduce((a,b)=>a+b.valor,0)||0))
-    : 0;
+  // LÓGICA PARA NOVO ANO
+  if (meses.length >= 12) {
+    let novoAno = anoAtual + 1;
+    if (!dados[novoAno]) dados[novoAno] = { meses: [] };
+    
+    // Pega saldo de Dezembro do ano anterior
+    const mDez = meses[11];
+    const d = mDez.despesas.filter(x => x.checked).reduce((a, b) => a + b.valor, 0);
+    const e = (mDez.empresa || []).filter(x => x.checked).reduce((a, b) => a + b.valor, 0);
+    const saldoDez = (mDez.salario + mDez.conta + e) - d;
 
-  dados[ano].meses.push({
-    despesas: [
-      { nome: "Aluguel", valor: 0, checked: true },
-      { nome: "Cartão de Crédito", valor: 0, checked: true },
-      { nome: "Vuon Card", valor: 0, checked: true },
-      { nome: "Fort", valor: 0, checked: true },
-      { nome: "Santander", valor: 0, checked: true },
-      { nome: "Academia", valor: 0, checked: true }
-    ],
-    empresa: [],
-    salario: 0,
-    conta: ultimoSaldo
-  });
-
-  aplicarParcelas();
-  salvarDados();
-  carregarAno();
-}
-
-// ---------------- DOM ----------------
-function criarMesDOM(ano, index, data) {
-
-  const mes = document.createElement("div");
-  mes.className = "mes";
-
-  // destaque + controle aberto/fechado
-  if (Number(ano) === anoAtual && index === mesAtual) {
-    mes.classList.add("mesAtual");
-    mes.classList.remove("collapsed"); // aberto
-  } else {
-    mes.classList.add("collapsed"); // fechado
-  }
-
-  const mesHeader = document.createElement("div");
-  mesHeader.className = "mesHeader";
-
-  const headerRight = document.createElement("div");
-
-  const mesTotal = document.createElement("span");
-  mesTotal.className = "mesTotal";
-
-  const duplicarBtn = document.createElement("button");
-  duplicarBtn.className = "duplicarMes";
-  duplicarBtn.innerHTML = `
-    <svg viewBox="0 0 24 24" width="16" height="16">
-      <path d="M8 8h12v12H8zM4 4h12v2H6v10H4z"/>
-    </svg>
-  `;
-  duplicarBtn.onclick = (e) => {
-    e.stopPropagation();
-    const copia = JSON.parse(JSON.stringify(data));
-    dados[ano].meses.splice(index+1, 0, copia);
-    salvarDados();
-    carregarAno();
-  };
-
-  const removeBtn = document.createElement("button");
-  removeBtn.className = "removeMes";
-  removeBtn.innerText = "×";
-  removeBtn.onclick = (e) => {
-    e.stopPropagation();
-    dados[ano].meses.splice(index,1);
-    salvarDados();
-    carregarAno();
-  };
-
-  headerRight.appendChild(mesTotal);
-  headerRight.appendChild(duplicarBtn);
-  headerRight.appendChild(removeBtn);
-
-  mesHeader.innerHTML = `<span>${nomesMesesFull[index]} ${ano}</span>`;
-  mesHeader.appendChild(headerRight);
-
-  const mesBody = document.createElement("div");
-  mesBody.className = "mesBody";
-
-  mesBody.innerHTML = `
-<div class="container">
-  <div class="coluna despesas">
-
-    <div class="topoColuna">
-      <h4>DESPESAS</h4>
-      <div class="acoesTopo">
-        <button class="copyDesp">📝</button>
-        <button class="pasteDesp">📋</button>
-      </div>
-    </div>
-
-    <div class="conteudoColuna">
-      <div class="listaDesp"></div>
-      <div class="acoesDesp">
-  <button class="addDesp">+ Despesa</button>
-  <button class="addParcela">+ Parcelamento</button>
-</div>
-    </div>
-
-    <p class="rodapeColuna">
-      <span>Total:</span>
-      <span class="valorTotal"><span class="totalDespesas">0,00</span></span>
-    </p>
-  </div>
-
-  <div class="coluna dinheiro">
-
-    <div class="topoColuna">
-      <h4>DINHEIROS</h4>
-      <div class="acoesTopo">
-        <button class="copyEmp">📝</button>
-        <button class="pasteEmp">📋</button>
-      </div>
-    </div>
-
-    <div class="conteudoColuna">
-      <div class="linhaInputs">
-        <div class="campo">
-          <label>Salário</label>
-          <input class="salario">
-      </div>
-
-      <div class="campo">
-        <label>Conta</label>
-        <input class="conta">
-      </div>
-    </div>
-
-      <h5>OUTROS</h5>
-      <div class="listaEmp"></div>
-      <button class="addEmp">+</button>
-    </div>
-
-    <p class="rodapeColuna">
-      <span>Total:</span>
-      <span class="valorTotal"><span class="totalDinheiro">0,00</span></span>
-    </p>
-  </div>
-</div>
-
-<div class="totalFinal">
-  TOTAL: R$ <span class="saldo">0,00</span>
-</div>
-  `;
-
-  mes.appendChild(mesHeader);
-  mes.appendChild(mesBody);
-
-  mesHeader.onclick = () => {
-    mes.classList.toggle("collapsed");
-  };
-
-  const listaDesp = mesBody.querySelector(".listaDesp");
-  const listaEmp = mesBody.querySelector(".listaEmp");
-
-  function renderList(lista, arr) {
-    lista.innerHTML = "";
-    arr.forEach(d => criarItem(lista, d, arr));
-  }
-
-  renderList(listaDesp, data.despesas);
-  renderList(listaEmp, data.empresa);
-
-// adicionar despesa normal
-mesBody.querySelector(".addDesp").onclick = () => {
-  const novo = {nome:"",valor:0,checked:true};
-  data.despesas.push(novo);
-
-  renderList(listaDesp, data.despesas);
-  atualizarTudo(ano);
-
-  const inputs = listaDesp.querySelectorAll(".nome");
-  const ultimo = inputs[inputs.length - 1];
-
-  if (ultimo) ultimo.focus();
-};
-
-// adicionar PARCELA
-mesBody.querySelector(".addParcela").onclick = () => {
-
-  const nome = prompt("Nome da despesa:");
-  if (!nome) return;
-
-  const valorInput = prompt("Valor total:");
-  if (!valorInput) return;
-
-  const parcelasInput = prompt("Número de parcelas:");
-  if (!parcelasInput) return;
-
-  const valor = parseValor(valorInput);
-  const parcelas = Number(parcelasInput);
-
-  if (!valor || !parcelas || parcelas <= 0) {
-    alert("Valores inválidos");
+    // Cria Janeiro no novo ano
+    dados[novoAno].meses.push({ despesas: [{ nome: "Aluguel", valor: 0, checked: true }], empresa: [], salario: 0, conta: saldoDez });
+    
+    // Atualiza o seletor visualmente
+    seletorAno.value = novoAno;
+    salvarDadosLocal();
+    carregarAno(); // Recarrega agora no novo ano
     return;
   }
 
-  criarParcelamento(ano, index, nome, valor, parcelas);
-
-  salvarDados();
-  carregarAno();
-};
-
-mesBody.querySelector(".addEmp").onclick = () => {
-  const novo = {nome:"",valor:0,checked:true};
-  data.empresa.push(novo);
-
-  renderList(listaEmp, data.empresa);
-  atualizarTudo(ano);
-
-  // foco automático
-  const inputs = listaEmp.querySelectorAll(".nome");
-  const ultimo = inputs[inputs.length - 1];
-
-  if (ultimo) {
-    ultimo.focus();
+  // Lógica normal de adicionar mês no mesmo ano
+  let saldoAnterior = 0;
+  if (meses.length > 0) {
+    const m = meses[meses.length - 1];
+    const d = m.despesas.filter(x => x.checked).reduce((a, b) => a + b.valor, 0);
+    const e = (m.empresa || []).filter(x => x.checked).reduce((a, b) => a + b.valor, 0);
+    saldoAnterior = (m.salario + m.conta + e) - d;
   }
-};
+  meses.push({ despesas: [{ nome: "Aluguel", valor: 0, checked: true }], empresa: [], salario: 0, conta: saldoAnterior });
+  aplicarParcelas();
+  salvarDadosLocal(); 
+  carregarAno();
+}
 
-  // copiar
-  mesBody.querySelector(".copyDesp").onclick = () => {
-    copiaDespesas = JSON.parse(JSON.stringify(data.despesas));
+function criarMesDOM(ano, index, data) {
+  const mes = document.createElement("div");
+  let mesAlvo = (hoje.getMonth() + 1) % 12;
+  let anoAlvo = hoje.getMonth() === 11 ? hoje.getFullYear() + 1 : hoje.getFullYear();
+  mes.className = "mes" + (Number(ano) === anoAlvo && index === mesAlvo ? " mesAtual" : " collapsed");
+
+  const header = document.createElement("div");
+  header.className = "mesHeader";
+  header.innerHTML = `<span>${nomesMesesFull[index]} ${ano}</span><div><span class="mesTotal">0,00</span><button class="duplicarMes"><svg viewBox="0 0 24 24"><path d="M8 8h12v12H8zM4 4h12v2H6v10H4z"/></svg></button><button class="removeMes">×</button></div>`;
+  
+  header.onclick = () => mes.classList.toggle("collapsed");
+  
+  header.querySelector(".duplicarMes").onclick = (e) => { 
+    e.stopPropagation(); 
+    dados[ano].meses.splice(index + 1, 0, JSON.parse(JSON.stringify(data)));
+    salvarDadosLocal(); carregarAno();
   };
 
-  mesBody.querySelector(".copyEmp").onclick = () => {
-    copiaEmpresa = JSON.parse(JSON.stringify(data.empresa));
+  header.querySelector(".removeMes").onclick = (e) => { 
+    e.stopPropagation(); 
+    if(confirm("Excluir?")) { dados[ano].meses.splice(index, 1); salvarDadosLocal(); carregarAno(); } 
   };
 
-  // colar
-  mesBody.querySelector(".pasteDesp").onclick = () => {
-    if(copiaDespesas){
-      data.despesas = JSON.parse(JSON.stringify(copiaDespesas));
-      renderList(listaDesp, data.despesas);
-      atualizarTudo(ano);
+  const body = document.createElement("div");
+  body.className = "mesBody";
+  body.innerHTML = `
+    <div class="container">
+        <div class="coluna despesas">
+            <div class="topoColuna"><h4>DESPESAS</h4></div>
+            <div class="conteudoColuna"><div class="listaDesp"></div>
+                <div class="acoesDesp">
+                    <button class="addDesp">+ Despesa</button>
+                    <button class="addParcela">+ Parcela</button>
+                </div>
+            </div>
+            <p class="rodapeColuna">Total: <span class="totalDespesas">0,00</span></p>
+        </div>
+        <div class="coluna dinheiro">
+            <div class="topoColuna"><h4>DINHEIROS</h4></div>
+            <div class="conteudoColuna">
+                <div class="linhaInputs">
+                    <div class="campo"><label>Salário</label><input type="text" class="salario inputPadrao"></div>
+                    <div class="campo"><label>Conta</label><input type="text" class="conta inputPadrao"></div>
+                </div>
+                <h5>OUTROS</h5>
+                <div class="listaEmp"></div>
+                <button class="addEmp inputPadrao" style="height:35px; cursor:pointer">+</button>
+            </div>
+            <p class="rodapeColuna">Total: <span class="totalDinheiro">0,00</span></p>
+        </div>
+    </div>
+    <div class="totalFinal">TOTAL: <span class="saldo">0,00</span></div>`;
+
+  const listD = body.querySelector(".listaDesp");
+  const listE = body.querySelector(".listaEmp");
+
+  const renderItems = () => {
+    listD.innerHTML = "";
+    listE.innerHTML = "";
+    data.despesas.forEach(item => criarItem(listD, item, data.despesas, ano));
+    (data.empresa || []).forEach(item => criarItem(listE, item, data.empresa, ano));
+  };
+  renderItems();
+
+  const inSal = body.querySelector("input.salario"); 
+  const inCon = body.querySelector("input.conta");
+  inSal.value = formatar(data.salario || 0); inCon.value = formatar(data.conta || 0);
+  aplicarComportamentoInput(inSal, () => data.salario, (v) => data.salario = v, ano);
+  aplicarComportamentoInput(inCon, () => data.conta, (v) => data.conta = v, ano);
+
+  // CORREÇÃO: ADICIONAR SEM FECHAR
+  body.querySelector(".addDesp").onclick = () => { 
+    const novo = {nome:"", valor:0, checked:true};
+    data.despesas.push(novo); 
+    criarItem(listD, novo, data.despesas, ano);
+    atualizarTudo(ano);
+  };
+  
+  body.querySelector(".addParcela").onclick = () => {
+    const nome = prompt("Nome:"); const valor = parseValor(prompt("Valor Total:")); const num = parseInt(prompt("Parcelas:"));
+    if(nome && valor > 0 && num > 0) {
+      parcelasMemoria.push({ id: Date.now(), nome, valorParcela: Number((valor/num).toFixed(2)), parcelas: num, inicio: index, ano: Number(ano) });
+      aplicarParcelas(); salvarDadosLocal(); carregarAno();
     }
   };
 
-  mesBody.querySelector(".pasteEmp").onclick = () => {
-    if(copiaEmpresa){
-      data.empresa = JSON.parse(JSON.stringify(copiaEmpresa));
-      renderList(listaEmp, data.empresa);
-      atualizarTudo(ano);
-    }
+  body.querySelector(".addEmp").onclick = () => { 
+    if(!data.empresa) data.empresa=[]; 
+    const novo = {nome:"", valor:0, checked:true};
+    data.empresa.push(novo); 
+    criarItem(listE, novo, data.empresa, ano);
+    atualizarTudo(ano);
   };
-
-  const sal = mesBody.querySelector(".salario");
-  const con = mesBody.querySelector(".conta");
-
-  sal.classList.add("inputPadrao");
-  con.classList.add("inputPadrao");
-
-  sal.value = formatar(data.salario);
-  con.value = formatar(data.conta);
-
-  aplicarComportamentoInput(
-  sal,
-  () => data.salario,
-  (v) => data.salario = v,
-  ano
-  );
-
-aplicarComportamentoInput(
-  con,
-  () => data.conta,
-  (v) => data.conta = v,
-  ano
-  );
-
+  
+  mes.appendChild(header); mes.appendChild(body);
   return mes;
 }
 
-// ---------------- ITEM ----------------
-function criarItem(lista, d, dataArray) {
-  const div = document.createElement("div");
-  div.className = "item";
-
-  div.innerHTML = `
-  <input type="checkbox">
-  <input class="nome" placeholder="Descrição">
-  <input class="valor" placeholder="0,00">
-  <button>x</button>
-`;
-  const [check,nome,valor,btn] = div.children;
-  btn.classList.add("removeItem");
-  nome.classList.add("inputPadrao");
-  valor.classList.add("inputPadrao");
-
-  check.checked = d.checked;
-  nome.value = d.nome;
-  valor.value = formatar(d.valor);
-
-  check.onchange = () => { d.checked = check.checked; atualizarTudo(seletorAno.value); };
-  nome.oninput = () => d.nome = nome.value;
-  aplicarComportamentoInput(
-  valor,
-  () => d.valor,
-  (v) => d.valor = v,
-  seletorAno.value
-);
-
-btn.onclick = () => {
-
-  // se for parcela → remove todas
-  if (d.parcelaId) {
-
-    // remove da memória
-    parcelasMemoria = parcelasMemoria.filter(p => p.id !== d.parcelaId);
-
-    // remove de todos os meses
-    dados[seletorAno.value].meses.forEach(m => {
-      m.despesas = m.despesas.filter(x => x.parcelaId !== d.parcelaId);
-    });
-
-  } else {
-    // comportamento normal
-    const index = dataArray.indexOf(d);
-    if(index > -1) dataArray.splice(index,1);
-  }
-
-  atualizarTudo(seletorAno.value);
-  carregarAno();
-};
-
-lista.appendChild(div);
+function criarItem(lista, d, dataArray, ano) {
+  const div = document.createElement("div"); div.className = "item";
+  div.innerHTML = `<input type="checkbox" ${d.checked?'checked':''}> <input class="nome inputPadrao" value="${d.nome}"> <input class="valor inputPadrao" value="${formatar(d.valor)}"> <button class="removeItem">×</button>`;
+  const [check, nome, valor, btn] = div.children;
+  check.onchange = () => { d.checked = check.checked; atualizarTudo(ano); };
+  nome.onblur = () => { d.nome = nome.value; salvarDadosLocal(); };
+  aplicarComportamentoInput(valor, () => d.valor, (v) => d.valor = v, ano);
+  btn.onclick = () => { 
+    if(d.parcelaId) {
+      parcelasMemoria = parcelasMemoria.filter(p => p.id !== d.parcelaId);
+      dados[seletorAno.value].meses.forEach(m => m.despesas = m.despesas.filter(x => x.parcelaId !== d.parcelaId));
+      carregarAno(); // Aqui precisa recarregar tudo pois afeta vários meses
+    } else { 
+      dataArray.splice(dataArray.indexOf(d), 1); 
+      div.remove(); // Remove apenas o elemento visual
+      atualizarTudo(ano); 
+    }
+    salvarDadosLocal();
+  };
+  lista.appendChild(div);
 }
 
-// ---------------- CALCULO ----------------
-function atualizarTudo(ano) {
-  mesesDOM.forEach(({dom, index}) => {
-    const data = dados[ano].meses[index];
+// ================= UTILITÁRIOS =================
+function formatar(v) { return "R$ " + (Number(v) || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2 }); }
+function parseValor(v) { if (!v) return 0; const limpo = v.toString().replace(/[^\d,.-]/g, "").replace(",", "."); return Number(limpo) || 0; }
 
-    let despesas = data.despesas
-      .filter(d => d.checked)
-      .reduce((a,b) => a + b.valor, 0);
-
-    let empresa = data.empresa?.filter(d => d.checked)
-      .reduce((a,b) => a + b.valor, 0) || 0;
-
-    let dinheiro = data.salario + data.conta + empresa;
-    let saldo = dinheiro - despesas;
-
-    // elementos
-    const totalDespesasEl = dom.querySelector(".totalDespesas");
-    const totalDinheiroEl = dom.querySelector(".totalDinheiro");
-    const saldoEl = dom.querySelector(".saldo");
-    const mesTotalEl = dom.querySelector(".mesTotal");
-
-    // valores
-    totalDespesasEl.textContent = formatar(despesas);
-    totalDinheiroEl.textContent = formatar(dinheiro);
-    saldoEl.textContent = formatar(saldo);
-    mesTotalEl.textContent = formatar(saldo);
-
-    // cores (positivo / negativo)
-if (saldo >= 0) {
-  saldoEl.classList.add("positivo");
-  saldoEl.classList.remove("negativo");
-} else {
-  saldoEl.classList.add("negativo");
-  saldoEl.classList.remove("positivo");
-}
+function aplicarComportamentoInput(input, getV, setV, ano) {
+  let vAnt = "";
+  input.addEventListener("focus", () => { vAnt = input.value; input.value = ""; });
+  input.addEventListener("blur", () => {
+    if (input.value.trim() === "") { input.value = vAnt; } 
+    else { const v = parseValor(input.value); setV(v); input.value = formatar(v); atualizarTudo(ano); }
   });
+  input.addEventListener("keydown", (e) => { if (e.key === "Enter") input.blur(); });
+}
 
-  salvarDados();
-  salvarEstados();
+function atualizarTudo(ano) {
+  if (!mesesDOM.length) return;
+  mesesDOM.forEach(({dom, index}) => {
+    const data = dados[ano].meses[index]; if(!data) return;
+    const desp = data.despesas.filter(d => d.checked).reduce((a, b) => a + b.valor, 0);
+    const empr = (data.empresa || []).filter(d => d.checked).reduce((a, b) => a + b.valor, 0);
+    const totalD = (Number(data.salario) || 0) + (Number(data.conta) || 0) + empr;
+    const saldo = totalD - desp;
+    dom.querySelector(".totalDespesas").textContent = formatar(desp);
+    dom.querySelector(".totalDinheiro").textContent = formatar(totalD);
+    const sEl = dom.querySelector(".saldo"); sEl.textContent = formatar(saldo);
+    sEl.className = "saldo " + (saldo >= 0 ? "positivo" : "negativo");
+    dom.querySelector(".mesTotal").textContent = formatar(saldo);
+  });
+  salvarDadosLocal();
   atualizarGrafico(ano);
 }
 
-// ---------------- GRAFICO ----------------
 function atualizarGrafico(ano) {
-  const meses = dados[ano].meses;
-
-  const valores = meses.map(m => {
-    const despesas = m.despesas.filter(d=>d.checked).reduce((a,b)=>a+b.valor,0);
-    const empresa = m.empresa?.filter(d=>d.checked).reduce((a,b)=>a+b.valor,0)||0;
-    return Number(((m.salario + m.conta + empresa) - despesas).toFixed(2));
+  if(!dados[ano] || !dados[ano].meses.length) return;
+  const valores = dados[ano].meses.map(m => {
+    const d = m.despesas.filter(x => x.checked).reduce((a, b) => a + b.valor, 0);
+    const e = (m.empresa || []).filter(x => x.checked).reduce((a, b) => a + b.valor, 0);
+    return Number(((m.salario + m.conta + e) - d).toFixed(2));
   });
-
-  if (chart) {
-    chart.updateSeries([{ name: "Balanço", data: valores }]);
-  } else {
+  if (chart) { chart.updateSeries([{ data: valores }]); } 
+  else {
     chart = new ApexCharts(document.querySelector("#grafico"), {
-      chart: { type: "bar", height: 300 },
-      series: [{ name: "Balanço", data: valores }],
-      xaxis: { categories: meses.map((_, i) => nomesMesesFull[i].slice(0,3).toUpperCase()) },
-      colors: [getComputedStyle(document.documentElement).getPropertyValue('--P03')]
+      chart: { type: "bar", height: 280, toolbar:{show:false} },
+      series: [{ name: "Saldo", data: valores }],
+      xaxis: { categories: nomesMesesFull.map(n => n.slice(0,3).toUpperCase()) },
+      colors: ['#3C5558']
     });
     chart.render();
   }
 }
 
-// LOGIN //
+// ================= INIT & EVENTOS =================
+const salvo = localStorage.getItem("financas"); if (salvo) dados = JSON.parse(salvo);
 
-window.fazerLogin = function() {
-  const email = document.getElementById("email").value;
-  const senha = document.getElementById("senha").value;
+for (let a = 2024; a <= 2035; a++) {
+  const opt = document.createElement("option"); opt.value = a; opt.textContent = a;
+  if(a === hoje.getFullYear()) opt.selected = true;
+  seletorAno.appendChild(opt);
+}
 
-  loginFirebase(email, senha);
-};
-
-// LOGIN COM GOOGLE
-window.loginGoogle = async function(){
-  try {
-    await signInWithPopup(auth, provider);
-  } catch(e){
-    alert(e.message);
-  }
-};
-
-// LOGOUT
-
-window.logoutFirebase = async function(){
-  try {
-    await signOut(auth);
-
-    // limpa dados locais
-    dados = {};
-    parcelasMemoria = [];
-    localStorage.removeItem("financas");
-
-    // mostra login de novo
-    document.getElementById("loginBox").style.display = "block";
-
-    // limpa tela
-    document.getElementById("areaAno").innerHTML = "";
-    document.getElementById("grafico").innerHTML = "";
-
-    usuarioLogado = null;
-
-  } catch(e){
-    alert(e.message);
-  }
-};
-
-// BOTÃO LOGOUT SUMIR //
-
-document.getElementById("logoutBtn").onclick = logoutFirebase;
-
-onAuthStateChanged(auth, async (user) => {
-  const logoutBtn = document.getElementById("logoutBtn");
-
-  if(user){
+onAuthStateChanged(auth, (user) => {
+  const authCont = document.getElementById("authContainer");
+  const appCont = document.getElementById("appContainer");
+  if (user) {
     usuarioLogado = user;
-
-    console.log("LOGADO:", user.uid); // 👈 DEBUG
-
-    document.getElementById("loginBox").style.display = "none";
-    logoutBtn.style.display = "block";
-
-    dados = {};
-    parcelasMemoria = [];
-
-    await carregarFirebase();
-
-    console.log("DADOS FIREBASE:", dados); // 👈 DEBUG
-
-    salvarDados();
-    carregarAno();
-
+    authCont.style.display = "none";
+    appCont.style.display = "block";
+    carregarAno(); 
   } else {
-    console.log("DESLOGADO");
-
     usuarioLogado = null;
-
-    document.getElementById("loginBox").style.display = "block";
-    logoutBtn.style.display = "none";
+    authCont.style.display = "flex";
+    appCont.style.display = "none";
   }
 });
 
+document.getElementById("loginBtn").onclick = () => loginFirebase(document.getElementById("email").value, document.getElementById("senha").value);
+document.getElementById("cadastroBtn").onclick = () => cadastrarFirebase(document.getElementById("email").value, document.getElementById("senha").value);
+document.getElementById("logoutBtn").onclick = logoutFirebase;
+document.getElementById("salvarNuvemBtn").onclick = salvarFirebase;
+document.getElementById("exportarTudoBtn").onclick = exportarTudo;
+document.getElementById("inputImport").onchange = importarDados;
+seletorAno.onchange = carregarAno;
+
+document.getElementById("showSignup").onclick = (e) => {
+  e.preventDefault();
+  document.getElementById("loginActions").style.display = "none";
+  document.getElementById("signupActions").style.display = "block";
+};
+document.getElementById("showLogin").onclick = (e) => {
+  e.preventDefault();
+  document.getElementById("signupActions").style.display = "none";
+  document.getElementById("loginActions").style.display = "block";
+};
