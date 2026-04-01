@@ -75,6 +75,29 @@
           </div>
       </div>
 
+            <!-- MÓDULO: RECEITAS FIXAS (TEMPLATE) -->
+      <div id="moduloReceitasFixas" class="mes collapsed">
+          <div class="mesHeader" id="headerReceitasFixas" style="background-color: var(--P03); cursor: pointer;">
+              <span>Configurar Receitas Fixas</span>
+          </div>
+          <div class="mesBody" id="bodyReceitasFixas">
+              <div class="fixed-list-header">
+                  <p style="font-size: 13px; color: var(--P02); margin-bottom: 15px; flex: 1;">
+                      Configure seu salário padrão e outras rendas recorrentes (aluguéis, extras, investimentos).
+                  </p>
+              </div>
+              
+              <!-- Campo de Salário Padrão -->
+              <div class="item-fixo" style="background: rgba(255,255,255,0.1); margin-bottom: 20px; border-left: 5px solid var(--P01);">
+                  <span style="flex: 2; font-weight: bold; color: white;">Salário Padrão</span>
+                  <input type="text" id="salarioFixoBase" class="inputPadrao" placeholder="R$ 0,00" style="width:150px">
+              </div>
+
+              <div id="listaReceitasFixas"></div>
+              <button class="addEmp inputPadrao" id="btnAddReceitaFixa" style="margin-top:15px; background: var(--P03); color: white; cursor:pointer">+ Nova Renda Recorrente</button>
+          </div>
+      </div>
+
       <div id="areaAno"></div>
 
       <div class="controles-topo">

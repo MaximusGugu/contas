@@ -126,6 +126,8 @@ body {
   color: var(--P02) !important;
   margin: 0;
   padding: 15px 0;
+  letter-spacing: 2px;
+  font-weight: 300;
 }
 
 /* ================= ESTADOS (ABERTO/FECHADO) ================= */
@@ -568,8 +570,6 @@ input.conta:not(.manual) {
 .positivo { color: #2ecc71; font-weight: bold; }
 .negativo { color: #e74c3c; font-weight: bold; }
 
-/* ... manter o resto ... */
-
 .campo {
   display: flex;
   flex-direction: column;
@@ -850,3 +850,4 @@ input.conta:not(.manual) {
 .btn-excluir-modal { color: #e74c3c; font-weight: bold; }
 
 .siteFooter { margin-bottom: 40px !important; }
+

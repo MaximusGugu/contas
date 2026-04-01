@@ -1,8 +1,5 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-import { 
-  getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, 
-  onAuthStateChanged, signOut 
-} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import { getFirestore, doc, setDoc, getDoc } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
 const firebaseConfig = {
@@ -26,12 +23,18 @@ let parcelasMemoria = [];
 let mesesDOM = [];
 let chart = null;
 let mesesAbertos = new Set(); 
+
 let contasFixas = JSON.parse(localStorage.getItem("contasFixas")) || [];
+let receitasFixas = JSON.parse(localStorage.getItem("receitasFixas")) || [];
+let salarioFixoBase = JSON.parse(localStorage.getItem("salarioFixoBase")) || 0;
 let categorias = JSON.parse(localStorage.getItem("categorias")) || ["Essencial", "Alimentação", "Cartões", "Contas"];
-let sortableFixas = null; // Instância global do Sortable
+
+let sortableFixas = null;
+let sortableReceitas = null;
 
 const hoje = new Date();
 const nomesMesesFull = ["Janeiro","Fevereiro","Março","Abril","Maio","Junho","Julho","Agosto","Setembro","Outubro","Novembro","Dezembro"];
+const categoriasReceitas = ["Salário", "Extra", "Investimentos", "Presente", "Vendas", "Outros"];
 
 // ================= CRIPTOGRAFIA =================
 const encoder = new TextEncoder();
@@ -67,6 +70,47 @@ async function decryptData(encryptedObj, senha) {
     const decrypted = await crypto.subtle.decrypt({ name: "AES-GCM", iv }, key, data);
     return JSON.parse(decoder.decode(decrypted));
   } catch (e) { throw new Error("Senha incorreta."); }
+}
+
+// ================= UTILITÁRIOS DE FORMATAÇÃO =================
+
+function formatar(v) { 
+    return "R$ " + (Number(v) || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }); 
+}
+
+function parseValor(v) {
+    if (!v) return 0;
+    if (typeof v === 'number') return v;
+    
+    let str = v.toString();
+    // Se tiver ponto e vírgula (ex: 1.250,50), remove o ponto e troca a vírgula por ponto
+    if (str.includes('.') && str.includes(',')) {
+        str = str.replace(/\./g, '').replace(',', '.');
+    } else {
+        // Se tiver apenas vírgula, troca por ponto
+        str = str.replace(',', '.');
+    }
+    // Remove qualquer caractere que não seja número ou ponto decimal
+    const limpo = str.replace(/[^\d.]/g, "");
+    return parseFloat(limpo) || 0;
+}
+
+function aplicarComportamentoInput(input, getV, setV, anoVinculado = null) {
+  if (!input) return;
+  input.addEventListener("focus", () => { input.dataset.old = input.value; input.value = ""; });
+  input.addEventListener("blur", () => {
+    const txt = input.value.trim();
+    if (txt === "") { 
+        input.value = input.dataset.old; 
+    } else { 
+        const v = parseValor(txt); 
+        setV(v); 
+        input.value = formatar(v); 
+        if (anoVinculado) atualizarTudo(anoVinculado); 
+        else salvarDadosLocal(); 
+    }
+  });
+  input.addEventListener("keydown", (e) => { if(e.key === "Enter") input.blur(); });
 }
 
 // ================= MOTOR DE CÁLCULO =================
@@ -146,20 +190,22 @@ function adicionarMes(ano) {
   const mesesArray = dados[anoNum].meses;
   const novoMesIndice = mesesArray.length;
 
-  let novoMes = { despesas: [], empresa: [], salario: 0, conta: 0, contaManual: false };
+  let novoMes = { despesas: [], empresa: [], salario: salarioFixoBase, conta: 0, contaManual: false };
 
   contasFixas.forEach(cf => {
     if (cf.ativo) {
-      let deveAdicionar = false;
-      const intervalo = parseInt(cf.intervalo) || 1;
-      if (cf.frequencia === "mensal") deveAdicionar = true;
-      else if (cf.frequencia === "bimestral") deveAdicionar = (novoMesIndice % 2 === 0);
-      else if (cf.frequencia === "anual") deveAdicionar = (novoMesIndice === 0);
-      else if (cf.frequencia === "personalizado") deveAdicionar = (novoMesIndice % intervalo === 0);
+      let deve = (cf.frequencia === "mensal") || 
+                 (cf.frequencia === "bimestral" && novoMesIndice % 2 === 0) ||
+                 (cf.frequencia === "anual" && novoMesIndice === 0) ||
+                 (cf.frequencia === "personalizado" && novoMesIndice % (parseInt(cf.intervalo) || 1) === 0);
+      if (deve) novoMes.despesas.push({ nome: cf.nome, valor: cf.valor || 0, checked: true, categoria: cf.categoria });
+    }
+  });
 
-      if (deveAdicionar) {
-        novoMes.despesas.push({ nome: cf.nome, valor: cf.valor || 0, checked: true, categoria: cf.categoria });
-      }
+  receitasFixas.forEach(rf => {
+    if (rf.ativo) {
+      let deve = (rf.frequencia === "mensal") || (rf.frequencia === "anual" && novoMesIndice === 0);
+      if (deve) novoMes.empresa.push({ nome: rf.nome, valor: rf.valor || 0, checked: true, categoria: rf.categoria });
     }
   });
 
@@ -167,7 +213,7 @@ function adicionarMes(ano) {
     let novoAnoNum = anoNum + 1;
     if (!dados[novoAnoNum]) dados[novoAnoNum] = { meses: [] };
     dados[novoAnoNum].meses.push(novoMes);
-    seletorAno.value = novoAnoNum;
+    document.getElementById("ano").value = novoAnoNum;
   } else {
     mesesArray.push(novoMes);
   }
@@ -175,36 +221,24 @@ function adicionarMes(ano) {
   carregarAno();
 }
 
-// ================= GESTÃO DE CONTAS FIXAS (FIXED DRAG & DROP) =================
+// ================= GESTÃO DE TEMPLATES =================
 
 function renderContasFixas() {
   const lista = document.getElementById("listaContasFixas");
   if (!lista) return;
-
-  // Destruir instância anterior do Sortable antes de recriar o HTML
-  if (sortableFixas) {
-    sortableFixas.destroy();
-    sortableFixas = null;
-  }
-
+  if (sortableFixas) { sortableFixas.destroy(); sortableFixas = null; }
   lista.innerHTML = "";
-
   contasFixas.forEach((cf) => {
-    // IMPORTANTE: Garantir que cada item tenha um ID único para o Sortable
     if (!cf.id) cf.id = Date.now() + Math.random();
-
     const div = document.createElement("div");
     div.className = "item item-fixo";
     div.setAttribute("data-id", cf.id);
-    
     div.innerHTML = `
       <div class="drag-handle">☰</div>
       <input type="checkbox" ${cf.ativo ? 'checked' : ''} class="check-fixo">
       <input type="text" class="inputPadrao nome-fixo" value="${cf.nome}" placeholder="Nome" style="flex:2">
       <input type="text" class="inputPadrao valor-fixo" value="${cf.valor > 0 ? formatar(cf.valor) : ''}" placeholder="Valor" style="width:110px">
-      <select class="inputPadrao cat-fixo" style="width:110px">
-        ${categorias.map(c => `<option value="${c}" ${cf.categoria === c ? 'selected' : ''}>${c}</option>`).join('')}
-      </select>
+      <select class="inputPadrao cat-fixo" style="width:110px">${categorias.map(c => `<option value="${c}" ${cf.categoria === c ? 'selected' : ''}>${c}</option>`).join('')}</select>
       <select class="inputPadrao freq-fixo" style="width:110px">
         <option value="mensal" ${cf.frequencia === 'mensal' ? 'selected' : ''}>Mensal</option>
         <option value="bimestral" ${cf.frequencia === 'bimestral' ? 'selected' : ''}>Bimestral</option>
@@ -212,46 +246,76 @@ function renderContasFixas() {
         <option value="personalizado" ${cf.frequencia === 'personalizado' ? 'selected' : ''}>A cada X meses</option>
       </select>
       ${cf.frequencia === 'personalizado' ? `<input type="number" class="inputPadrao int-fixo" value="${cf.intervalo || 2}" style="width:50px">` : ''}
-      <button class="removeItem">×</button>
-    `;
+      <button class="removeItem">×</button>`;
 
-    // Eventos usando seletores de classe para evitar erros de índice
     div.querySelector('.check-fixo').onchange = (e) => { cf.ativo = e.target.checked; salvarDadosLocal(); };
     div.querySelector('.nome-fixo').onblur = (e) => { cf.nome = e.target.value; salvarDadosLocal(); };
-    div.querySelector('.valor-fixo').onblur = (e) => { cf.valor = parseValor(e.target.value); e.target.value = formatar(cf.valor); salvarDadosLocal(); };
+    aplicarComportamentoInput(div.querySelector('.valor-fixo'), () => cf.valor, (v) => { cf.valor = v; });
     div.querySelector('.cat-fixo').onchange = (e) => { cf.categoria = e.target.value; salvarDadosLocal(); };
     div.querySelector('.freq-fixo').onchange = (e) => { cf.frequencia = e.target.value; renderContasFixas(); salvarDadosLocal(); };
-    
-    if (cf.frequencia === 'personalizado') {
-        div.querySelector('.int-fixo').onblur = (e) => { cf.intervalo = e.target.value; salvarDadosLocal(); };
-    }
+    if (cf.frequencia === 'personalizado') div.querySelector('.int-fixo').onblur = (e) => { cf.intervalo = e.target.value; salvarDadosLocal(); };
+    div.querySelector('.removeItem').onclick = () => { contasFixas = contasFixas.filter(c => c.id !== cf.id); renderContasFixas(); salvarDadosLocal(); };
+    lista.appendChild(div);
+  });
+  setTimeout(() => {
+    sortableFixas = Sortable.create(lista, { handle: '.drag-handle', animation: 150, ghostClass: 'sortable-ghost', onEnd: () => {
+      const novaOrdem = [];
+      lista.querySelectorAll('.item-fixo').forEach(itemDOM => {
+        const id = itemDOM.getAttribute("data-id");
+        const conta = contasFixas.find(c => c.id.toString() === id);
+        if (conta) novaOrdem.push(conta);
+      });
+      contasFixas = novaOrdem; salvarDadosLocal();
+    }});
+  }, 10);
+}
 
-    div.querySelector('.removeItem').onclick = () => { 
-      contasFixas = contasFixas.filter(c => c.id !== cf.id); 
-      renderContasFixas(); 
-      salvarDadosLocal(); 
-    };
+function renderReceitasFixas() {
+  const lista = document.getElementById("listaReceitasFixas");
+  const inSalarioBase = document.getElementById("salarioFixoBase");
+  if (!lista || !inSalarioBase) return;
+  if (sortableReceitas) { sortableReceitas.destroy(); sortableReceitas = null; }
+  
+  inSalarioBase.value = formatar(salarioFixoBase);
+  aplicarComportamentoInput(inSalarioBase, () => salarioFixoBase, (v) => { salarioFixoBase = v; });
 
+  lista.innerHTML = "";
+  receitasFixas.forEach((rf) => {
+    if (!rf.id) rf.id = Date.now() + Math.random();
+    const div = document.createElement("div");
+    div.className = "item item-fixo";
+    div.setAttribute("data-id", rf.id);
+    div.innerHTML = `
+      <div class="drag-handle">☰</div>
+      <input type="checkbox" ${rf.ativo ? 'checked' : ''} class="check-rf">
+      <input type="text" class="inputPadrao nome-rf" value="${rf.nome}" placeholder="Ex: Aluguel" style="flex:2">
+      <input type="text" class="inputPadrao valor-rf" value="${rf.valor > 0 ? formatar(rf.valor) : ''}" placeholder="Valor" style="width:110px">
+      <select class="inputPadrao cat-rf" style="width:110px">${categoriasReceitas.map(c => `<option value="${c}" ${rf.categoria === c ? 'selected' : ''}>${c}</option>`).join('')}</select>
+      <select class="inputPadrao freq-rf" style="width:110px">
+        <option value="mensal" ${rf.frequencia === 'mensal' ? 'selected' : ''}>Mensal</option>
+        <option value="anual" ${rf.frequencia === 'anual' ? 'selected' : ''}>Anual</option>
+      </select>
+      <button class="removeItem">×</button>`;
+
+    div.querySelector('.check-rf').onchange = (e) => { rf.ativo = e.target.checked; salvarDadosLocal(); };
+    div.querySelector('.nome-rf').onblur = (e) => { rf.nome = e.target.value; salvarDadosLocal(); };
+    aplicarComportamentoInput(div.querySelector('.valor-rf'), () => rf.valor, (v) => { rf.valor = v; });
+    div.querySelector('.cat-rf').onchange = (e) => { rf.categoria = e.target.value; salvarDadosLocal(); };
+    div.querySelector('.freq-rf').onchange = (e) => { rf.frequencia = e.target.value; renderReceitasFixas(); salvarDadosLocal(); };
+    div.querySelector('.removeItem').onclick = () => { receitasFixas = receitasFixas.filter(r => r.id !== rf.id); renderReceitasFixas(); salvarDadosLocal(); };
     lista.appendChild(div);
   });
 
-  // Inicializar Sortable com uma pequena espera para garantir o DOM
   setTimeout(() => {
-    sortableFixas = Sortable.create(lista, {
-      handle: '.drag-handle',
-      animation: 150,
-      ghostClass: 'sortable-ghost',
-      onEnd: () => {
-        const novaOrdem = [];
-        lista.querySelectorAll('.item-fixo').forEach(itemDOM => {
-          const id = itemDOM.getAttribute("data-id");
-          const conta = contasFixas.find(c => c.id.toString() === id);
-          if (conta) novaOrdem.push(conta);
-        });
-        contasFixas = novaOrdem;
-        salvarDadosLocal();
-      }
-    });
+    sortableReceitas = Sortable.create(lista, { handle: '.drag-handle', animation: 150, ghostClass: 'sortable-ghost', onEnd: () => {
+      const novaOrdem = [];
+      lista.querySelectorAll('.item-fixo').forEach(itemDOM => {
+        const id = itemDOM.getAttribute("data-id");
+        const item = receitasFixas.find(r => r.id.toString() === id);
+        if (item) novaOrdem.push(item);
+      });
+      receitasFixas = novaOrdem; salvarDadosLocal();
+    }});
   }, 10);
 }
 
@@ -261,37 +325,18 @@ function criarMesDOM(ano, index, data) {
   const mes = document.createElement("div");
   const mesAtualIdx = hoje.getMonth(); const anoAtual = hoje.getFullYear();
   let estaAberto = mesesAbertos.has(index);
-  if (mesesAbertos.size === 0 && Number(ano) === anoAtual && index === mesAtualIdx) {
-      estaAberto = true;
-      mesesAbertos.add(index);
-  }
+  if (mesesAbertos.size === 0 && Number(ano) === anoAtual && index === mesAtualIdx) { estaAberto = true; mesesAbertos.add(index); }
   mes.className = "mes" + (estaAberto ? "" : " collapsed");
   if (Number(ano) === anoAtual && index === mesAtualIdx) mes.classList.add("mesAtual");
 
   const header = document.createElement("div"); header.className = "mesHeader";
   header.innerHTML = `<span>${nomesMesesFull[index]} ${ano}</span><div><span class="mesTotal">0,00</span><button class="duplicarMes"><svg viewBox="0 0 24 24"><path d="M8 8h12v12H8zM4 4h12v2H6v10H4z"/></svg></button><button class="removeMes">×</button></div>`;
-  header.onclick = () => {
-      const isCollapsed = mes.classList.toggle("collapsed");
-      if (isCollapsed) mesesAbertos.delete(index);
-      else mesesAbertos.add(index);
-  };
+  header.onclick = () => { const isCollapsed = mes.classList.toggle("collapsed"); if (isCollapsed) mesesAbertos.delete(index); else mesesAbertos.add(index); };
   header.querySelector(".duplicarMes").onclick = (e) => { e.stopPropagation(); dados[ano].meses.splice(index + 1, 0, JSON.parse(JSON.stringify(data))); carregarAno(); };
   header.querySelector(".removeMes").onclick = (e) => { e.stopPropagation(); if(confirm("Excluir mês?")) { dados[ano].meses.splice(index, 1); carregarAno(); } };
 
   const body = document.createElement("div"); body.className = "mesBody";
-  body.innerHTML = `
-    <div class="container">
-        <div class="coluna despesas">
-            <div class="topoColuna"><h4>DESPESAS</h4></div>
-            <div class="conteudoColuna"><div class="listaDesp"></div><div class="acoesDesp"><button class="addDesp">+ Despesa</button><button class="addParcela">+ Parcela</button></div></div>
-            <p class="rodapeColuna">Total: <span class="totalDespesas">0,00</span></p>
-        </div>
-        <div class="coluna dinheiro">
-            <div class="topoColuna"><h4>DINHEIROS</h4></div>
-            <div class="conteudoColuna"><div class="linhaInputs"><div class="campo"><label>Salário</label><input type="text" class="salario inputPadrao"></div><div class="campo"><label>Conta</label><input type="text" class="conta inputPadrao"></div><button class="btn-cascata" title="Vincular meses seguintes">🔗</button></div><h5>OUTROS</h5><div class="listaEmp"></div><button class="addEmp inputPadrao" style="height:35px; cursor:pointer">+</button></div>
-            <p class="rodapeColuna">Total: <span class="totalDinheiro">0,00</span></p>
-        </div>
-    </div><div class="totalFinal">TOTAL: <span class="saldo">0,00</span></div>`;
+  body.innerHTML = `<div class="container"><div class="coluna despesas"><div class="topoColuna"><h4>DESPESAS</h4></div><div class="conteudoColuna"><div class="listaDesp"></div><div class="acoesDesp"><button class="addDesp">+ Despesa</button><button class="addParcela">+ Parcela</button></div></div><p class="rodapeColuna">Total: <span class="totalDespesas">0,00</span></p></div><div class="coluna dinheiro"><div class="topoColuna"><h4>RENDAS</h4></div><div class="conteudoColuna"><div class="linhaInputs"><div class="campo"><label>Salário</label><input type="text" class="salario inputPadrao"></div><div class="campo"><label>Conta</label><input type="text" class="conta inputPadrao"></div><button class="btn-cascata" title="Vincular meses seguintes">🔗</button></div><h5>OUTROS</h5><div class="listaEmp"></div><button class="addEmp inputPadrao" style="height:35px; cursor:pointer">+</button></div><p class="rodapeColuna">Total: <span class="totalDinheiro">0,00</span></p></div></div><div class="totalFinal">TOTAL: <span class="saldo">0,00</span></div>`;
 
   const listD = body.querySelector(".listaDesp"); 
   const listE = body.querySelector(".listaEmp");
@@ -304,7 +349,7 @@ function criarMesDOM(ano, index, data) {
   inSal.value = formatar(data.salario || 0);
   inCon.value = formatar(data.conta || 0);
 
-  aplicarComportamentoInput(inSal, () => data.salario, (v) => data.salario = v, ano);
+  aplicarComportamentoInput(inSal, () => data.salario, (v) => { data.salario = v; atualizarTudo(ano); }, ano);
   inCon.addEventListener("focus", () => { inCon.dataset.old = inCon.value; inCon.value = ""; });
   inCon.addEventListener("blur", () => {
     const txt = inCon.value.trim();
@@ -336,10 +381,10 @@ function criarItem(lista, d, dataArray, ano) {
   check.onchange = () => { d.checked = check.checked; atualizarTudo(ano); };
   nome.onblur = () => { d.nome = nome.value; salvarDadosLocal(true); };
   nome.addEventListener("keydown", (e) => { if(e.key === "Enter") nome.blur(); });
-  aplicarComportamentoInput(valor, () => d.valor, (v) => d.valor = v, ano);
+  aplicarComportamentoInput(valor, () => d.valor, (v) => { d.valor = v; atualizarTudo(ano); }, ano);
   btn.onclick = () => { 
     if(d.parcelaId) {
-      if(confirm("Deseja excluir todas as parcelas vinculadas?")) {
+      if(confirm("Excluir todas as parcelas?")) {
         parcelasMemoria = parcelasMemoria.filter(p => p.id !== d.parcelaId);
         Object.keys(dados).forEach(a => { if(dados[a].meses) dados[a].meses.forEach(m => { m.despesas = m.despesas.filter(item => item.parcelaId !== d.parcelaId); }); });
         carregarAno();
@@ -371,6 +416,8 @@ function salvarDadosLocal(pendente = true) {
   localStorage.setItem("financas", JSON.stringify(dados));
   localStorage.setItem("parcelas", JSON.stringify(parcelasMemoria));
   localStorage.setItem("contasFixas", JSON.stringify(contasFixas));
+  localStorage.setItem("receitasFixas", JSON.stringify(receitasFixas));
+  localStorage.setItem("salarioFixoBase", JSON.stringify(salarioFixoBase));
   localStorage.setItem("categorias", JSON.stringify(categorias));
   const a = document.getElementById("statusAlteracao");
   if(a) a.style.display = pendente ? "inline" : "none";
@@ -378,10 +425,17 @@ function salvarDadosLocal(pendente = true) {
 
 async function salvarFirebase() {
   const btn = document.getElementById("salvarNuvemBtn");
-  if (!usuarioLogado || !senhaDoUsuario) return alert("Erro: Senha não encontrada.");
+  if (!usuarioLogado || !senhaDoUsuario) return alert("Erro: Login ou Senha ausentes.");
   try {
     btn.innerText = "⌛ SALVANDO..."; btn.disabled = true;
-    const pacote = await encryptData({ dados, parcelasMemoria, contasFixas, categorias }, senhaDoUsuario);
+    const pacote = await encryptData({ 
+        dados, 
+        parcelasMemoria, 
+        contasFixas, 
+        receitasFixas, 
+        salarioFixoBase, 
+        categorias 
+    }, senhaDoUsuario);
     await setDoc(doc(db, "financas", usuarioLogado.uid), pacote);
     btn.innerText = "✅ SALVO NA NUVEM";
     salvarDadosLocal(false);
@@ -398,12 +452,15 @@ async function carregarFirebase(senha) {
       dados = res.dados || {};
       parcelasMemoria = res.parcelasMemoria || [];
       contasFixas = res.contasFixas || [];
+      receitasFixas = res.receitasFixas || [];
+      salarioFixoBase = res.salarioFixoBase || 0;
       categorias = res.categorias || ["Essencial", "Alimentação", "Cartões", "Contas"];
       salvarDadosLocal(false);
     }
-  } catch (e) { alert("Senha incorreta."); }
+  } catch (e) { alert("Erro ao carregar da nuvem."); }
   carregarAno();
   renderContasFixas();
+  renderReceitasFixas();
 }
 
 onAuthStateChanged(auth, async (user) => {
@@ -421,46 +478,24 @@ onAuthStateChanged(auth, async (user) => {
   }
 });
 
-// ================= UTILITÁRIOS E EVENTOS =================
-
-function formatar(v) { return "R$ " + (Number(v) || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2 }); }
-function parseValor(v) { if (!v) return 0; const limpo = v.toString().replace(/[^\d,.-]/g, "").replace(",", "."); return Number(limpo) || 0; }
-
-function aplicarComportamentoInput(input, getV, setV, ano) {
-  input.addEventListener("focus", () => { input.dataset.old = input.value; input.value = ""; });
-  input.addEventListener("blur", () => {
-    if (input.value.trim() === "") { input.value = input.dataset.old; } 
-    else { const v = parseValor(input.value); setV(v); input.value = formatar(v); atualizarTudo(ano); }
-  });
-  input.addEventListener("keydown", (e) => { if(e.key === "Enter") input.blur(); });
-}
+// ================= EVENTOS DE BOTÕES =================
 
 document.getElementById("loginBtn").onclick = async () => {
     const e = document.getElementById("email").value;
     const s = document.getElementById("senha").value;
-    try { 
-        await signInWithEmailAndPassword(auth, e, s); 
-        senhaDoUsuario = s;
-        sessionStorage.setItem("temp_key", s);
-    } catch (err) { alert("Erro login."); }
+    try { await signInWithEmailAndPassword(auth, e, s); senhaDoUsuario = s; sessionStorage.setItem("temp_key", s); } catch (err) { alert("Erro login."); }
 };
 
 document.getElementById("cadastroBtn").onclick = async () => {
     const e = document.getElementById("email").value;
     const s = document.getElementById("senha").value;
-    try { 
-        await createUserWithEmailAndPassword(auth, e, s);
-        senhaDoUsuario = s;
-        sessionStorage.setItem("temp_key", s);
-        dados = {}; parcelasMemoria = []; contasFixas = [];
-        await salvarFirebase();
-    } catch (err) { alert("Erro cadastro."); }
+    try { await createUserWithEmailAndPassword(auth, e, s); senhaDoUsuario = s; sessionStorage.setItem("temp_key", s); dados = {}; parcelasMemoria = []; await salvarFirebase(); } catch (err) { alert("Erro cadastro."); }
 };
 
 document.getElementById("logoutBtn").onclick = () => { signOut(auth); localStorage.clear(); sessionStorage.clear(); location.reload(); };
 document.getElementById("salvarNuvemBtn").onclick = salvarFirebase;
 document.getElementById("exportarTudoBtn").onclick = () => {
-    const blob = new Blob([JSON.stringify({ dados, parcelasMemoria, contasFixas, categorias }, null, 2)], { type: "application/json" });
+    const blob = new Blob([JSON.stringify({ dados, parcelasMemoria, contasFixas, receitasFixas, salarioFixoBase, categorias }, null, 2)], { type: "application/json" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a"); a.href = url; a.download = `backup.json`; a.click();
 };
@@ -473,8 +508,9 @@ document.getElementById("inputImport").onchange = (e) => {
             const j = JSON.parse(ev.target.result);
             if(j.dados) { 
                 dados = j.dados; parcelasMemoria = j.parcelasMemoria || []; 
-                contasFixas = j.contasFixas || []; categorias = j.categorias || categorias;
-                mesesAbertos.clear(); carregarAno(); renderContasFixas(); alert("Importado!"); 
+                contasFixas = j.contasFixas || []; receitasFixas = j.receitasFixas || []; 
+                salarioFixoBase = j.salarioFixoBase || 0; categorias = j.categorias || categorias;
+                mesesAbertos.clear(); carregarAno(); renderContasFixas(); renderReceitasFixas(); alert("Importado!"); 
             }
         } catch(err) { alert("Erro no arquivo."); }
     };
@@ -486,6 +522,11 @@ document.getElementById("btnAddContaFixa").onclick = () => {
   renderContasFixas();
 };
 
+document.getElementById("btnAddReceitaFixa").onclick = () => {
+  receitasFixas.push({ id: Date.now(), nome: "", valor: 0, ativo: true, categoria: "Extra", frequencia: "mensal" });
+  renderReceitasFixas();
+};
+
 document.getElementById("btnGerenciarCategorias").onclick = () => { document.getElementById("modalCategorias").style.display = "flex"; renderCategoriasModal(); };
 document.getElementById("btnFecharModal").onclick = () => { document.getElementById("modalCategorias").style.display = "none"; renderContasFixas(); };
 document.getElementById("btnAddCategoria").onclick = () => {
@@ -493,7 +534,9 @@ document.getElementById("btnAddCategoria").onclick = () => {
   const nome = input.value.trim();
   if (nome && !categorias.includes(nome)) { categorias.push(nome); input.value = ""; renderCategoriasModal(); salvarDadosLocal(); }
 };
-document.getElementById("headerContasFixas").onclick = () => { document.getElementById("moduloContasFixas").classList.toggle("collapsed"); };
+
+document.getElementById("headerContasFixas").onclick = () => document.getElementById("moduloContasFixas").classList.toggle("collapsed");
+document.getElementById("headerReceitasFixas").onclick = () => document.getElementById("moduloReceitasFixas").classList.toggle("collapsed");
 
 function carregarAno() {
   const ano = document.getElementById("ano").value;
@@ -537,3 +580,9 @@ for (let a = 2024; a <= 2035; a++) {
   seletorAno.appendChild(o);
 }
 seletorAno.onchange = carregarAno;
+
+renderContasFixas();
+renderReceitasFixas();
+
+document.getElementById("showSignup").onclick = (e) => { e.preventDefault(); document.getElementById("loginActions").style.display = "none"; document.getElementById("signupActions").style.display = "block"; };
+document.getElementById("showLogin").onclick = (e) => { e.preventDefault(); document.getElementById("signupActions").style.display = "none"; document.getElementById("loginActions").style.display = "block"; };
