@@ -52,8 +52,43 @@
 
     <!-- CONTEÚDO CENTRALIZADO -->
     <div class="container-central">
+      
+      <!-- SELETOR DE ANO (TOPO) -->
       <div class="controles-topo">
-        <select id="ano" class="inputPadrao" style="width: auto;"></select>
+          <span>Selecione o ano:</span>
+          <select id="ano" class="inputPadrao" style="width: auto;"></select>
+      </div>
+
+      <!-- GRÁFICO -->
+      <div id="grafico"></div>
+
+      <!-- MÓDULO: CONTAS FIXAS (ABAIXO DO GRÁFICO) -->
+      <div id="moduloContasFixas" class="mes collapsed">
+          <div class="mesHeader" id="headerContasFixas" style="background-color: var(--P04); cursor: pointer;">
+              <span>⚙️ Configurar Despesas Fixas (Template)</span>
+              <div class="header-actions"></div>
+          </div>
+          <div class="mesBody" id="bodyContasFixas">
+              <div class="fixed-list-header">
+                  <p style="font-size: 13px; color: var(--P02); margin-bottom: 15px; flex: 1;">
+                      As contas marcadas aqui serão adicionadas automaticamente ao clicar em "Adicionar Mês".
+                  </p>
+                  <div class="acoes-categorias">
+                      <span id="btnGerenciarCategorias" style="color: var(--P02); cursor: pointer; font-size: 14px; font-weight: bold;">
+                          ✏️ Categorias
+                      </span>
+                  </div>
+              </div>
+              <div id="listaContasFixas"></div>
+              <button class="addEmp inputPadrao" id="btnAddContaFixa" style="margin-top:15px; background: var(--P04); color: white; cursor:pointer">+ Nova Despesa Fixa</button>
+          </div>
+      </div>
+
+      <!-- ÁREA DOS MESES (ONDE APARECE O BOTÃO + ADICIONAR MÊS) -->
+      <div id="areaAno"></div>
+
+      <!-- CONTROLES DE AÇÃO (EXPORTAR, IMPORTAR, SALVAR) -->
+      <div class="controles-topo">
         <button id="exportarTudoBtn" class="btn-secundario">EXPORTAR JSON</button>
         <label for="inputImport" class="btn-secundario">IMPORTAR JSON</label>
         <input type="file" id="inputImport" style="display: none;">
@@ -61,9 +96,18 @@
         <span id="statusAlteracao" style="display: none; color: #e67e22; font-weight: bold; margin-left: 10px; font-size: 13px;">⚠️ Alterações pendentes</span>
       </div>
 
-      <div id="grafico"></div>
-      <hr>
-      <div id="areaAno"></div>
+      <!-- MODAL DE GERENCIAMENTO DE CATEGORIAS -->
+      <div id="modalCategorias" class="modal-overlay" style="display:none;">
+          <div class="modal-content">
+              <h3>Gerenciar Categorias</h3>
+              <div class="modal-inputs" style="display: flex; gap: 10px; margin-bottom: 20px;">
+                  <input type="text" id="novaCategoriaNome" class="inputPadrao" placeholder="Nova categoria...">
+                  <button class="btn" id="btnAddCategoria" style="background: var(--P04);">➕</button>
+              </div>
+              <ul id="listaCategoriasModal" style="list-style: none; padding: 0; margin-bottom: 20px;"></ul>
+              <button class="btn sair" id="btnFecharModal" style="width:100%;">Fechar</button>
+          </div>
+      </div>
 
       <footer class="siteFooter">
         <p>© 2026 <a href="https://www.behance.net/gustavojsantos">Gustavo Santos</a></p>
