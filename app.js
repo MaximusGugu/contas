@@ -312,6 +312,8 @@ async function carregarFirebase() {
 onAuthStateChanged(auth, async (user) => {
   if (user) {
     usuarioLogado = user;
+    document.getElementById("displayEmail").textContent = `Autenticado como ${user.email}`;
+    document.getElementById("authContainer").style.display = "none";
     document.getElementById("authContainer").style.display = "none";
     document.getElementById("appContainer").style.display = "block";
     await carregarFirebase();

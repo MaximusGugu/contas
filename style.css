@@ -26,9 +26,10 @@ body {
   font-optical-sizing: auto;
   font-weight: 400;
   padding: 20px;
-  background: var(--P02);
-  max-width: 1080px;
-  margin: auto;
+  background: var(--P02);  
+  max-width: none !important;
+  margin: 0 !important;
+  padding: 0 !important;
 }
 
 #grafico {
@@ -104,6 +105,27 @@ body {
   width: 14px;
   height: 14px;
   display: block;
+}
+
+/* --- CSS PARA O CABEÇALHO FULL WIDTH --- */
+.header-verde-full {
+  width: 100%;
+  background-color: var(--P03);
+  margin-bottom: 20px;
+}
+
+/* Container para travar o conteúdo em 1080px e centralizar */
+.container-central {
+  max-width: 1080px;
+  margin: 0 auto;
+  padding: 0 20px;
+}
+
+/* Garante que o título dentro do verde fique bege */
+.header-verde-full h1 {
+  color: var(--P02) !important;
+  margin: 0;
+  padding: 15px 0;
 }
 
 /* ================= ESTADOS (ABERTO/FECHADO) ================= */
@@ -205,6 +227,7 @@ body {
   border-radius: 8px;
   display: flex;
   justify-content: space-between;
+  margin-bottom: 30px;
 }
 
 .valor, .salario, .conta {
@@ -421,6 +444,7 @@ body {
   border-radius: 10px;
   margin-top: 30px;
   font-size: 14px;
+  margin-bottom: 30px;
 }
 
 .siteFooter a { color: var(--P02); text-decoration: none; }
@@ -581,3 +605,22 @@ input.conta:not(.manual) {
 /* Feedback visual simples */
 .positivo { color: #2ecc71; font-weight: bold; }
 .negativo { color: #e74c3c; font-weight: bold; }
+
+.auth-status {
+  display: flex;
+  align-items: center;
+  gap: 15px; /* Espaço entre o e-mail e o botão */
+}
+
+#displayEmail {
+  color: var(--P02); /* Cor bege igual ao título */
+  font-size: 13px;
+  opacity: 0.9;
+}
+
+/* Ajuste para mobile: esconde o texto "Autenticado como" se a tela for pequena demais */
+@media (max-width: 600px) {
+  #displayEmail {
+    display: none;
+  }
+}
