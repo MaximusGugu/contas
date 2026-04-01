@@ -2,6 +2,9 @@
 <html lang="pt-BR">
 <head>
   <meta charset="UTF-8">
+  <!-- ESTA É A LINHA QUE RESOLVE O PROBLEMA DO CELULAR -->
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  
   <title>Contas Mensais - Login</title>
   <script src="https://cdn.jsdelivr.net/npm/apexcharts"></script>
   <link rel="stylesheet" href="style.css">
@@ -46,6 +49,7 @@
       <label for="inputImport" class="btn-secundario">IMPORTAR JSON</label>
       <input type="file" id="inputImport" style="display: none;">
       <button id="salvarNuvemBtn" class="btn" style="background-color: var(--P03);">☁️ SALVAR NA NUVEM</button>
+      <span id="statusAlteracao" style="display: none; color: #e67e22; font-weight: bold; margin-left: 10px; font-size: 13px;">⚠️ Alterações pendentes</span>
     </div>
 
     <div id="grafico"></div>

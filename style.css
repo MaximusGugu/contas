@@ -1,6 +1,15 @@
 /* Fonte Google DM Sans */
 @import url('https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,100..1000;1,9..40,100..1000&display=swap');
 
+* {
+  box-sizing: border-box; /* Garante que padding não aumente a largura total */
+}
+
+html, body {
+  overflow-x: hidden; /* Evita que a tela dance para os lados no celular */
+  width: 100%;
+}
+
 /* CORES PLANETÁRIO */
 :root {
   --P01: #D78341;
@@ -438,7 +447,6 @@ body {
 .btn-secundario {
   padding: 8px 14px;
   border: 2px solid var(--P03);
-  background: white;
   color: var(--P03);
   border-radius: 8px;
   font-weight: bold;
@@ -511,3 +519,65 @@ body {
 .siteFooter {
   margin-top: 50px;
 }
+
+/* Campo automático (Segue a cascata) */
+input.conta {
+  border-left: 5px solid #2ecc71 !important;
+  color: #27ae60;
+}
+
+/* Campo manual (Travado pelo usuário) */
+input.conta.manual {
+  border-left: 5px solid var(--P01) !important;
+  background-color: #fffdf8 !important;
+  color: var(--P05);
+  font-weight: bold;
+}
+
+/* Indica campo automático (cascata) */
+input.conta:not(.manual) {
+  border-left: 5px solid #2ecc71 !important; /* Verde discreto para automático */
+  color: #27ae60;
+}
+
+.positivo { color: #2ecc71; font-weight: bold; }
+.negativo { color: #e74c3c; font-weight: bold; }
+
+/* ... manter o resto ... */
+
+.campo {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+}
+
+.linhaInputs {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 10px;
+  align-items: flex-end;
+}
+
+.btn-cascata {
+  background: var(--P03);
+  color: white;
+  border: none;
+  border-radius: 8px;
+  width: 35px;
+  height: 35px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  transition: all 0.2s;
+}
+.btn-cascata:hover { background: var(--P01); transform: scale(1.1); }
+
+.btn-cascata:active {
+  transform: scale(0.9);
+}
+
+/* Feedback visual simples */
+.positivo { color: #2ecc71; font-weight: bold; }
+.negativo { color: #e74c3c; font-weight: bold; }
