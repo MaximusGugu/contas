@@ -28,10 +28,12 @@ let chart = null;
 let mesesAbertos = new Set(); 
 let contasFixas = JSON.parse(localStorage.getItem("contasFixas")) || [];
 let categorias = JSON.parse(localStorage.getItem("categorias")) || ["Essencial", "Alimentação", "Cartões", "Contas"];
+let sortableFixas = null; // Instância global do Sortable
+
 const hoje = new Date();
 const nomesMesesFull = ["Janeiro","Fevereiro","Março","Abril","Maio","Junho","Julho","Agosto","Setembro","Outubro","Novembro","Dezembro"];
 
-// ================= CRIPTOGRAFIA (RESTABELECIDA) =================
+// ================= CRIPTOGRAFIA =================
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
 
@@ -138,8 +140,6 @@ function aplicarParcelas() {
   });
 }
 
-// ================= ADICIONAR MÊS (TEMPLATE ENGINE) =================
-
 function adicionarMes(ano) {
   let anoNum = Number(ano);
   if (!dados[anoNum]) dados[anoNum] = { meses: [] };
@@ -175,7 +175,87 @@ function adicionarMes(ano) {
   carregarAno();
 }
 
-// ================= INTERFACE DOM =================
+// ================= GESTÃO DE CONTAS FIXAS (FIXED DRAG & DROP) =================
+
+function renderContasFixas() {
+  const lista = document.getElementById("listaContasFixas");
+  if (!lista) return;
+
+  // Destruir instância anterior do Sortable antes de recriar o HTML
+  if (sortableFixas) {
+    sortableFixas.destroy();
+    sortableFixas = null;
+  }
+
+  lista.innerHTML = "";
+
+  contasFixas.forEach((cf) => {
+    // IMPORTANTE: Garantir que cada item tenha um ID único para o Sortable
+    if (!cf.id) cf.id = Date.now() + Math.random();
+
+    const div = document.createElement("div");
+    div.className = "item item-fixo";
+    div.setAttribute("data-id", cf.id);
+    
+    div.innerHTML = `
+      <div class="drag-handle">☰</div>
+      <input type="checkbox" ${cf.ativo ? 'checked' : ''} class="check-fixo">
+      <input type="text" class="inputPadrao nome-fixo" value="${cf.nome}" placeholder="Nome" style="flex:2">
+      <input type="text" class="inputPadrao valor-fixo" value="${cf.valor > 0 ? formatar(cf.valor) : ''}" placeholder="Valor" style="width:110px">
+      <select class="inputPadrao cat-fixo" style="width:110px">
+        ${categorias.map(c => `<option value="${c}" ${cf.categoria === c ? 'selected' : ''}>${c}</option>`).join('')}
+      </select>
+      <select class="inputPadrao freq-fixo" style="width:110px">
+        <option value="mensal" ${cf.frequencia === 'mensal' ? 'selected' : ''}>Mensal</option>
+        <option value="bimestral" ${cf.frequencia === 'bimestral' ? 'selected' : ''}>Bimestral</option>
+        <option value="anual" ${cf.frequencia === 'anual' ? 'selected' : ''}>Anual</option>
+        <option value="personalizado" ${cf.frequencia === 'personalizado' ? 'selected' : ''}>A cada X meses</option>
+      </select>
+      ${cf.frequencia === 'personalizado' ? `<input type="number" class="inputPadrao int-fixo" value="${cf.intervalo || 2}" style="width:50px">` : ''}
+      <button class="removeItem">×</button>
+    `;
+
+    // Eventos usando seletores de classe para evitar erros de índice
+    div.querySelector('.check-fixo').onchange = (e) => { cf.ativo = e.target.checked; salvarDadosLocal(); };
+    div.querySelector('.nome-fixo').onblur = (e) => { cf.nome = e.target.value; salvarDadosLocal(); };
+    div.querySelector('.valor-fixo').onblur = (e) => { cf.valor = parseValor(e.target.value); e.target.value = formatar(cf.valor); salvarDadosLocal(); };
+    div.querySelector('.cat-fixo').onchange = (e) => { cf.categoria = e.target.value; salvarDadosLocal(); };
+    div.querySelector('.freq-fixo').onchange = (e) => { cf.frequencia = e.target.value; renderContasFixas(); salvarDadosLocal(); };
+    
+    if (cf.frequencia === 'personalizado') {
+        div.querySelector('.int-fixo').onblur = (e) => { cf.intervalo = e.target.value; salvarDadosLocal(); };
+    }
+
+    div.querySelector('.removeItem').onclick = () => { 
+      contasFixas = contasFixas.filter(c => c.id !== cf.id); 
+      renderContasFixas(); 
+      salvarDadosLocal(); 
+    };
+
+    lista.appendChild(div);
+  });
+
+  // Inicializar Sortable com uma pequena espera para garantir o DOM
+  setTimeout(() => {
+    sortableFixas = Sortable.create(lista, {
+      handle: '.drag-handle',
+      animation: 150,
+      ghostClass: 'sortable-ghost',
+      onEnd: () => {
+        const novaOrdem = [];
+        lista.querySelectorAll('.item-fixo').forEach(itemDOM => {
+          const id = itemDOM.getAttribute("data-id");
+          const conta = contasFixas.find(c => c.id.toString() === id);
+          if (conta) novaOrdem.push(conta);
+        });
+        contasFixas = novaOrdem;
+        salvarDadosLocal();
+      }
+    });
+  }, 10);
+}
+
+// ================= INTERFACE DOM MESES =================
 
 function criarMesDOM(ano, index, data) {
   const mes = document.createElement("div");
@@ -269,45 +349,7 @@ function criarItem(lista, d, dataArray, ano) {
   lista.appendChild(div);
 }
 
-// ================= GESTÃO DE CONTAS FIXAS =================
-
-function renderContasFixas() {
-  const lista = document.getElementById("listaContasFixas");
-  if (!lista) return;
-  lista.innerHTML = "";
-  contasFixas.forEach((cf, index) => {
-    const div = document.createElement("div");
-    div.className = "item"; div.style.marginBottom = "10px";
-    div.innerHTML = `
-      <input type="checkbox" ${cf.ativo ? 'checked' : ''}>
-      <input type="text" class="inputPadrao" value="${cf.nome}" placeholder="Nome" style="flex:2">
-      <input type="text" class="inputPadrao" value="${cf.valor > 0 ? formatar(cf.valor) : ''}" placeholder="Valor" style="width:110px">
-      <select class="inputPadrao" style="width:110px">${categorias.map(c => `<option value="${c}" ${cf.categoria === c ? 'selected' : ''}>${c}</option>`).join('')}</select>
-      <select class="inputPadrao" style="width:110px">
-        <option value="mensal" ${cf.frequencia === 'mensal' ? 'selected' : ''}>Mensal</option>
-        <option value="bimestral" ${cf.frequencia === 'bimestral' ? 'selected' : ''}>Bimestral</option>
-        <option value="anual" ${cf.frequencia === 'anual' ? 'selected' : ''}>Anual</option>
-        <option value="personalizado" ${cf.frequencia === 'personalizado' ? 'selected' : ''}>A cada X meses</option>
-      </select>
-      ${cf.frequencia === 'personalizado' ? `<input type="number" class="inputPadrao" value="${cf.intervalo || 2}" style="width:50px">` : ''}
-      <button class="removeItem">×</button>`;
-
-    const inputs = div.querySelectorAll('input, select, button');
-    inputs[0].onchange = (e) => { cf.ativo = e.target.checked; salvarDadosLocal(); };
-    inputs[1].onblur = (e) => { cf.nome = e.target.value; salvarDadosLocal(); };
-    inputs[2].onblur = (e) => { cf.valor = parseValor(e.target.value); e.target.value = formatar(cf.valor); salvarDadosLocal(); };
-    inputs[3].onchange = (e) => { cf.categoria = e.target.value; salvarDadosLocal(); };
-    inputs[4].onchange = (e) => { cf.frequencia = e.target.value; renderContasFixas(); salvarDadosLocal(); };
-    const btnRemover = div.querySelector('.removeItem');
-    if (cf.frequencia === 'personalizado' && inputs[5]) {
-        inputs[5].onblur = (e) => { cf.intervalo = e.target.value; salvarDadosLocal(); };
-        btnRemover.onclick = () => { contasFixas.splice(index, 1); renderContasFixas(); salvarDadosLocal(); };
-    } else {
-        btnRemover.onclick = () => { contasFixas.splice(index, 1); renderContasFixas(); salvarDadosLocal(); };
-    }
-    lista.appendChild(div);
-  });
-}
+// ================= CATEGORIAS MODAL =================
 
 function renderCategoriasModal() {
   const lista = document.getElementById("listaCategoriasModal");
@@ -336,7 +378,7 @@ function salvarDadosLocal(pendente = true) {
 
 async function salvarFirebase() {
   const btn = document.getElementById("salvarNuvemBtn");
-  if (!usuarioLogado || !senhaDoUsuario) return alert("Erro: Senha não encontrada para criptografia.");
+  if (!usuarioLogado || !senhaDoUsuario) return alert("Erro: Senha não encontrada.");
   try {
     btn.innerText = "⌛ SALVANDO..."; btn.disabled = true;
     const pacote = await encryptData({ dados, parcelasMemoria, contasFixas, categorias }, senhaDoUsuario);
@@ -359,7 +401,7 @@ async function carregarFirebase(senha) {
       categorias = res.categorias || ["Essencial", "Alimentação", "Cartões", "Contas"];
       salvarDadosLocal(false);
     }
-  } catch (e) { alert("Senha incorreta ou erro nos dados."); }
+  } catch (e) { alert("Senha incorreta."); }
   carregarAno();
   renderContasFixas();
 }
@@ -440,7 +482,7 @@ document.getElementById("inputImport").onchange = (e) => {
 };
 
 document.getElementById("btnAddContaFixa").onclick = () => {
-  contasFixas.push({ nome: "", valor: 0, ativo: true, categoria: categorias[0], frequencia: "mensal", intervalo: 1 });
+  contasFixas.push({ id: Date.now(), nome: "", valor: 0, ativo: true, categoria: categorias[0], frequencia: "mensal", intervalo: 1 });
   renderContasFixas();
 };
 

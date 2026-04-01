@@ -5,6 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Contas Mensais - Login</title>
   <script src="https://cdn.jsdelivr.net/npm/apexcharts"></script>
+  <!-- BIBLIOTECA PARA ARRASTAR ITENS -->
+  <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
   <link rel="stylesheet" href="style.css">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -12,7 +14,6 @@
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='8' fill='%233C5558' stroke='white' stroke-width='0.5'/><text x='50%' y='55%' dominant-baseline='middle' text-anchor='middle' fill='white' font-family='sans-serif' font-size='20' font-weight='bold'>$</text></svg>">
 </head>
 <body>
-
   <!-- TELA DE AUTENTICAÇÃO -->
   <div id="authContainer" class="auth-wrapper">
     <div class="auth-card">
@@ -21,12 +22,10 @@
         <input type="email" id="email" placeholder="Email" class="inputPadrao">
         <input type="password" id="senha" placeholder="Senha" class="inputPadrao">
       </div>
-      
       <div id="loginActions">
         <button class="btn" id="loginBtn">ENTRAR</button>
         <p class="auth-toggle">Não tem uma conta? <a href="#" id="showSignup">Cadastre-se</a></p>
       </div>
-
       <div id="signupActions" style="display: none;">
         <button class="btn" id="cadastroBtn" style="background-color: var(--P01);">CRIAR CONTA</button>
         <p class="auth-toggle">Já tem conta? <a href="#" id="showLogin">Fazer Login</a></p>
@@ -36,8 +35,6 @@
 
   <!-- TELA DO APLICATIVO -->
   <div id="appContainer" style="display: none;">
-    
-    <!-- CABEÇALHO VERDE FULL WIDTH -->
     <header class="header-verde-full">
       <div class="container-central">
         <div class="topo">
@@ -50,28 +47,22 @@
       </div>
     </header>
 
-    <!-- CONTEÚDO CENTRALIZADO -->
     <div class="container-central">
-      
-      <!-- SELETOR DE ANO (TOPO) -->
       <div class="controles-topo">
           <span>Selecione o ano:</span>
           <select id="ano" class="inputPadrao" style="width: auto;"></select>
       </div>
 
-      <!-- GRÁFICO -->
       <div id="grafico"></div>
 
-      <!-- MÓDULO: CONTAS FIXAS (ABAIXO DO GRÁFICO) -->
       <div id="moduloContasFixas" class="mes collapsed">
           <div class="mesHeader" id="headerContasFixas" style="background-color: var(--P04); cursor: pointer;">
               <span>Configurar Despesas Fixas</span>
-              <div class="header-actions"></div>
           </div>
           <div class="mesBody" id="bodyContasFixas">
               <div class="fixed-list-header">
                   <p style="font-size: 13px; color: var(--P02); margin-bottom: 15px; flex: 1;">
-                      As contas marcadas aqui serão adicionadas automaticamente ao clicar em "Adicionar Mês".
+                      Arraste as contas para ordenar. Elas serão criadas nos novos meses nesta ordem, mas é possível arrastá-las para personalizar depois de criar.<br>Ao lado, é possível editar as categorias do menu de seleção.
                   </p>
                   <div class="acoes-categorias">
                       <span id="btnGerenciarCategorias" style="color: var(--P02); cursor: pointer; font-size: 14px; font-weight: bold;">
@@ -84,10 +75,8 @@
           </div>
       </div>
 
-      <!-- ÁREA DOS MESES (ONDE APARECE O BOTÃO + ADICIONAR MÊS) -->
       <div id="areaAno"></div>
 
-      <!-- CONTROLES DE AÇÃO (EXPORTAR, IMPORTAR, SALVAR) -->
       <div class="controles-topo">
         <button id="exportarTudoBtn" class="btn-secundario">EXPORTAR JSON</button>
         <label for="inputImport" class="btn-secundario">IMPORTAR JSON</label>
@@ -96,15 +85,14 @@
         <span id="statusAlteracao" style="display: none; color: #e67e22; font-weight: bold; margin-left: 10px; font-size: 13px;">⚠️ Alterações pendentes</span>
       </div>
 
-      <!-- MODAL DE GERENCIAMENTO DE CATEGORIAS -->
       <div id="modalCategorias" class="modal-overlay" style="display:none;">
           <div class="modal-content">
               <h3>Gerenciar Categorias</h3>
-              <div class="modal-inputs" style="display: flex; gap: 10px; margin-bottom: 20px;">
+              <div class="modal-inputs">
                   <input type="text" id="novaCategoriaNome" class="inputPadrao" placeholder="Nova categoria...">
                   <button class="btn" id="btnAddCategoria" style="background: var(--P04);">➕</button>
               </div>
-              <ul id="listaCategoriasModal" style="list-style: none; padding: 0; margin-bottom: 20px;"></ul>
+              <ul id="listaCategoriasModal"></ul>
               <button class="btn sair" id="btnFecharModal" style="width:100%;">Fechar</button>
           </div>
       </div>
