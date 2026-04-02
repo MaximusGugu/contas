@@ -1,5 +1,8 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+import { 
+  getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, 
+  onAuthStateChanged, signOut, updatePassword, reauthenticateWithCredential, EmailAuthProvider 
+} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import { getFirestore, doc, setDoc, getDoc } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
 const firebaseConfig = {
@@ -19,7 +22,7 @@ const db = getFirestore(app);
 let usuarioLogado = null;
 let senhaDoUsuario = sessionStorage.getItem("temp_key") || ""; 
 let dados = {};
-let parcelasMemoria = [];
+let parcelasMemoria = JSON.parse(localStorage.getItem("parcelas")) || [];
 let mesesDOM = [];
 let chart = null;
 let mesesAbertos = new Set(); 
@@ -28,6 +31,7 @@ let contasFixas = JSON.parse(localStorage.getItem("contasFixas")) || [];
 let receitasFixas = JSON.parse(localStorage.getItem("receitasFixas")) || [];
 let salarioFixoBase = JSON.parse(localStorage.getItem("salarioFixoBase")) || 0;
 let categorias = JSON.parse(localStorage.getItem("categorias")) || ["Essencial", "Alimentação", "Cartões", "Contas"];
+let configuracoes = JSON.parse(localStorage.getItem("configuracoes")) || { diaVirada: 1, nomeUsuario: "", referenciaMes: "atual" };
 
 let sortableFixas = null;
 let sortableReceitas = null;
@@ -50,11 +54,7 @@ async function encryptData(obj, senha) {
   );
   const iv = crypto.getRandomValues(new Uint8Array(12));
   const encrypted = await crypto.subtle.encrypt({ name: "AES-GCM", iv }, key, dadosBytes);
-  return {
-    encrypted: btoa(String.fromCharCode(...new Uint8Array(encrypted))),
-    iv: btoa(String.fromCharCode(...iv)),
-    salt: btoa(String.fromCharCode(...salt))
-  };
+  return { encrypted: btoa(String.fromCharCode(...new Uint8Array(encrypted))), iv: btoa(String.fromCharCode(...iv)), salt: btoa(String.fromCharCode(...salt)) };
 }
 
 async function decryptData(encryptedObj, senha) {
@@ -72,25 +72,16 @@ async function decryptData(encryptedObj, senha) {
   } catch (e) { throw new Error("Senha incorreta."); }
 }
 
-// ================= UTILITÁRIOS DE FORMATAÇÃO =================
+// ================= UTILITÁRIOS =================
 
-function formatar(v) { 
-    return "R$ " + (Number(v) || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }); 
-}
+function formatar(v) { return "R$ " + (Number(v) || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
 
 function parseValor(v) {
     if (!v) return 0;
     if (typeof v === 'number') return v;
-    
     let str = v.toString();
-    // Se tiver ponto e vírgula (ex: 1.250,50), remove o ponto e troca a vírgula por ponto
-    if (str.includes('.') && str.includes(',')) {
-        str = str.replace(/\./g, '').replace(',', '.');
-    } else {
-        // Se tiver apenas vírgula, troca por ponto
-        str = str.replace(',', '.');
-    }
-    // Remove qualquer caractere que não seja número ou ponto decimal
+    if (str.includes('.') && str.includes(',')) str = str.replace(/\./g, '').replace(',', '.');
+    else str = str.replace(',', '.');
     const limpo = str.replace(/[^\d.]/g, "");
     return parseFloat(limpo) || 0;
 }
@@ -100,15 +91,8 @@ function aplicarComportamentoInput(input, getV, setV, anoVinculado = null) {
   input.addEventListener("focus", () => { input.dataset.old = input.value; input.value = ""; });
   input.addEventListener("blur", () => {
     const txt = input.value.trim();
-    if (txt === "") { 
-        input.value = input.dataset.old; 
-    } else { 
-        const v = parseValor(txt); 
-        setV(v); 
-        input.value = formatar(v); 
-        if (anoVinculado) atualizarTudo(anoVinculado); 
-        else salvarDadosLocal(); 
-    }
+    if (txt === "") input.value = input.dataset.old;
+    else { const v = parseValor(txt); setV(v); input.value = formatar(v); if (anoVinculado) atualizarTudo(anoVinculado); else salvarDadosLocal(); }
   });
   input.addEventListener("keydown", (e) => { if(e.key === "Enter") input.blur(); });
 }
@@ -116,12 +100,24 @@ function aplicarComportamentoInput(input, getV, setV, anoVinculado = null) {
 // ================= MOTOR DE CÁLCULO =================
 
 function atualizarTudo(anoParaVisualizar, pendente = true) {
+  const hojeSync = new Date();
+  const diaV = parseInt(configuracoes?.diaVirada) || 1;
+  const refMes = configuracoes?.referenciaMes || "atual";
+  
+  let baseDate = new Date();
+  if (refMes === "proximo") baseDate.setMonth(baseDate.getMonth() + 1);
+
+  let mesAt = baseDate.getMonth();
+  let anoAt = baseDate.getFullYear();
+  if (hojeSync.getDate() < diaV) { mesAt--; if (mesAt < 0) { mesAt = 11; anoAt--; } }
+
   const anosOrdenados = Object.keys(dados).map(Number).sort((a, b) => a - b);
   let saldoAcumulado = 0;
   let ehOPrimeiroMesDeTodos = true;
 
   anosOrdenados.forEach(ano => {
-    if (!dados[ano].meses) return;
+    if (!dados[ano] || !dados[ano].meses) return;
+    
     dados[ano].meses.forEach((m, idx) => {
       if (!ehOPrimeiroMesDeTodos && m.contaManual !== true) m.conta = saldoAcumulado;
       const dTotal = (m.despesas || []).filter(x => x.checked).reduce((acc, b) => acc + b.valor, 0);
@@ -149,10 +145,16 @@ function atualizarTudo(anoParaVisualizar, pendente = true) {
             if (m.contaManual === true) inC.classList.add("manual");
             else inC.classList.remove("manual");
           }
+          if (ano === anoAt && idx === mesAt) dom.classList.add("mesAtual");
+          else dom.classList.remove("mesAtual");
         }
       }
     });
   });
+
+  const titulo = document.getElementById("tituloSite");
+  if (titulo) titulo.textContent = configuracoes.nomeUsuario ? `CONTAS DE ${configuracoes.nomeUsuario.toUpperCase()}` : "CONTAS MENSAIS";
+
   salvarDadosLocal(pendente);
   atualizarGrafico(Number(anoParaVisualizar));
 }
@@ -161,6 +163,7 @@ function liberarCascataFutura(anoInicial, mesIdxInicial) {
   const anosOrdenados = Object.keys(dados).map(Number).sort((a, b) => a - b);
   let encontrouAtual = false;
   anosOrdenados.forEach(ano => {
+    if (!dados[ano] || !dados[ano].meses) return;
     dados[ano].meses.forEach((m, idx) => {
       if (encontrouAtual) m.contaManual = false;
       if (ano === Number(anoInicial) && idx === mesIdxInicial) encontrouAtual = true;
@@ -171,7 +174,7 @@ function liberarCascataFutura(anoInicial, mesIdxInicial) {
 
 function aplicarParcelas() {
   parcelasMemoria.forEach(p => {
-    if (!dados[p.ano]) return;
+    if (!dados[p.ano] || !dados[p.ano].meses) return;
     const meses = dados[p.ano].meses;
     for (let i = 0; i < p.parcelas; i++) {
       const idx = p.inicio + i;
@@ -189,15 +192,11 @@ function adicionarMes(ano) {
   if (!dados[anoNum]) dados[anoNum] = { meses: [] };
   const mesesArray = dados[anoNum].meses;
   const novoMesIndice = mesesArray.length;
-
   let novoMes = { despesas: [], empresa: [], salario: salarioFixoBase, conta: 0, contaManual: false };
 
   contasFixas.forEach(cf => {
     if (cf.ativo) {
-      let deve = (cf.frequencia === "mensal") || 
-                 (cf.frequencia === "bimestral" && novoMesIndice % 2 === 0) ||
-                 (cf.frequencia === "anual" && novoMesIndice === 0) ||
-                 (cf.frequencia === "personalizado" && novoMesIndice % (parseInt(cf.intervalo) || 1) === 0);
+      let deve = (cf.frequencia === "mensal") || (cf.frequencia === "bimestral" && novoMesIndice % 2 === 0) || (cf.frequencia === "anual" && novoMesIndice === 0) || (cf.frequencia === "personalizado" && novoMesIndice % (parseInt(cf.intervalo) || 1) === 0);
       if (deve) novoMes.despesas.push({ nome: cf.nome, valor: cf.valor || 0, checked: true, categoria: cf.categoria });
     }
   });
@@ -213,7 +212,8 @@ function adicionarMes(ano) {
     let novoAnoNum = anoNum + 1;
     if (!dados[novoAnoNum]) dados[novoAnoNum] = { meses: [] };
     dados[novoAnoNum].meses.push(novoMes);
-    document.getElementById("ano").value = novoAnoNum;
+    const seletor = document.getElementById("ano");
+    if(seletor) seletor.value = novoAnoNum;
   } else {
     mesesArray.push(novoMes);
   }
@@ -221,7 +221,7 @@ function adicionarMes(ano) {
   carregarAno();
 }
 
-// ================= GESTÃO DE TEMPLATES =================
+// ================= RENDERERS TEMPLATES =================
 
 function renderContasFixas() {
   const lista = document.getElementById("listaContasFixas");
@@ -233,21 +233,7 @@ function renderContasFixas() {
     const div = document.createElement("div");
     div.className = "item item-fixo";
     div.setAttribute("data-id", cf.id);
-    div.innerHTML = `
-      <div class="drag-handle">☰</div>
-      <input type="checkbox" ${cf.ativo ? 'checked' : ''} class="check-fixo">
-      <input type="text" class="inputPadrao nome-fixo" value="${cf.nome}" placeholder="Nome" style="flex:2">
-      <input type="text" class="inputPadrao valor-fixo" value="${cf.valor > 0 ? formatar(cf.valor) : ''}" placeholder="Valor" style="width:110px">
-      <select class="inputPadrao cat-fixo" style="width:110px">${categorias.map(c => `<option value="${c}" ${cf.categoria === c ? 'selected' : ''}>${c}</option>`).join('')}</select>
-      <select class="inputPadrao freq-fixo" style="width:110px">
-        <option value="mensal" ${cf.frequencia === 'mensal' ? 'selected' : ''}>Mensal</option>
-        <option value="bimestral" ${cf.frequencia === 'bimestral' ? 'selected' : ''}>Bimestral</option>
-        <option value="anual" ${cf.frequencia === 'anual' ? 'selected' : ''}>Anual</option>
-        <option value="personalizado" ${cf.frequencia === 'personalizado' ? 'selected' : ''}>A cada X meses</option>
-      </select>
-      ${cf.frequencia === 'personalizado' ? `<input type="number" class="inputPadrao int-fixo" value="${cf.intervalo || 2}" style="width:50px">` : ''}
-      <button class="removeItem">×</button>`;
-
+    div.innerHTML = `<div class="drag-handle">☰</div><input type="checkbox" ${cf.ativo ? 'checked' : ''} class="check-fixo"><input type="text" class="inputPadrao nome-fixo" value="${cf.nome}" placeholder="Nome" style="flex:2"><input type="text" class="inputPadrao valor-fixo" value="${cf.valor > 0 ? formatar(cf.valor) : ''}" placeholder="Valor" style="width:110px"><select class="inputPadrao cat-fixo" style="width:110px">${categorias.map(c => `<option value="${c}" ${cf.categoria === c ? 'selected' : ''}>${c}</option>`).join('')}</select><select class="inputPadrao freq-fixo" style="width:110px"><option value="mensal" ${cf.frequencia === 'mensal' ? 'selected' : ''}>Mensal</option><option value="bimestral" ${cf.frequencia === 'bimestral' ? 'selected' : ''}>Bimestral</option><option value="anual" ${cf.frequencia === 'anual' ? 'selected' : ''}>Anual</option><option value="personalizado" ${cf.frequencia === 'personalizado' ? 'selected' : ''}>A cada X meses</option></select>${cf.frequencia === 'personalizado' ? `<input type="number" class="inputPadrao int-fixo" value="${cf.intervalo || 2}" style="width:50px">` : ''}<button class="removeItem">×</button>`;
     div.querySelector('.check-fixo').onchange = (e) => { cf.ativo = e.target.checked; salvarDadosLocal(); };
     div.querySelector('.nome-fixo').onblur = (e) => { cf.nome = e.target.value; salvarDadosLocal(); };
     aplicarComportamentoInput(div.querySelector('.valor-fixo'), () => cf.valor, (v) => { cf.valor = v; });
@@ -258,15 +244,17 @@ function renderContasFixas() {
     lista.appendChild(div);
   });
   setTimeout(() => {
-    sortableFixas = Sortable.create(lista, { handle: '.drag-handle', animation: 150, ghostClass: 'sortable-ghost', onEnd: () => {
-      const novaOrdem = [];
-      lista.querySelectorAll('.item-fixo').forEach(itemDOM => {
-        const id = itemDOM.getAttribute("data-id");
-        const conta = contasFixas.find(c => c.id.toString() === id);
-        if (conta) novaOrdem.push(conta);
-      });
-      contasFixas = novaOrdem; salvarDadosLocal();
-    }});
+    if(typeof Sortable !== 'undefined') {
+        sortableFixas = Sortable.create(lista, { handle: '.drag-handle', animation: 150, ghostClass: 'sortable-ghost', onEnd: () => {
+          const novaOrdem = [];
+          lista.querySelectorAll('.item-fixo').forEach(itemDOM => {
+            const id = itemDOM.getAttribute("data-id");
+            const conta = contasFixas.find(c => c.id.toString() === id);
+            if (conta) novaOrdem.push(conta);
+          });
+          contasFixas = novaOrdem; salvarDadosLocal();
+        }});
+    }
   }, 10);
 }
 
@@ -275,9 +263,10 @@ function renderReceitasFixas() {
   const inSalarioBase = document.getElementById("salarioFixoBase");
   if (!lista || !inSalarioBase) return;
   if (sortableReceitas) { sortableReceitas.destroy(); sortableReceitas = null; }
-  
   inSalarioBase.value = formatar(salarioFixoBase);
-  aplicarComportamentoInput(inSalarioBase, () => salarioFixoBase, (v) => { salarioFixoBase = v; });
+  const novoIn = inSalarioBase.cloneNode(true);
+  inSalarioBase.parentNode.replaceChild(novoIn, inSalarioBase);
+  aplicarComportamentoInput(novoIn, () => salarioFixoBase, (v) => { salarioFixoBase = v; });
 
   lista.innerHTML = "";
   receitasFixas.forEach((rf) => {
@@ -285,18 +274,7 @@ function renderReceitasFixas() {
     const div = document.createElement("div");
     div.className = "item item-fixo";
     div.setAttribute("data-id", rf.id);
-    div.innerHTML = `
-      <div class="drag-handle">☰</div>
-      <input type="checkbox" ${rf.ativo ? 'checked' : ''} class="check-rf">
-      <input type="text" class="inputPadrao nome-rf" value="${rf.nome}" placeholder="Ex: Aluguel" style="flex:2">
-      <input type="text" class="inputPadrao valor-rf" value="${rf.valor > 0 ? formatar(rf.valor) : ''}" placeholder="Valor" style="width:110px">
-      <select class="inputPadrao cat-rf" style="width:110px">${categoriasReceitas.map(c => `<option value="${c}" ${rf.categoria === c ? 'selected' : ''}>${c}</option>`).join('')}</select>
-      <select class="inputPadrao freq-rf" style="width:110px">
-        <option value="mensal" ${rf.frequencia === 'mensal' ? 'selected' : ''}>Mensal</option>
-        <option value="anual" ${rf.frequencia === 'anual' ? 'selected' : ''}>Anual</option>
-      </select>
-      <button class="removeItem">×</button>`;
-
+    div.innerHTML = `<div class="drag-handle">☰</div><input type="checkbox" ${rf.ativo ? 'checked' : ''} class="check-rf"><input type="text" class="inputPadrao nome-rf" value="${rf.nome}" placeholder="Ex: Aluguel" style="flex:2"><input type="text" class="inputPadrao valor-rf" value="${rf.valor > 0 ? formatar(rf.valor) : ''}" placeholder="Valor" style="width:110px"><select class="inputPadrao cat-rf" style="width:110px">${categoriasReceitas.map(c => `<option value="${c}" ${rf.categoria === c ? 'selected' : ''}>${c}</option>`).join('')}</select><select class="inputPadrao freq-rf" style="width:110px"><option value="mensal" ${rf.frequencia === 'mensal' ? 'selected' : ''}>Mensal</option><option value="anual" ${rf.frequencia === 'anual' ? 'selected' : ''}>Anual</option></select><button class="removeItem">×</button>`;
     div.querySelector('.check-rf').onchange = (e) => { rf.ativo = e.target.checked; salvarDadosLocal(); };
     div.querySelector('.nome-rf').onblur = (e) => { rf.nome = e.target.value; salvarDadosLocal(); };
     aplicarComportamentoInput(div.querySelector('.valor-rf'), () => rf.valor, (v) => { rf.valor = v; });
@@ -305,17 +283,18 @@ function renderReceitasFixas() {
     div.querySelector('.removeItem').onclick = () => { receitasFixas = receitasFixas.filter(r => r.id !== rf.id); renderReceitasFixas(); salvarDadosLocal(); };
     lista.appendChild(div);
   });
-
   setTimeout(() => {
-    sortableReceitas = Sortable.create(lista, { handle: '.drag-handle', animation: 150, ghostClass: 'sortable-ghost', onEnd: () => {
-      const novaOrdem = [];
-      lista.querySelectorAll('.item-fixo').forEach(itemDOM => {
-        const id = itemDOM.getAttribute("data-id");
-        const item = receitasFixas.find(r => r.id.toString() === id);
-        if (item) novaOrdem.push(item);
-      });
-      receitasFixas = novaOrdem; salvarDadosLocal();
-    }});
+    if(typeof Sortable !== 'undefined') {
+        sortableReceitas = Sortable.create(lista, { handle: '.drag-handle', animation: 150, ghostClass: 'sortable-ghost', onEnd: () => {
+          const novaOrdem = [];
+          lista.querySelectorAll('.item-fixo').forEach(itemDOM => {
+            const id = itemDOM.getAttribute("data-id");
+            const item = receitasFixas.find(r => r.id.toString() === id);
+            if (item) novaOrdem.push(item);
+          });
+          receitasFixas = novaOrdem; salvarDadosLocal();
+        }});
+    }
   }, 10);
 }
 
@@ -323,11 +302,20 @@ function renderReceitasFixas() {
 
 function criarMesDOM(ano, index, data) {
   const mes = document.createElement("div");
-  const mesAtualIdx = hoje.getMonth(); const anoAtual = hoje.getFullYear();
+  const hojeSync = new Date();
+  const diaV = parseInt(configuracoes.diaVirada) || 1;
+  const refMes = configuracoes.referenciaMes || "atual";
+  let baseDate = new Date();
+  if (refMes === "proximo") baseDate.setMonth(baseDate.getMonth() + 1);
+  let mesAt = baseDate.getMonth();
+  let anoAt = baseDate.getFullYear();
+  if (hojeSync.getDate() < diaV) { mesAt--; if (mesAt < 0) { mesAt = 11; anoAt--; } }
+  
   let estaAberto = mesesAbertos.has(index);
-  if (mesesAbertos.size === 0 && Number(ano) === anoAtual && index === mesAtualIdx) { estaAberto = true; mesesAbertos.add(index); }
+  if (mesesAbertos.size === 0 && Number(ano) === anoAt && index === mesAt) { estaAberto = true; mesesAbertos.add(index); }
+  
   mes.className = "mes" + (estaAberto ? "" : " collapsed");
-  if (Number(ano) === anoAtual && index === mesAtualIdx) mes.classList.add("mesAtual");
+  if (Number(ano) === anoAt && index === mesAt) mes.classList.add("mesAtual");
 
   const header = document.createElement("div"); header.className = "mesHeader";
   header.innerHTML = `<span>${nomesMesesFull[index]} ${ano}</span><div><span class="mesTotal">0,00</span><button class="duplicarMes"><svg viewBox="0 0 24 24"><path d="M8 8h12v12H8zM4 4h12v2H6v10H4z"/></svg></button><button class="removeMes">×</button></div>`;
@@ -360,15 +348,20 @@ function criarMesDOM(ano, index, data) {
   inCon.addEventListener("keydown", (e) => { if(e.key === "Enter") inCon.blur(); });
   btnC.onclick = () => liberarCascataFutura(ano, index);
   body.querySelector(".addDesp").onclick = () => { data.despesas.push({nome:"", valor:0, checked:true}); carregarAno(); };
+  
+  // CORRIGIDO: LOGICA DO BOTÃO PARCELA
   body.querySelector(".addParcela").onclick = () => {
     const nome = prompt("Nome da despesa:");
     const valorTotal = parseValor(prompt("Valor TOTAL da compra:"));
     const numParcelas = parseInt(prompt("Quantidade de parcelas:"));
     if(nome && valorTotal > 0 && numParcelas > 0) {
       parcelasMemoria.push({ id: Date.now(), nome: nome, valorParcela: Number((valorTotal / numParcelas).toFixed(2)), parcelas: numParcelas, inicio: index, ano: Number(ano) });
-      aplicarParcelas(); carregarAno();
+      aplicarParcelas(); // Injeta no objeto dados imediatamente
+      salvarDadosLocal(); // Salva
+      carregarAno(); // Recarrega visualmente
     }
   };
+  
   body.querySelector(".addEmp").onclick = () => { if(!data.empresa) data.empresa=[]; data.empresa.push({nome:"", valor:0, checked:true}); carregarAno(); };
   mes.appendChild(header); mes.appendChild(body);
   return mes;
@@ -386,7 +379,7 @@ function criarItem(lista, d, dataArray, ano) {
     if(d.parcelaId) {
       if(confirm("Excluir todas as parcelas?")) {
         parcelasMemoria = parcelasMemoria.filter(p => p.id !== d.parcelaId);
-        Object.keys(dados).forEach(a => { if(dados[a].meses) dados[a].meses.forEach(m => { m.despesas = m.despesas.filter(item => item.parcelaId !== d.parcelaId); }); });
+        Object.keys(dados).forEach(a => { if(dados[a] && dados[a].meses) dados[a].meses.forEach(m => { m.despesas = m.despesas.filter(item => item.parcelaId !== d.parcelaId); }); });
         carregarAno();
       }
     } else { dataArray.splice(dataArray.indexOf(d), 1); carregarAno(); }
@@ -394,7 +387,7 @@ function criarItem(lista, d, dataArray, ano) {
   lista.appendChild(div);
 }
 
-// ================= CATEGORIAS MODAL =================
+// ================= MODAIS E CONFIGURAÇÕES =================
 
 function renderCategoriasModal() {
   const lista = document.getElementById("listaCategoriasModal");
@@ -410,6 +403,22 @@ function renderCategoriasModal() {
 window.removerCategoria = (index) => { if (confirm(`Excluir categoria?`)) { categorias.splice(index, 1); renderCategoriasModal(); salvarDadosLocal(); } };
 window.renomearCategoria = (index) => { const novo = prompt("Novo nome:", categorias[index]); if (novo) { categorias[index] = novo; renderCategoriasModal(); salvarDadosLocal(); } };
 
+async function mudarSenha() {
+    const pAntiga = document.getElementById("pwdAntiga").value;
+    const pNova = document.getElementById("pwdNova").value;
+    if(!pAntiga || !pNova) return alert("Preencha as senhas.");
+    try {
+        const credential = EmailAuthProvider.credential(usuarioLogado.email, pAntiga);
+        await reauthenticateWithCredential(auth.currentUser, credential);
+        await updatePassword(auth.currentUser, pNova);
+        senhaDoUsuario = pNova;
+        sessionStorage.setItem("temp_key", pNova);
+        alert("Senha atualizada!");
+        document.getElementById("pwdAntiga").value = "";
+        document.getElementById("pwdNova").value = "";
+    } catch (e) { alert("Erro ao mudar senha."); }
+}
+
 // ================= FIREBASE E PERSISTÊNCIA =================
 
 function salvarDadosLocal(pendente = true) {
@@ -419,28 +428,24 @@ function salvarDadosLocal(pendente = true) {
   localStorage.setItem("receitasFixas", JSON.stringify(receitasFixas));
   localStorage.setItem("salarioFixoBase", JSON.stringify(salarioFixoBase));
   localStorage.setItem("categorias", JSON.stringify(categorias));
+  localStorage.setItem("configuracoes", JSON.stringify(configuracoes));
   const a = document.getElementById("statusAlteracao");
   if(a) a.style.display = pendente ? "inline" : "none";
 }
 
 async function salvarFirebase() {
   const btn = document.getElementById("salvarNuvemBtn");
-  if (!usuarioLogado || !senhaDoUsuario) return alert("Erro: Login ou Senha ausentes.");
+  if (!usuarioLogado || !senhaDoUsuario) return;
   try {
     btn.innerText = "⌛ SALVANDO..."; btn.disabled = true;
     const pacote = await encryptData({ 
-        dados, 
-        parcelasMemoria, 
-        contasFixas, 
-        receitasFixas, 
-        salarioFixoBase, 
-        categorias 
+        dados, parcelasMemoria, contasFixas, receitasFixas, salarioFixoBase, categorias, configuracoes 
     }, senhaDoUsuario);
     await setDoc(doc(db, "financas", usuarioLogado.uid), pacote);
     btn.innerText = "✅ SALVO NA NUVEM";
     salvarDadosLocal(false);
   } catch (e) { btn.innerText = "❌ ERRO"; }
-  finally { setTimeout(() => { btn.innerText = "☁️ SALVAR NA NUVEM"; btn.disabled = false; }, 2000); }
+  finally { setTimeout(() => { if(btn) btn.innerText = "☁️ SALVAR NA NUVEM"; btn.disabled = false; }, 2000); }
 }
 
 async function carregarFirebase(senha) {
@@ -455,9 +460,12 @@ async function carregarFirebase(senha) {
       receitasFixas = res.receitasFixas || [];
       salarioFixoBase = res.salarioFixoBase || 0;
       categorias = res.categorias || ["Essencial", "Alimentação", "Cartões", "Contas"];
+      configuracoes = res.configuracoes || { diaVirada: 1, nomeUsuario: "", referenciaMes: "atual" };
+      
+      aplicarParcelas(); // Aplica as parcelas ao carregar
       salvarDadosLocal(false);
     }
-  } catch (e) { alert("Erro ao carregar da nuvem."); }
+  } catch (e) { alert("Senha incorreta."); }
   carregarAno();
   renderContasFixas();
   renderReceitasFixas();
@@ -466,7 +474,8 @@ async function carregarFirebase(senha) {
 onAuthStateChanged(auth, async (user) => {
   if (user) {
     usuarioLogado = user;
-    document.getElementById("displayEmail").textContent = `Autenticado como ${user.email}`;
+    const dispEmail = document.getElementById("displayEmail");
+    if(dispEmail) dispEmail.textContent = `Autenticado como ${user.email}`;
     document.getElementById("authContainer").style.display = "none";
     document.getElementById("appContainer").style.display = "block";
     if (senhaDoUsuario) await carregarFirebase(senhaDoUsuario);
@@ -480,22 +489,27 @@ onAuthStateChanged(auth, async (user) => {
 
 // ================= EVENTOS DE BOTÕES =================
 
-document.getElementById("loginBtn").onclick = async () => {
+const loginBtn = document.getElementById("loginBtn");
+if(loginBtn) loginBtn.onclick = async () => {
     const e = document.getElementById("email").value;
     const s = document.getElementById("senha").value;
     try { await signInWithEmailAndPassword(auth, e, s); senhaDoUsuario = s; sessionStorage.setItem("temp_key", s); } catch (err) { alert("Erro login."); }
 };
 
-document.getElementById("cadastroBtn").onclick = async () => {
+const cadastroBtn = document.getElementById("cadastroBtn");
+if(cadastroBtn) cadastroBtn.onclick = async () => {
     const e = document.getElementById("email").value;
     const s = document.getElementById("senha").value;
     try { await createUserWithEmailAndPassword(auth, e, s); senhaDoUsuario = s; sessionStorage.setItem("temp_key", s); dados = {}; parcelasMemoria = []; await salvarFirebase(); } catch (err) { alert("Erro cadastro."); }
 };
 
-document.getElementById("logoutBtn").onclick = () => { signOut(auth); localStorage.clear(); sessionStorage.clear(); location.reload(); };
+const logoutBtn = document.getElementById("logoutBtn");
+if(logoutBtn) logoutBtn.onclick = () => { signOut(auth); localStorage.clear(); sessionStorage.clear(); location.reload(); };
+
 document.getElementById("salvarNuvemBtn").onclick = salvarFirebase;
+
 document.getElementById("exportarTudoBtn").onclick = () => {
-    const blob = new Blob([JSON.stringify({ dados, parcelasMemoria, contasFixas, receitasFixas, salarioFixoBase, categorias }, null, 2)], { type: "application/json" });
+    const blob = new Blob([JSON.stringify({ dados, parcelasMemoria, contasFixas, receitasFixas, salarioFixoBase, categorias, configuracoes }, null, 2)], { type: "application/json" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a"); a.href = url; a.download = `backup.json`; a.click();
 };
@@ -510,12 +524,30 @@ document.getElementById("inputImport").onchange = (e) => {
                 dados = j.dados; parcelasMemoria = j.parcelasMemoria || []; 
                 contasFixas = j.contasFixas || []; receitasFixas = j.receitasFixas || []; 
                 salarioFixoBase = j.salarioFixoBase || 0; categorias = j.categorias || categorias;
+                configuracoes = j.configuracoes || { diaVirada: 1, nomeUsuario: "", referenciaMes: "atual" };
+                aplicarParcelas();
                 mesesAbertos.clear(); carregarAno(); renderContasFixas(); renderReceitasFixas(); alert("Importado!"); 
             }
         } catch(err) { alert("Erro no arquivo."); }
     };
     reader.readAsText(file);
 };
+
+// Tooltip lógica
+const helpTrigger = document.getElementById("helpTrigger");
+if(helpTrigger) helpTrigger.onclick = (e) => {
+    e.stopPropagation();
+    const popup = document.getElementById("helpPopup");
+    const rect = e.currentTarget.getBoundingClientRect();
+    popup.style.display = popup.style.display === "none" ? "block" : "none";
+    popup.style.top = (rect.bottom + window.scrollY + 10) + "px";
+    popup.style.left = (rect.left + window.scrollX - 100) + "px";
+};
+
+document.addEventListener("click", () => { 
+  const popup = document.getElementById("helpPopup");
+  if(popup) popup.style.display = "none"; 
+});
 
 document.getElementById("btnAddContaFixa").onclick = () => {
   contasFixas.push({ id: Date.now(), nome: "", valor: 0, ativo: true, categoria: categorias[0], frequencia: "mensal", intervalo: 1 });
@@ -529,6 +561,30 @@ document.getElementById("btnAddReceitaFixa").onclick = () => {
 
 document.getElementById("btnGerenciarCategorias").onclick = () => { document.getElementById("modalCategorias").style.display = "flex"; renderCategoriasModal(); };
 document.getElementById("btnFecharModal").onclick = () => { document.getElementById("modalCategorias").style.display = "none"; renderContasFixas(); };
+
+document.getElementById("btnSettings").onclick = () => {
+    document.getElementById("cfgNomeUsuario").value = configuracoes.nomeUsuario || "";
+    document.getElementById("cfgDiaVirada").value = configuracoes.diaVirada || 1;
+    if(configuracoes.referenciaMes === "proximo") document.getElementById("refProximo").checked = true;
+    else document.getElementById("refAtual").checked = true;
+    document.getElementById("modalConfiguracoes").style.display = "flex";
+};
+
+document.getElementById("btnFecharConfig").onclick = () => document.getElementById("modalConfiguracoes").style.display = "none";
+
+document.getElementById("btnSalvarConfig").onclick = async () => {
+    configuracoes.nomeUsuario = document.getElementById("cfgNomeUsuario").value;
+    configuracoes.diaVirada = parseInt(document.getElementById("cfgDiaVirada").value) || 1;
+    const refCheck = document.querySelector('input[name="refMes"]:checked');
+    configuracoes.referenciaMes = refCheck ? refCheck.value : "atual";
+    salvarDadosLocal();
+    await salvarFirebase();
+    document.getElementById("modalConfiguracoes").style.display = "none";
+    atualizarTudo(seletorAno.value);
+};
+
+document.getElementById("btnSalvarSenha").onclick = mudarSenha;
+
 document.getElementById("btnAddCategoria").onclick = () => {
   const input = document.getElementById("novaCategoriaNome");
   const nome = input.value.trim();
@@ -538,10 +594,18 @@ document.getElementById("btnAddCategoria").onclick = () => {
 document.getElementById("headerContasFixas").onclick = () => document.getElementById("moduloContasFixas").classList.toggle("collapsed");
 document.getElementById("headerReceitasFixas").onclick = () => document.getElementById("moduloReceitasFixas").classList.toggle("collapsed");
 
+const showSignup = document.getElementById("showSignup");
+if(showSignup) showSignup.onclick = (e) => { e.preventDefault(); document.getElementById("loginActions").style.display = "none"; document.getElementById("signupActions").style.display = "block"; };
+
+const showLogin = document.getElementById("showLogin");
+if(showLogin) showLogin.onclick = (e) => { e.preventDefault(); document.getElementById("signupActions").style.display = "none"; document.getElementById("loginActions").style.display = "block"; };
+
 function carregarAno() {
-  const ano = document.getElementById("ano").value;
+  const seletor = document.getElementById("ano");
+  const ano = seletor ? seletor.value : hoje.getFullYear();
   if (!dados[ano]) dados[ano] = { meses: [] };
   const area = document.getElementById("areaAno");
+  if(!area) return;
   mesesDOM.forEach(m => { if (!m.dom.classList.contains("collapsed")) mesesAbertos.add(m.index); else mesesAbertos.delete(m.index); });
   area.innerHTML = ""; mesesDOM = [];
   const container = document.createElement("div"); area.appendChild(container);
@@ -561,9 +625,11 @@ function atualizarGrafico(ano) {
     const e = (m.empresa || []).filter(x => x.checked).reduce((acc, b) => acc + b.valor, 0);
     return Number(((m.salario + m.conta + e) - d).toFixed(2));
   });
+  const graficoEl = document.querySelector("#grafico");
+  if(!graficoEl) return;
   if (chart) chart.updateSeries([{ data: valores }]);
   else {
-    chart = new ApexCharts(document.querySelector("#grafico"), {
+    chart = new ApexCharts(graficoEl, {
       chart: { type: "bar", height: 280, toolbar:{show:false} },
       series: [{ name: "Saldo", data: valores }],
       xaxis: { categories: nomesMesesFull.map(n => n.slice(0,3).toUpperCase()) },
@@ -573,16 +639,15 @@ function atualizarGrafico(ano) {
   }
 }
 
-const seletorAno = document.getElementById("ano");
-for (let a = 2024; a <= 2035; a++) {
-  const o = document.createElement("option"); o.value = a; o.text = a;
-  if(a === hoje.getFullYear()) o.selected = true;
-  seletorAno.appendChild(o);
+const seletorAnoInit = document.getElementById("ano");
+if(seletorAnoInit) {
+    for (let a = 2024; a <= 2035; a++) {
+      const o = document.createElement("option"); o.value = a; o.text = a;
+      if(a === hoje.getFullYear()) o.selected = true;
+      seletorAnoInit.appendChild(o);
+    }
+    seletorAnoInit.onchange = carregarAno;
 }
-seletorAno.onchange = carregarAno;
 
 renderContasFixas();
 renderReceitasFixas();
-
-document.getElementById("showSignup").onclick = (e) => { e.preventDefault(); document.getElementById("loginActions").style.display = "none"; document.getElementById("signupActions").style.display = "block"; };
-document.getElementById("showLogin").onclick = (e) => { e.preventDefault(); document.getElementById("signupActions").style.display = "none"; document.getElementById("loginActions").style.display = "block"; };

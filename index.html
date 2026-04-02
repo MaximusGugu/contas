@@ -5,7 +5,6 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Contas Mensais - Login</title>
   <script src="https://cdn.jsdelivr.net/npm/apexcharts"></script>
-  <!-- BIBLIOTECA PARA ARRASTAR ITENS -->
   <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
   <link rel="stylesheet" href="style.css">
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -14,7 +13,6 @@
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='8' fill='%233C5558' stroke='white' stroke-width='0.5'/><text x='50%' y='55%' dominant-baseline='middle' text-anchor='middle' fill='white' font-family='sans-serif' font-size='20' font-weight='bold'>$</text></svg>">
 </head>
 <body>
-  <!-- TELA DE AUTENTICAÇÃO -->
   <div id="authContainer" class="auth-wrapper">
     <div class="auth-card">
       <h1>CONTAS MENSAIS</h1>
@@ -33,14 +31,14 @@
     </div>
   </div>
 
-  <!-- TELA DO APLICATIVO -->
   <div id="appContainer" style="display: none;">
     <header class="header-verde-full">
       <div class="container-central">
         <div class="topo">
-          <h1>CONTAS MENSAIS</h1>
+          <h1 id="tituloSite">CONTAS MENSAIS</h1>
           <div class="auth-status">
             <span id="displayEmail"></span>
+            <button id="btnSettings" title="Configurações" style="background:none; border:none; color:var(--P02); cursor:pointer; font-size:20px; padding:0 5px;">⚙️</button>
             <button id="logoutBtn" class="btn sair">Sair</button>
           </div>
         </div>
@@ -55,6 +53,7 @@
 
       <div id="grafico"></div>
 
+      <!-- MÓDULO: DESPESAS FIXAS -->
       <div id="moduloContasFixas" class="mes collapsed">
           <div class="mesHeader" id="headerContasFixas" style="background-color: var(--P04); cursor: pointer;">
               <span>Configurar Despesas Fixas</span>
@@ -62,7 +61,7 @@
           <div class="mesBody" id="bodyContasFixas">
               <div class="fixed-list-header">
                   <p style="font-size: 13px; color: var(--P02); margin-bottom: 15px; flex: 1;">
-                      Arraste as contas para ordenar. Elas serão criadas nos novos meses nesta ordem, mas é possível arrastá-las para personalizar depois de criar.<br>Ao lado, é possível editar as categorias do menu de seleção.
+                      Arraste para ordenar. Elas serão criadas nos novos meses nesta ordem.
                   </p>
                   <div class="acoes-categorias">
                       <span id="btnGerenciarCategorias" style="color: var(--P02); cursor: pointer; font-size: 14px; font-weight: bold;">
@@ -75,7 +74,7 @@
           </div>
       </div>
 
-            <!-- MÓDULO: RECEITAS FIXAS (TEMPLATE) -->
+      <!-- MÓDULO: RECEITAS FIXAS -->
       <div id="moduloReceitasFixas" class="mes collapsed">
           <div class="mesHeader" id="headerReceitasFixas" style="background-color: var(--P03); cursor: pointer;">
               <span>Configurar Receitas Fixas</span>
@@ -83,16 +82,14 @@
           <div class="mesBody" id="bodyReceitasFixas">
               <div class="fixed-list-header">
                   <p style="font-size: 13px; color: var(--P02); margin-bottom: 15px; flex: 1;">
-                      Configure seu salário padrão e outras rendas recorrentes (aluguéis, extras, investimentos).
+                      Configure seu salário padrão e outras rendas recorrentes.
                   </p>
               </div>
-              
-              <!-- Campo de Salário Padrão -->
               <div class="item-fixo" style="background: rgba(255,255,255,0.1); margin-bottom: 20px; border-left: 5px solid var(--P01);">
+                  <div style="padding: 0 10px; font-size: 20px;">🏠</div>
                   <span style="flex: 2; font-weight: bold; color: white;">Salário Padrão</span>
                   <input type="text" id="salarioFixoBase" class="inputPadrao" placeholder="R$ 0,00" style="width:150px">
               </div>
-
               <div id="listaReceitasFixas"></div>
               <button class="addEmp inputPadrao" id="btnAddReceitaFixa" style="margin-top:15px; background: var(--P03); color: white; cursor:pointer">+ Nova Renda Recorrente</button>
           </div>
@@ -106,6 +103,52 @@
         <input type="file" id="inputImport" style="display: none;">
         <button id="salvarNuvemBtn" class="btn" style="background-color: var(--P03);">☁️ SALVAR NA NUVEM</button>
         <span id="statusAlteracao" style="display: none; color: #e67e22; font-weight: bold; margin-left: 10px; font-size: 13px;">⚠️ Alterações pendentes</span>
+      </div>
+
+      <div id="modalConfiguracoes" class="modal-overlay" style="display:none;">
+          <div class="modal-content">
+              <h3>Configurações do App</h3>
+              
+              <div class="campo" style="margin-bottom: 15px;">
+                  <label>Seu Nome (Título do Site)</label>
+                  <input type="text" id="cfgNomeUsuario" class="inputPadrao" placeholder="Ex: Gustavo">
+              </div>
+
+              <div class="campo" style="margin-bottom: 15px;">
+                  <label style="display: flex; align-items: center; gap: 5px;">
+                      Mês de Referência 
+                      <span class="help-icon" title="Define se o destaque de 'Mês Atual' segue o calendário civil ou se você prefere já visualizar o próximo mês de pagamentos.">?</span>
+                  </label>
+                  <div style="display: flex; gap: 20px; align-items: center; margin-top: 5px;">
+                      <label style="font-weight: normal; cursor: pointer; display: flex; align-items: center; gap: 5px; color: var(--P03);">
+                          <input type="radio" name="refMes" value="atual" id="refAtual"> Atual
+                      </label>
+                      <label style="font-weight: normal; cursor: pointer; display: flex; align-items: center; gap: 5px; color: var(--P03);">
+                          <input type="radio" name="refMes" value="proximo" id="refProximo"> Próximo
+                      </label>
+                  </div>
+              </div>
+
+              <div class="campo" style="margin-bottom: 15px;">
+                  <label>Dia da Virada do Mês
+                  <span class="help-icon" title="Define a partir de qual dia o mês seguinte vai ser considerado o atual.">?</span>
+                  </label>
+                  <input type="number" id="cfgDiaVirada" class="inputPadrao" min="1" max="31">
+                  <small style="font-size: 10px; color: #7f8c8d;">Define em qual dia o sistema deve alternar o destaque do mês.</small>
+              </div>
+
+              <hr style="margin: 20px 0; border: 0; border-top: 1px solid #ddd;">
+              
+              <h4 style="margin-bottom: 10px; color: var(--P03);">Alterar Senha</h4>
+              <div class="auth-inputs" style="gap: 8px;">
+                  <input type="password" id="pwdAntiga" class="inputPadrao" placeholder="Senha Atual">
+                  <input type="password" id="pwdNova" class="inputPadrao" placeholder="Nova Senha">
+                  <button class="btn-secundario" id="btnSalvarSenha">Atualizar Senha</button>
+              </div>
+
+              <button class="btn" id="btnSalvarConfig" style="width:100%; margin-top:25px; background: var(--P03);">SALVAR CONFIGURAÇÕES</button>
+              <button class="btn sair" id="btnFecharConfig" style="width:100%; margin-top:10px; background: #95a5a6;">Cancelar</button>
+          </div>
       </div>
 
       <div id="modalCategorias" class="modal-overlay" style="display:none;">
