@@ -144,6 +144,18 @@ body {
   color: var(--P03);
 }
 
+.despHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 20px;
+  cursor: pointer;
+  font-weight: 500;
+  font-size: 16px;
+  background: var(--P05);
+  color: var(--P03);
+}
+
 .mesHeade:hover {
   background: var(--P06);
 }
@@ -255,7 +267,7 @@ body {
   padding: 20px;
   overflow: hidden;
   /* Reduzi para 1000px: quanto mais perto da altura real, mais rápida a resposta */
-  max-height: 1000px; 
+  max-height: 3000px; 
   background-color: var(--P05);
   opacity: 1;
   transition:
@@ -633,6 +645,7 @@ body {
   align-items: center;
   margin-bottom: 20px;
   justify-content: center;
+  color: var(--P07) !important;
 }
 
 .btn-secundario {

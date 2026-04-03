@@ -142,22 +142,14 @@ function atualizarTudo(anoParaVisualizar, pendente = true) {
       if (!ehOPrimeiroMesDeTodos && m.contaManual !== true) {
           m.conta = saldoAcumulado;
       }
-
-      const dTotalManuais = (m.despesas || []).filter(x => x.checked).reduce((acc, b) => acc + b.valor, 0);
+      const dManuais = (m.despesas || []).filter(x => x.checked).reduce((acc, b) => acc + b.valor, 0);
       const gastosMes = (gastosDetalhes[ano] || []).filter(g => g.mes === idx);
-      
-      const totalCartoesCredito = gastosMes.filter(g => {
-          const cObj = cartoes.find(c => c.id == g.cartaoId);
-          return cObj && cObj.tipo === 'Crédito';
-      }).reduce((acc, g) => acc + g.valor, 0);
-
+      const tCr = gastosMes.filter(g => cartoes.find(c => c.id == g.cartaoId)?.tipo === 'Crédito').reduce((acc, g) => acc + g.valor, 0);
       const eTotal = (m.empresa || []).filter(x => x.checked).reduce((acc, b) => acc + b.valor, 0);
-      const totalDisponivel = (m.salario || 0) + (m.conta || 0) + eTotal;
-      const saldoFinal = totalDisponivel - (dTotalManuais + totalCartoesCredito);
-      
+      const tDisp = (m.salario || 0) + (m.conta || 0) + eTotal;
+      const saldoFinal = tDisp - (dManuais + tCr);
       m.saldoCalculadoFinal = saldoFinal; 
-      saldoAcumulado = saldoFinal; 
-      ehOPrimeiroMesDeTodos = false;
+      saldoAcumulado = saldoFinal; ehOPrimeiroMesDeTodos = false;
 
       if (ano === Number(anoParaVisualizar)) {
         const info = mesesDOM.find(item => item.index === idx);
@@ -175,101 +167,83 @@ function atualizarTudo(anoParaVisualizar, pendente = true) {
                       const cObj = cartoes.find(c => c.id == cid);
                       const itemC = document.createElement("div"); 
                       itemC.className = "item-cartao-resumo";
-                      itemC.style.cursor = "pointer"; // Mostra que é clicável
-                      itemC.title = "Clique para ver detalhes deste cartão";
+                      itemC.style.cursor = "pointer";
                       itemC.innerHTML = `<span>💳 ${cObj ? cObj.nome : 'Cartão'}</span> <span>${formatar(totaisPorCartao[cid])}</span>`;
-
-                      // LÓGICA DE NAVEGAÇÃO AO CLICAR
-                      itemC.onclick = () => {
-                          // 1. Seta o ano na tela de gastos
-                          document.getElementById("anoGastos").value = ano;
-                          
-                          // 2. Define o filtro específico para aquele mês e cartão
-                          filtrosPorMes[idx] = cid;
-                          
-                          // 3. Garante que esse mês estará aberto
-                          mesesGastosAbertos.add(idx);
-                          
-                          // 4. Muda para a aba de Gastos Detalhados (simula o clique no menu)
-                          document.getElementById("navGastos").click();
-                          
-                          // 5. Scroll suave até o mês clicado (opcional)
-                          setTimeout(() => {
-                              const mesesCards = document.querySelectorAll("#areaGastosMensais .mes");
-                              if(mesesCards[idx]) {
-                                  mesesCards[idx].scrollIntoView({ behavior: 'smooth', block: 'center' });
-                              }
-                          }, 300);
-                      };
-
+                      itemC.onclick = () => { document.getElementById("anoGastos").value = ano; filtrosPorMes[idx] = cid; mesesGastosAbertos.add(idx); document.getElementById("navGastos").click(); setTimeout(() => { const target = document.querySelectorAll("#areaGastosMensais .mes")[idx]; if(target) target.scrollIntoView({ behavior: 'smooth', block: 'center' }); }, 300); };
                       listaCartoesDiv.appendChild(itemC);
                   });
               }
           }
-
-          dom.querySelector(".totalDespesas").textContent = formatar(dTotalManuais + totalCartoesCredito);
-          dom.querySelector(".totalDinheiro").textContent = formatar(totalDisponivel);
+          dom.querySelector(".totalDespesas").textContent = formatar(dManuais + tCr);
+          dom.querySelector(".totalDinheiro").textContent = formatar(tDisp);
           const sEl = dom.querySelector(".saldo"); 
           sEl.textContent = formatar(saldoFinal);
           sEl.className = "saldo " + (saldoFinal >= 0 ? "positivo" : "negativo");
           dom.querySelector(".mesTotal").textContent = formatar(saldoFinal);
-          
           const inS = dom.querySelector("input.salario"); 
           const inC = dom.querySelector("input.conta");
           if (document.activeElement !== inS) inS.value = formatar(m.salario);
-          if (document.activeElement !== inC) {
-            inC.value = formatar(m.conta);
-            if (m.contaManual === true) inC.classList.add("manual"); else inC.classList.remove("manual");
-          }
+          if (document.activeElement !== inC) { inC.value = formatar(m.conta); if (m.contaManual === true) inC.classList.add("manual"); else inC.classList.remove("manual"); }
           if (ano === anoAt && idx === mesAt) dom.classList.add("mesAtual"); else dom.classList.remove("mesAtual");
         }
       }
     });
   });
-
-  salvarDadosLocal(pendente);
-  atualizarGrafico(Number(anoParaVisualizar));
+  salvarDadosLocal(pendente); atualizarGrafico(Number(anoParaVisualizar));
 }
 
 function atualizarGrafico(ano) {
     const ctx = document.getElementById("grafico"); 
     if (!ctx || !dados[ano] || !dados[ano].meses || dados[ano].meses.length === 0) return;
-
-    // Pegamos a cor clara do tema para os textos (P01) e a cor de destaque para as barras (P04)
-    const tColor = getComputedStyle(document.body).getPropertyValue('--P02').trim() || '#000000';
+    const tempElement = document.createElement("div");
+    tempElement.className = "texto-claro"; tempElement.style.display = "none";
+    document.body.appendChild(tempElement);
+    const tColor = getComputedStyle(tempElement).color || '#000000';
+    document.body.removeChild(tempElement);
     const pColor = getComputedStyle(document.body).getPropertyValue('--P04').trim() || '#D78341';
     const bgColor = getComputedStyle(document.body).getPropertyValue('--P06').trim() || '#ffffff';
-
     const saldos = dados[ano].meses.map(m => parseFloat((m.saldoCalculadoFinal || 0).toFixed(2)));
     const labels = dados[ano].meses.map((_, i) => nomesMesesFull[i]);
-
-    const options = { 
-        series: [{ name: 'Saldo Final', data: saldos }], 
-        chart: { 
-            type: 'bar', 
-            height: 250, 
-            toolbar: { show: false },
-            background: bgColor,
-            foreColor: tColor
-        }, 
-        colors: [pColor], 
-        xaxis: { categories: labels, labels: { style: { colors: tColor } } }, 
-        yaxis: { labels: { style: { colors: tColor }, formatter: (val) => "R$ " + val.toLocaleString('pt-BR') } }, 
-        grid: { borderColor: 'rgba(255,255,255,0.1)' },
-        tooltip: { theme: 'dark', y: { formatter: (val) => formatar(val) } },
-        dataLabels: {
-            enabled: true,
-            formatter: (val) => "R$ " + val.toLocaleString('pt-BR'),
-            style: { fontSize: '10px', colors: [tColor] },
-            offsetY: -20
-        },
-        plotOptions: { bar: { dataLabels: { position: 'top' }, borderRadius: 4 } },
-        legend: { labels: { colors: tColor } } 
-    };
-
+    const options = { series: [{ name: 'Saldo Final', data: saldos }], chart: { type: 'bar', height: 250, toolbar: { show: false }, background: bgColor, foreColor: tColor }, colors: [pColor], xaxis: { categories: labels }, yaxis: { labels: { formatter: (val) => "R$ " + val.toLocaleString('pt-BR') } }, grid: { borderColor: 'rgba(255,255,255,0.1)' }, tooltip: { theme: 'dark' }, dataLabels: { enabled: true, formatter: (val) => "R$ " + val.toLocaleString('pt-BR'), style: { fontSize: '10px' }, offsetY: -20 }, plotOptions: { bar: { dataLabels: { position: 'top' }, borderRadius: 4 } } };
     if (chartResumo) chartResumo.destroy();
-    chartResumo = new ApexCharts(ctx, options); 
-    chartResumo.render();
+    chartResumo = new ApexCharts(ctx, options); chartResumo.render();
+}
+
+// ================= FUNÇÃO PARCELAS (HOME) =================
+function aplicarParcelas() {
+    // Primeiro, removemos parcelas antigas para evitar duplicação antes de reaplicar
+    Object.keys(dados).forEach(ano => {
+        dados[ano].meses.forEach(m => {
+            m.despesas = (m.despesas || []).filter(d => !d.parcelaId);
+        });
+    });
+
+    parcelasMemoria.forEach(p => {
+        if (!dados[p.ano] || !dados[p.ano].meses) return;
+        let mesCorrente = p.inicio;
+        let anoCorrente = p.ano;
+
+        for (let i = 1; i <= p.parcelas; i++) {
+            if (!dados[anoCorrente]) dados[anoCorrente] = { meses: [] };
+            const meses = dados[anoCorrente].meses;
+            
+            if (meses[mesCorrente]) {
+                const nomeP = `${p.nome} (${i}/${p.parcelas})`;
+                meses[mesCorrente].despesas.push({ 
+                    nome: nomeP, 
+                    valor: p.valorParcela, 
+                    checked: true, 
+                    parcelaId: p.id 
+                });
+            }
+
+            mesCorrente++;
+            if (mesCorrente > 11) {
+                mesCorrente = 0;
+                anoCorrente++;
+            }
+        }
+    });
 }
 
 // ================= INTERFACE RESUMO =================
@@ -284,8 +258,7 @@ function criarItem(lista, d, dataArray, ano) {
       if(d.parcelaId) {
           if(confirm("Deseja apagar TODAS as parcelas desta compra?")) {
               parcelasMemoria = parcelasMemoria.filter(p => p.id !== d.parcelaId);
-              Object.keys(dados).forEach(a => { dados[a].meses.forEach(m => { m.despesas = m.despesas.filter(item => item.parcelaId !== d.parcelaId); }); });
-              carregarAno();
+              aplicarParcelas(); carregarAno();
           }
       } else { dataArray.splice(dataArray.indexOf(d), 1); carregarAno(); }
   };
@@ -297,20 +270,37 @@ function criarMesDOM(ano, index, data) {
   const header = document.createElement("div"); header.className = "mesHeader";
   header.innerHTML = `<span>${nomesMesesFull[index]} ${ano}</span><div><span class="mesTotal">0,00</span><button class="duplicarMes" title="Duplicar">📑</button><button class="removeMes">×</button></div>`;
   header.onclick = () => { mes.classList.toggle("collapsed"); if(mes.classList.contains("collapsed")) mesesAbertos.delete(index); else mesesAbertos.add(index); };
-  header.querySelector(".duplicarMes").onclick = (e) => { e.stopPropagation(); dados[ano].meses.splice(index + 1, 0, JSON.parse(JSON.stringify(data))); carregarAno(); };
-  header.querySelector(".removeMes").onclick = (e) => { e.stopPropagation(); if(confirm("Excluir mês?")) { dados[ano].meses.splice(index, 1); carregarAno(); } };
   const body = document.createElement("div"); body.className = "mesBody";
   body.innerHTML = `<div class="container"><div class="coluna despesas"><div class="topoColuna"><h4>DESPESAS</h4></div><div class="conteudoColuna"><div class="listaDesp"></div><div class="acoesDesp" style="display:flex; gap:5px; margin-top:10px;"><button class="addDesp btn" style="font-size:11px; padding:5px 10px;">+ Despesa</button><button class="addParcela btn" style="font-size:11px; padding:5px 10px;">+ Parcela</button></div><div class="listaCartoesDinamica"></div></div><p class="rodapeColuna">Total: <span class="totalDespesas">0,00</span></p></div><div class="coluna dinheiro"><div class="topoColuna"><h4>RENDAS</h4></div><div class="conteudoColuna"><div class="linhaInputs"><div class="campo"><label>Salário</label><input type="text" class="salario inputPadrao"></div><div class="campo"><label>Conta</label><input type="text" class="conta inputPadrao"></div><button class="btn-cascata" title="Vincular meses seguintes">🔗</button></div><h5>OUTROS</h5><div class="listaEmp"></div><button class="addEmp btn" style="height:35px; cursor:pointer; width:100%; margin-top:10px;">+</button></div><p class="rodapeColuna">Total: <span class="totalDinheiro">0,00</span></p></div></div><div class="totalFinal">TOTAL: <span class="saldo">0,00</span></div>`;
   const listD = body.querySelector(".listaDesp"); const listE = body.querySelector(".listaEmp");
   data.despesas.forEach(item => criarItem(listD, item, data.despesas, ano)); (data.empresa || []).forEach(item => criarItem(listE, item, data.empresa, ano));
-  const inSal = body.querySelector("input.salario"); const inCon = body.querySelector("input.conta"); const btnC = body.querySelector(".btn-cascata");
-  inSal.value = formatar(data.salario || 0); inCon.value = formatar(data.conta || 0);
-  aplicarComportamentoInput(inSal, () => data.salario, (v) => { data.salario = v; atualizarTudo(ano); }, ano);
-  inCon.addEventListener("blur", () => { const txt = inCon.value.trim(); if (txt === "") data.contaManual = false; else { data.conta = parseValor(txt); data.contaManual = true; } atualizarTudo(ano); });
-  inCon.addEventListener("keydown", (e) => { if(e.key === "Enter") inCon.blur(); });
-  btnC.onclick = () => { const anosOrdenados = Object.keys(dados).map(Number).sort((a,b)=>a-b); let found = false; anosOrdenados.forEach(a => dados[a].meses.forEach((m, i) => { if(a == ano && i == index) found = true; else if(found) m.contaManual = false; })); atualizarTudo(ano); };
+  const inS = body.querySelector("input.salario"); const inC = body.querySelector("input.conta"); const btnC = body.querySelector(".btn-cascata");
+  inS.value = formatar(data.salario || 0); inC.value = formatar(data.conta || 0);
+  aplicarComportamentoInput(inS, () => data.salario, (v) => { data.salario = v; atualizarTudo(ano); }, ano);
+  inC.addEventListener("blur", () => { const txt = inC.value.trim(); if (txt === "") data.contaManual = false; else { data.conta = parseValor(txt); data.contaManual = true; } atualizarTudo(ano); });
+  inC.addEventListener("keydown", (e) => { if(e.key === "Enter") inC.blur(); });
+  btnC.onclick = () => { const anos = Object.keys(dados).map(Number).sort((a,b)=>a-b); let found = false; anos.forEach(a => dados[a].meses.forEach((m, i) => { if(a == ano && i == index) found = true; else if(found) m.contaManual = false; })); atualizarTudo(ano); };
   body.querySelector(".addDesp").onclick = () => { data.despesas.push({nome:"", valor:0, checked:true}); carregarAno(); };
-  body.querySelector(".addParcela").onclick = () => { const n = prompt("Nome:"); const vt = parseValor(prompt("Valor TOTAL:")); const np = parseInt(prompt("Parcelas:")); if(n && vt > 0 && np > 0) { parcelasMemoria.push({ id: Date.now(), nome: n, valorParcela: Number((vt / np).toFixed(2)), parcelas: np, inicio: index, ano: Number(ano) }); carregarAno(); } };
+  
+  // BOTÃO PARCELA DA HOME CORRIGIDO
+  body.querySelector(".addParcela").onclick = () => { 
+      const n = prompt("Nome da despesa:"); 
+      const vt = parseValor(prompt("Valor TOTAL da compra:")); 
+      const np = parseInt(prompt("Quantidade de parcelas:")); 
+      if(n && vt > 0 && np > 0) { 
+          parcelasMemoria.push({ 
+              id: Date.now(), 
+              nome: n, 
+              valorParcela: Number((vt / np).toFixed(2)), 
+              parcelas: np, 
+              inicio: index, 
+              ano: Number(ano) 
+          }); 
+          aplicarParcelas(); 
+          carregarAno(); 
+      } 
+  };
+  
   body.querySelector(".addEmp").onclick = () => { if(!data.empresa) data.empresa=[]; data.empresa.push({nome:"", valor:0, checked:true}); carregarAno(); };
   mes.appendChild(header); mes.appendChild(body); return mes;
 }
@@ -327,7 +317,7 @@ function renderPaginaGastos() {
         if(filtroAtual !== "todos") gastosMes = gastosMes.filter(g => g.cartaoId == filtroAtual);
         const tCr = gastosMes.filter(g => cartoes.find(c => c.id == g.cartaoId)?.tipo === 'Crédito').reduce((a,b) => a + b.valor, 0);
         const tDb = gastosMes.filter(g => cartoes.find(c => c.id == g.cartaoId)?.tipo === 'Débito').reduce((a,b) => a + b.valor, 0);
-        mesBox.innerHTML = `<div class="mesHeader"><span>${nomesMesesFull[m]} ${anoView}</span><span>${formatar(tCr + tDb)}</span></div><div class="mesBody"><div class="filtro-interno" style="color: var('--P02'); margin-bottom: 15px; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 10px; display:flex; align-items:center; gap:10px;"><span style="font-size:12px; opacity:0.8">Exibir cartão:</span><select class="inputPadrao sel-filtro-mes" style="width:auto; height:30px; font-size:12px;"><option value="todos">Todos</option>${cartoes.map(c => `<option value="${c.id}" ${filtroAtual == c.id ? 'selected' : ''}>${c.nome}</option>`).join('')}</select></div><div id="chart-pizza-${m}" style="display:flex; justify-content:center; margin: 15px 0;"></div><table class="tabela-gastos"><thead><tr><th>Gasto</th><th>Categoria</th><th>Cartão</th><th>Valor</th><th></th></tr></thead><tbody id="tbody-gastos-${m}"></tbody><tfoot><tr><td><input type="text" placeholder="Gasto..." id="add-nome-${m}" class="inputPadrao"></td><td><select id="add-cat-${m}" class="inputPadrao">${categorias.map(c => `<option value="${c.name}">${c.name}</option>`).join('')}</select></td><td><select id="add-card-${m}" class="inputPadrao">${cartoes.map(c => `<option value="${c.id}">${c.nome}</option>`).join('')}</select></td><td><input type="text" placeholder="0,00" id="add-val-${m}" class="inputPadrao input-valor-add"></td><td><div style="display:flex; gap:5px"><button class="btn" id="btn-add-${m}">+</button><button class="btn" style="background:#8e44ad" id="btn-add-parcela-${m}">🗓️</button></div></td></tr></tfoot></table><div class="resumo-gastos-inferior"><div class="barra-resumo credito">Crédito <span>${formatar(tCr)}</span></div><div class="barra-resumo debito">Débito <span>${formatar(tDb)}</span></div><div class="barra-resumo total">TOTAL <span>${formatar(tCr + tDb)}</span></div></div></div>`;
+        mesBox.innerHTML = `<div class="mesHeader"><span>${nomesMesesFull[m]} ${anoView}</span><span>${formatar(tCr + tDb)}</span></div><div class="mesBody"><div class="filtro-interno" style="margin-bottom: 15px; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 10px; display:flex; align-items:center; gap:10px;"><span style="font-size:12px; opacity:0.8">Exibir cartão:</span><select class="inputPadrao sel-filtro-mes" style="width:auto; height:30px; font-size:12px;"><option value="todos">Todos</option>${cartoes.map(c => `<option value="${c.id}" ${filtroAtual == c.id ? 'selected' : ''}>${c.nome}</option>`).join('')}</select></div><div id="chart-pizza-${m}" style="display:flex; justify-content:center; margin: 15px 0;"></div><table class="tabela-gastos"><thead><tr><th>Gasto</th><th style="cursor:pointer" onclick="document.getElementById('modalCategorias').style.display='flex'; renderCategoriasModal();">Categoria ✏️</th><th>Cartão</th><th>Valor</th><th></th></tr></thead><tbody id="tbody-gastos-${m}"></tbody><tfoot><tr><td><input type="text" placeholder="Gasto..." id="add-nome-${m}" class="inputPadrao"></td><td><select id="add-cat-${m}" class="inputPadrao">${categorias.map(c => `<option value="${c.name}">${c.name}</option>`).join('')}</select></td><td><select id="add-card-${m}" class="inputPadrao">${cartoes.map(c => `<option value="${c.id}">${c.nome}</option>`).join('')}</select></td><td><input type="text" placeholder="0,00" id="add-val-${m}" class="inputPadrao input-valor-add"></td><td><div style="display:flex; gap:5px"><button class="btn" id="btn-add-${m}">+</button><button class="btn" style="background:#8e44ad" id="btn-add-parcela-${m}">🗓️</button></div></td></tr></tfoot></table><div class="resumo-gastos-inferior"><div class="barra-resumo credito">Crédito <span>${formatar(tCr)}</span></div><div class="barra-resumo debito">Débito <span>${formatar(tDb)}</span></div><div class="barra-resumo total">TOTAL <span>${formatar(tCr + tDb)}</span></div></div></div>`;
         mesBox.querySelector(".mesHeader").onclick = () => { mesBox.classList.toggle("collapsed"); if(mesBox.classList.contains("collapsed")) mesesGastosAbertos.delete(m); else { mesesGastosAbertos.add(m); renderPizza(m, gastosMes); } };
         const selF = mesBox.querySelector(".sel-filtro-mes"); selF.onclick = (e) => e.stopPropagation(); selF.onchange = (e) => { filtrosPorMes[m] = e.target.value; renderPaginaGastos(); };
         area.appendChild(mesBox); if(isOpen) setTimeout(() => renderPizza(m, gastosMes), 50);
@@ -339,7 +329,6 @@ function renderPaginaGastos() {
             tr.querySelector(".removeItem").onclick = () => { if(g.parcelaId) { if(confirm("Apagar todas as parcelas?")) { Object.keys(gastosDetalhes).forEach(ano => { gastosDetalhes[ano] = gastosDetalhes[ano].filter(item => item.parcelaId !== g.parcelaId); }); salvarDadosLocal(); renderPaginaGastos(); } } else { gastosDetalhes[anoView] = gastosDetalhes[anoView].filter(item => item !== g); salvarDadosLocal(); renderPaginaGastos(); } };
             tbody.appendChild(tr);
         });
-        document.getElementById(`add-val-${m}`).onkeydown = (e) => { if(e.key === 'Enter') document.getElementById(`btn-add-${m}`).click(); };
         document.getElementById(`btn-add-${m}`).onclick = () => { const n = document.getElementById(`add-nome-${m}`).value, c = document.getElementById(`add-cat-${m}`).value, crd = document.getElementById(`add-card-${m}`).value, v = parseValor(document.getElementById(`add-val-${m}`).value); if(!n || v <= 0) return; if(!gastosDetalhes[anoView]) gastosDetalhes[anoView] = []; gastosDetalhes[anoView].push({ mes: m, nome: n, valor: v, categoria: c, cartaoId: crd }); salvarDadosLocal(); renderPaginaGastos(); };
         document.getElementById(`btn-add-parcela-${m}`).onclick = () => { contextParcelaCartao = { mes: m, ano: Number(anoView) }; document.getElementById("pcNome").value = document.getElementById(`add-nome-${m}`).value; document.getElementById("pcValorTotal").value = document.getElementById(`add-val-${m}`).value; const sCard = document.getElementById("pcCartao"); sCard.innerHTML = cartoes.map(c => `<option value="${c.id}">${c.nome}</option>`).join(''); sCard.value = document.getElementById(`add-card-${m}`).value; const sCat = document.getElementById("pcCategoria"); sCat.innerHTML = categorias.map(c => `<option value="${c.name}">${c.name}</option>`).join(''); sCat.value = document.getElementById(`add-cat-${m}`).value; document.getElementById("modalParcelaCartao").style.display = "flex"; };
     }
@@ -354,65 +343,11 @@ document.getElementById("btnSalvarParcelaCartao").onclick = () => {
 };
 
 function renderPizza(mesIdx, gastos) {
-    const div = document.querySelector(`#chart-pizza-${mesIdx}`);
-    if (!div || gastos.length === 0) return;
-
-    // 1. Captura a cor do texto do tema (P08 ou P05 dependendo da sua preferência)
+    const div = document.querySelector(`#chart-pizza-${mesIdx}`); if (!div || gastos.length === 0) return;
     const tColor = getComputedStyle(document.body).getPropertyValue('--P05').trim() || '#000000';
-
-    const res = {};
-    gastos.forEach(g => res[g.categoria] = (res[g.categoria] || 0) + g.valor);
-
-    const options = {
-        series: Object.values(res),
-        labels: Object.keys(res),
-        chart: { 
-            type: 'donut', 
-            height: 220,
-            background: 'transparent' // Mantém o fundo seguindo o card
-        },
-        // 2. Ajusta as cores das fatias usando as cores das categorias que você já tem
-        colors: Object.keys(res).map(n => (categorias.find(c => c.name === n)?.color || "#fff")),
-        
-        // 3. AJUSTE DA LEGENDA (Nomes abaixo do gráfico)
-        legend: { 
-            position: 'bottom', 
-            labels: { 
-                colors: ['#fff'] // <--- COR DO TEXTO DA LEGENDA
-            } 
-        },
-
-        // 4. AJUSTE DOS NÚMEROS DENTRO OU SOBRE O GRÁFICO
-        dataLabels: {
-            style: {
-                colors: ['#fff'] // Geralmente branco fica melhor dentro das cores, mas você pode usar tColor
-            }
-        },
-
-        // 5. AJUSTE DO TEXTO NO CENTRO (Caso use Donut com labels centrais)
-        plotOptions: {
-            pie: {
-                donut: {
-                    labels: {
-                        show: true,
-                        name: { color: tColor },
-                        value: { color: tColor },
-                        total: { 
-                            show: true, 
-                            color: tColor,
-                            formatter: function (w) {
-                                const total = w.globals.seriesTotals.reduce((a, b) => a + b, 0);
-                                return formatar(total);
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    };
-
-    div.innerHTML = "";
-    new ApexCharts(div, options).render();
+    const res = {}; gastos.forEach(g => res[g.categoria] = (res[g.categoria] || 0) + g.valor);
+    const options = { series: Object.values(res), labels: Object.keys(res), chart: { type: 'donut', height: 220, background: 'transparent' }, colors: Object.keys(res).map(n => (categorias.find(c => c.name === n)?.color || "#888")), legend: { position: 'bottom', labels: { colors: tColor } }, plotOptions: { pie: { donut: { labels: { show: true, name: { color: tColor }, value: { color: tColor } } } } } };
+    div.innerHTML = ""; new ApexCharts(div, options).render();
 }
 
 function renderContasFixas() {
@@ -442,7 +377,7 @@ function renderReceitasFixas() {
 }
 
 function renderCategoriasModal() {
-    const lista = document.getElementById("listaCategoriasModal"); lista.innerHTML = "";
+    const lista = document.getElementById("listaCategoriasModal"); if(!lista) return; lista.innerHTML = "";
     categorias.forEach((cat, index) => {
       const li = document.createElement("li"); li.style.display = "flex"; li.style.gap = "10px"; li.style.padding = "8px 0"; li.style.alignItems = "center";
       li.innerHTML = `<input type="color" class="seletor-cor-quadrado" value="${cat.color}" style="width:30px; height:30px;"><input type="text" class="inputPadrao cat-name-edit" value="${cat.name}" style="flex:2"><button class="removeItem" style="width:22px;height:22px">×</button>`;
@@ -452,8 +387,14 @@ function renderCategoriasModal() {
     });
 }
 
+document.getElementById("btnAddCategoria").onclick = () => {
+    const n = document.getElementById("novaCategoriaNome").value;
+    const c = document.getElementById("novaCategoriaCor").value; if(!n) return alert("Erro");
+    categorias.push({name: n, color: c}); document.getElementById("novaCategoriaNome").value = ""; renderCategoriasModal(); salvarDadosLocal();
+};
+
 function renderCartoesModal() {
-    const lista = document.getElementById("listaCartoesModal"); lista.innerHTML = "";
+    const lista = document.getElementById("listaCartoesModal"); if(!lista) return; lista.innerHTML = "";
     cartoes.forEach((c, index) => {
         const div = document.createElement("div"); div.className = "item";
         div.innerHTML = `<input type="text" class="inputPadrao" value="${c.nome}" style="flex:2"><select class="inputPadrao" style="width:100px"><option value="Crédito" ${c.tipo=='Crédito'?'selected':''}>Crédito</option><option value="Débito" ${c.tipo=='Débito'?'selected':''}>Débito</option></select><input type="number" class="inputPadrao" value="${c.vencimento}" style="width:60px"><button class="removeItem">×</button>`;
@@ -471,6 +412,7 @@ onAuthStateChanged(auth, async (user) => {
         const res = await decryptData(snap.data(), senhaDoUsuario);
         dados = res.dados || {}; parcelasMemoria = res.parcelasMemoria || []; contasFixas = res.contasFixas || []; receitasFixas = res.receitasFixas || [];
         salarioFixoBase = res.salarioFixoBase || 0; categorias = migrarCategorias(res.categorias); configuracoes = res.configuracoes || configuracoes; cartoes = res.cartoes || []; gastosDetalhes = res.gastosDetalhes || {};
+        aplicarParcelas();
     }
     aplicarTema(configuracoes.tema);
     document.getElementById("authContainer").style.display = "none"; document.getElementById("appContainer").style.display = "block";
@@ -480,42 +422,24 @@ onAuthStateChanged(auth, async (user) => {
   } else { document.getElementById("authContainer").style.display = "flex"; document.getElementById("appContainer").style.display = "none"; }
 });
 
-// EVENT LISTENERS
 const seletorTemaFooter = document.getElementById("cfgTemaFooter");
 if(seletorTemaFooter) {
     seletorTemaFooter.onchange = async () => {
-        configuracoes.tema = seletorTemaFooter.value;
-        aplicarTema(configuracoes.tema);
-        const anoAtual = document.getElementById("ano").value;
-        atualizarTudo(anoAtual);
-        await salvarFirebase();
+        configuracoes.tema = seletorTemaFooter.value; aplicarTema(configuracoes.tema);
+        const anoAt = document.getElementById("ano").value; atualizarTudo(anoAt); await salvarFirebase();
     };
 }
 
 document.getElementById("exportarTudoBtn").onclick = () => { const b = { dados, parcelasMemoria, contasFixas, receitasFixas, salarioFixoBase, categorias, configuracoes, cartoes, gastosDetalhes }; const blob = new Blob([JSON.stringify(b, null, 2)], { type: "application/json" }); const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = `backup.json`; a.click(); };
 document.getElementById("inputImport").onchange = (e) => { const r = new FileReader(); r.onload = (ev) => { const res = JSON.parse(ev.target.result); dados = res.dados || {}; parcelasMemoria = res.parcelasMemoria || []; contasFixas = res.contasFixas || []; receitasFixas = res.receitasFixas || []; salarioFixoBase = res.salarioFixoBase || 0; categorias = migrarCategorias(res.categorias); configuracoes = res.configuracoes || configuracoes; cartoes = res.cartoes || []; gastosDetalhes = res.gastosDetalhes || {}; carregarAno(); renderContasFixas(); renderReceitasFixas(); }; r.readAsText(e.target.files[0]); };
-document.getElementById("btnSalvarSenha").onclick = async () => { const a = document.getElementById("pwdAntiga").value, n = document.getElementById("pwdNova").value; if(!n) return; try { const cred = EmailAuthProvider.credential(usuarioLogado.email, a); await reauthenticateWithCredential(usuarioLogado, cred); await updatePassword(usuarioLogado, n); senhaDoUsuario = n; sessionStorage.setItem("temp_key", n); alert("Sucesso!"); } catch (e) { alert("Erro!"); } };
-document.getElementById("loginBtn").onclick = async () => { const e = document.getElementById("email").value, s = document.getElementById("senha").value; try { await signInWithEmailAndPassword(auth, e, s); senhaDoUsuario = s; sessionStorage.setItem("temp_key", s); } catch (err) { alert("Erro!"); } };
-document.getElementById("cadastroBtn").onclick = async () => { const e = document.getElementById("email").value, s = document.getElementById("senha").value; try { await createUserWithEmailAndPassword(auth, e, s); senhaDoUsuario = s; sessionStorage.setItem("temp_key", s); await salvarFirebase(); } catch (err) { alert("Erro!"); } };
+document.getElementById("btnSalvarSenha").onclick = async () => { const a = document.getElementById("pwdAntiga").value, n = document.getElementById("pwdNova").value; if(!n) return; try { const cred = EmailAuthProvider.credential(usuarioLogado.email, a); await reauthenticateWithCredential(usuarioLogado, credential); await updatePassword(usuarioLogado, n); senhaDoUsuario = n; sessionStorage.setItem("temp_key", n); alert("Sucesso!"); } catch (e) { alert("Erro!"); } };
+document.getElementById("loginBtn").onclick = async () => { const e = document.getElementById("email").value, s = document.getElementById("senha").value; try { await signInWithEmailAndPassword(auth, e, s); senhaDoUsuario = s; sessionStorage.setItem("temp_key", s); } catch (err) { alert("Erro login"); } };
+document.getElementById("cadastroBtn").onclick = async () => { const e = document.getElementById("email").value, s = document.getElementById("senha").value; try { await createUserWithEmailAndPassword(auth, e, s); senhaDoUsuario = s; sessionStorage.setItem("temp_key", s); await salvarFirebase(); } catch (err) { alert("Erro cadastro"); } };
 document.getElementById("logoutBtn").onclick = () => { signOut(auth); sessionStorage.clear(); location.reload(); };
 document.getElementById("navResumo").onclick = (e) => { e.preventDefault(); document.getElementById("viewResumo").style.display = "block"; document.getElementById("viewGastos").style.display = "none"; document.getElementById("navResumo").className = "active"; document.getElementById("navGastos").className = ""; carregarAno(); };
 document.getElementById("navGastos").onclick = (e) => { e.preventDefault(); document.getElementById("viewResumo").style.display = "none"; document.getElementById("viewGastos").style.display = "block"; document.getElementById("navResumo").className = ""; document.getElementById("navGastos").className = "active"; renderPaginaGastos(); };
-document.getElementById("btnSettings").onclick = () => { 
-    const modalCfg = document.getElementById("modalConfiguracoes");
-    if(!modalCfg) return;
-    document.getElementById("cfgNomeUsuario").value = configuracoes.nomeUsuario || ""; 
-    document.getElementById("cfgDiaVirada").value = configuracoes.diaVirada || 1; 
-    const ref = configuracoes.referenciaMes || "atual"; 
-    document.getElementById("refAtual").checked = (ref === "atual");
-    document.getElementById("refProximo").checked = (ref === "proximo");
-    modalCfg.style.display = "flex"; 
-};
-document.getElementById("btnSalvarConfig").onclick = async () => { 
-    configuracoes.nomeUsuario = document.getElementById("cfgNomeUsuario").value; 
-    configuracoes.diaVirada = document.getElementById("cfgDiaVirada").value; 
-    configuracoes.referenciaMes = document.querySelector('input[name="refMes"]:checked')?.value || "atual"; 
-    await salvarFirebase(); document.getElementById("modalConfiguracoes").style.display = "none"; carregarAno(); renderPaginaGastos();
-};
+document.getElementById("btnSettings").onclick = () => { const modalCfg = document.getElementById("modalConfiguracoes"); if(!modalCfg) return; document.getElementById("cfgNomeUsuario").value = configuracoes.nomeUsuario || ""; document.getElementById("cfgDiaVirada").value = configuracoes.diaVirada || 1; const ref = configuracoes.referenciaMes || "atual"; document.getElementById("refAtual").checked = (ref === "atual"); document.getElementById("refProximo").checked = (ref === "proximo"); modalCfg.style.display = "flex"; };
+document.getElementById("btnSalvarConfig").onclick = async () => { configuracoes.nomeUsuario = document.getElementById("cfgNomeUsuario").value; configuracoes.diaVirada = document.getElementById("cfgDiaVirada").value; configuracoes.referenciaMes = document.querySelector('input[name="refMes"]:checked')?.value || "atual"; await salvarFirebase(); document.getElementById("modalConfiguracoes").style.display = "none"; carregarAno(); renderPaginaGastos(); };
 document.getElementById("btnFecharConfig").onclick = () => document.getElementById("modalConfiguracoes").style.display = "none";
 document.getElementById("btnGerenciarCategorias").onclick = () => { document.getElementById("modalCategorias").style.display = "flex"; renderCategoriasModal(); };
 document.getElementById("btnGerenciarCartoes").onclick = () => { document.getElementById("modalCartoes").style.display = "flex"; renderCartoesModal(); };
@@ -547,6 +471,10 @@ function carregarAno() {
     dados[anoNum].meses.push(n); carregarAno();
   };
   addBox.appendChild(btnAdd); area.prepend(addBox);
+  
+  // APLICAR PARCELAS ANTES DE RENDERIZAR
+  aplicarParcelas();
+
   dados[ano].meses.forEach((m, i) => { const mDOM = criarMesDOM(ano, i, m); container.prepend(mDOM); mesesDOM.push({ dom: mDOM, index: i }); });
   atualizarTudo(ano);
 }
