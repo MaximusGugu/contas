@@ -175,7 +175,33 @@ function atualizarTudo(anoParaVisualizar, pendente = true) {
                       const cObj = cartoes.find(c => c.id == cid);
                       const itemC = document.createElement("div"); 
                       itemC.className = "item-cartao-resumo";
+                      itemC.style.cursor = "pointer"; // Mostra que é clicável
+                      itemC.title = "Clique para ver detalhes deste cartão";
                       itemC.innerHTML = `<span>💳 ${cObj ? cObj.nome : 'Cartão'}</span> <span>${formatar(totaisPorCartao[cid])}</span>`;
+
+                      // LÓGICA DE NAVEGAÇÃO AO CLICAR
+                      itemC.onclick = () => {
+                          // 1. Seta o ano na tela de gastos
+                          document.getElementById("anoGastos").value = ano;
+                          
+                          // 2. Define o filtro específico para aquele mês e cartão
+                          filtrosPorMes[idx] = cid;
+                          
+                          // 3. Garante que esse mês estará aberto
+                          mesesGastosAbertos.add(idx);
+                          
+                          // 4. Muda para a aba de Gastos Detalhados (simula o clique no menu)
+                          document.getElementById("navGastos").click();
+                          
+                          // 5. Scroll suave até o mês clicado (opcional)
+                          setTimeout(() => {
+                              const mesesCards = document.querySelectorAll("#areaGastosMensais .mes");
+                              if(mesesCards[idx]) {
+                                  mesesCards[idx].scrollIntoView({ behavior: 'smooth', block: 'center' });
+                              }
+                          }, 300);
+                      };
+
                       listaCartoesDiv.appendChild(itemC);
                   });
               }
@@ -301,7 +327,7 @@ function renderPaginaGastos() {
         if(filtroAtual !== "todos") gastosMes = gastosMes.filter(g => g.cartaoId == filtroAtual);
         const tCr = gastosMes.filter(g => cartoes.find(c => c.id == g.cartaoId)?.tipo === 'Crédito').reduce((a,b) => a + b.valor, 0);
         const tDb = gastosMes.filter(g => cartoes.find(c => c.id == g.cartaoId)?.tipo === 'Débito').reduce((a,b) => a + b.valor, 0);
-        mesBox.innerHTML = `<div class="mesHeader"><span>${nomesMesesFull[m]} ${anoView}</span><span>${formatar(tCr + tDb)}</span></div><div class="mesBody"><div class="filtro-interno" style="margin-bottom: 15px; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 10px; display:flex; align-items:center; gap:10px;"><span style="font-size:12px; opacity:0.8">Exibir cartão:</span><select class="inputPadrao sel-filtro-mes" style="width:auto; height:30px; font-size:12px;"><option value="todos">Todos</option>${cartoes.map(c => `<option value="${c.id}" ${filtroAtual == c.id ? 'selected' : ''}>${c.nome}</option>`).join('')}</select></div><div id="chart-pizza-${m}" style="display:flex; justify-content:center; margin: 15px 0;"></div><table class="tabela-gastos"><thead><tr><th>Gasto</th><th>Categoria</th><th>Cartão</th><th>Valor</th><th></th></tr></thead><tbody id="tbody-gastos-${m}"></tbody><tfoot><tr><td><input type="text" placeholder="Gasto..." id="add-nome-${m}" class="inputPadrao"></td><td><select id="add-cat-${m}" class="inputPadrao">${categorias.map(c => `<option value="${c.name}">${c.name}</option>`).join('')}</select></td><td><select id="add-card-${m}" class="inputPadrao">${cartoes.map(c => `<option value="${c.id}">${c.nome}</option>`).join('')}</select></td><td><input type="text" placeholder="0,00" id="add-val-${m}" class="inputPadrao input-valor-add"></td><td><div style="display:flex; gap:5px"><button class="btn" id="btn-add-${m}">+</button><button class="btn" style="background:#8e44ad" id="btn-add-parcela-${m}">🗓️</button></div></td></tr></tfoot></table><div class="resumo-gastos-inferior"><div class="barra-resumo credito">Crédito <span>${formatar(tCr)}</span></div><div class="barra-resumo debito">Débito <span>${formatar(tDb)}</span></div><div class="barra-resumo total">TOTAL <span>${formatar(tCr + tDb)}</span></div></div></div>`;
+        mesBox.innerHTML = `<div class="mesHeader"><span>${nomesMesesFull[m]} ${anoView}</span><span>${formatar(tCr + tDb)}</span></div><div class="mesBody"><div class="filtro-interno" style="color: var('--P02'); margin-bottom: 15px; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 10px; display:flex; align-items:center; gap:10px;"><span style="font-size:12px; opacity:0.8">Exibir cartão:</span><select class="inputPadrao sel-filtro-mes" style="width:auto; height:30px; font-size:12px;"><option value="todos">Todos</option>${cartoes.map(c => `<option value="${c.id}" ${filtroAtual == c.id ? 'selected' : ''}>${c.nome}</option>`).join('')}</select></div><div id="chart-pizza-${m}" style="display:flex; justify-content:center; margin: 15px 0;"></div><table class="tabela-gastos"><thead><tr><th>Gasto</th><th>Categoria</th><th>Cartão</th><th>Valor</th><th></th></tr></thead><tbody id="tbody-gastos-${m}"></tbody><tfoot><tr><td><input type="text" placeholder="Gasto..." id="add-nome-${m}" class="inputPadrao"></td><td><select id="add-cat-${m}" class="inputPadrao">${categorias.map(c => `<option value="${c.name}">${c.name}</option>`).join('')}</select></td><td><select id="add-card-${m}" class="inputPadrao">${cartoes.map(c => `<option value="${c.id}">${c.nome}</option>`).join('')}</select></td><td><input type="text" placeholder="0,00" id="add-val-${m}" class="inputPadrao input-valor-add"></td><td><div style="display:flex; gap:5px"><button class="btn" id="btn-add-${m}">+</button><button class="btn" style="background:#8e44ad" id="btn-add-parcela-${m}">🗓️</button></div></td></tr></tfoot></table><div class="resumo-gastos-inferior"><div class="barra-resumo credito">Crédito <span>${formatar(tCr)}</span></div><div class="barra-resumo debito">Débito <span>${formatar(tDb)}</span></div><div class="barra-resumo total">TOTAL <span>${formatar(tCr + tDb)}</span></div></div></div>`;
         mesBox.querySelector(".mesHeader").onclick = () => { mesBox.classList.toggle("collapsed"); if(mesBox.classList.contains("collapsed")) mesesGastosAbertos.delete(m); else { mesesGastosAbertos.add(m); renderPizza(m, gastosMes); } };
         const selF = mesBox.querySelector(".sel-filtro-mes"); selF.onclick = (e) => e.stopPropagation(); selF.onchange = (e) => { filtrosPorMes[m] = e.target.value; renderPaginaGastos(); };
         area.appendChild(mesBox); if(isOpen) setTimeout(() => renderPizza(m, gastosMes), 50);
@@ -328,10 +354,65 @@ document.getElementById("btnSalvarParcelaCartao").onclick = () => {
 };
 
 function renderPizza(mesIdx, gastos) {
-    const div = document.querySelector(`#chart-pizza-${mesIdx}`); if (!div || gastos.length === 0) return;
-    const res = {}; gastos.forEach(g => res[g.categoria] = (res[g.categoria] || 0) + g.valor);
-    const options = { series: Object.values(res), labels: Object.keys(res), chart: { type: 'donut', height: 220 }, colors: Object.keys(res).map(n => (categorias.find(c => c.name === n)?.color || "#888")), legend: { position: 'bottom', labels: { colors: getComputedStyle(document.body).getPropertyValue('--P05').trim() } } };
-    div.innerHTML = ""; new ApexCharts(div, options).render();
+    const div = document.querySelector(`#chart-pizza-${mesIdx}`);
+    if (!div || gastos.length === 0) return;
+
+    // 1. Captura a cor do texto do tema (P08 ou P05 dependendo da sua preferência)
+    const tColor = getComputedStyle(document.body).getPropertyValue('--P05').trim() || '#000000';
+
+    const res = {};
+    gastos.forEach(g => res[g.categoria] = (res[g.categoria] || 0) + g.valor);
+
+    const options = {
+        series: Object.values(res),
+        labels: Object.keys(res),
+        chart: { 
+            type: 'donut', 
+            height: 220,
+            background: 'transparent' // Mantém o fundo seguindo o card
+        },
+        // 2. Ajusta as cores das fatias usando as cores das categorias que você já tem
+        colors: Object.keys(res).map(n => (categorias.find(c => c.name === n)?.color || "#fff")),
+        
+        // 3. AJUSTE DA LEGENDA (Nomes abaixo do gráfico)
+        legend: { 
+            position: 'bottom', 
+            labels: { 
+                colors: ['#fff'] // <--- COR DO TEXTO DA LEGENDA
+            } 
+        },
+
+        // 4. AJUSTE DOS NÚMEROS DENTRO OU SOBRE O GRÁFICO
+        dataLabels: {
+            style: {
+                colors: ['#fff'] // Geralmente branco fica melhor dentro das cores, mas você pode usar tColor
+            }
+        },
+
+        // 5. AJUSTE DO TEXTO NO CENTRO (Caso use Donut com labels centrais)
+        plotOptions: {
+            pie: {
+                donut: {
+                    labels: {
+                        show: true,
+                        name: { color: tColor },
+                        value: { color: tColor },
+                        total: { 
+                            show: true, 
+                            color: tColor,
+                            formatter: function (w) {
+                                const total = w.globals.seriesTotals.reduce((a, b) => a + b, 0);
+                                return formatar(total);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    };
+
+    div.innerHTML = "";
+    new ApexCharts(div, options).render();
 }
 
 function renderContasFixas() {

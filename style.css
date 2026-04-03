@@ -209,7 +209,7 @@ body {
   max-width: 1080px;
   margin: 0 auto;
   padding: 0 20px;
-  color: var(--P07);
+  color: var(--P02);
 }
 
 .texto-claro {
@@ -218,6 +218,10 @@ body {
 
 .container-central h1 {
   color: var(--P02)
+}
+
+.ano-selector {
+  color: var(--P07);
 }
 
 /* Garante que o título dentro do verde fique bege */
@@ -1055,6 +1059,18 @@ element.style {
   margin-bottom: 4px;
   color: #555;
   font-weight: bold;
+  transition: background 0.2s, transform 0.1s;
+  
+}
+
+.item-cartao-resumo:hover {
+    background: var(--P04) !important; /* Cor de destaque do tema */
+    color: white !important;
+    transform: translateX(5px); /* Leve deslocamento para a direita */
+}
+
+.item-cartao-resumo:active {
+    transform: scale(0.98);
 }
 
 .item-cartao-resumo span:last-child { color: #a04070; }
