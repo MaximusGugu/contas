@@ -1,8 +1,5 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-import { 
-  getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, 
-  onAuthStateChanged, signOut, updatePassword, reauthenticateWithCredential, EmailAuthProvider 
-} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, onAuthStateChanged, signOut, updatePassword, reauthenticateWithCredential, EmailAuthProvider } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import { getFirestore, doc, setDoc, getDoc } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
 const firebaseConfig = {
@@ -22,23 +19,43 @@ const db = getFirestore(app);
 let usuarioLogado = null;
 let senhaDoUsuario = sessionStorage.getItem("temp_key") || ""; 
 let dados = {};
-let parcelasMemoria = JSON.parse(localStorage.getItem("parcelas")) || [];
+let parcelasMemoria = [];
 let mesesDOM = [];
-let chart = null;
+let chartResumo = null;
 let mesesAbertos = new Set(); 
+let mesesGastosAbertos = new Set(); 
 
-let contasFixas = JSON.parse(localStorage.getItem("contasFixas")) || [];
-let receitasFixas = JSON.parse(localStorage.getItem("receitasFixas")) || [];
-let salarioFixoBase = JSON.parse(localStorage.getItem("salarioFixoBase")) || 0;
-let categorias = JSON.parse(localStorage.getItem("categorias")) || ["Essencial", "Alimentação", "Cartões", "Contas"];
-let configuracoes = JSON.parse(localStorage.getItem("configuracoes")) || { diaVirada: 1, nomeUsuario: "", referenciaMes: "atual" };
-
-let sortableFixas = null;
-let sortableReceitas = null;
+let contasFixas = [];
+let receitasFixas = [];
+let salarioFixoBase = 0;
+let categorias = [{name: "Essencial", color: "#3C5558"}, {name: "Alimentação", color: "#D78341"}, {name: "Lazer", color: "#586E5F"}, {name: "Contas", color: "#e74c3c"}];
+let configuracoes = { diaVirada: 1, nomeUsuario: "", referenciaMes: "atual", tema: "planetario" };
+let cartoes = [];
+let gastosDetalhes = {}; 
+let filtrosPorMes = {};
 
 const hoje = new Date();
 const nomesMesesFull = ["Janeiro","Fevereiro","Março","Abril","Maio","Junho","Julho","Agosto","Setembro","Outubro","Novembro","Dezembro"];
-const categoriasReceitas = ["Salário", "Extra", "Investimentos", "Presente", "Vendas", "Outros"];
+let contextParcelaCartao = { mes: 0, ano: 2024 };
+
+// ================= FUNÇÕES DE APOIO =================
+function aplicarTema(tema) { document.body.className = "theme-" + (tema || "planetario"); }
+
+function getMesReferenciaAtivo() {
+    const diaV = parseInt(configuracoes.diaVirada) || 1;
+    const refMes = configuracoes.referenciaMes || "atual";
+    let baseDate = new Date();
+    if (refMes === "proximo") baseDate.setMonth(baseDate.getMonth() + 1);
+    let mesAt = baseDate.getMonth();
+    let anoAt = baseDate.getFullYear();
+    if (new Date().getDate() < diaV) { mesAt--; if (mesAt < 0) { mesAt = 11; anoAt--; } }
+    return { mesAt, anoAt };
+}
+
+function migrarCategorias(lista) {
+    if(!lista || !Array.isArray(lista)) return categorias;
+    return lista.map(c => (typeof c === 'string' ? { name: c, color: "#D78341" } : c));
+}
 
 // ================= CRIPTOGRAFIA =================
 const encoder = new TextEncoder();
@@ -48,10 +65,7 @@ async function encryptData(obj, senha) {
   const dadosBytes = encoder.encode(JSON.stringify(obj));
   const keyMaterial = await crypto.subtle.importKey("raw", encoder.encode(senha), "PBKDF2", false, ["deriveKey"]);
   const salt = crypto.getRandomValues(new Uint8Array(16));
-  const key = await crypto.subtle.deriveKey(
-    { name: "PBKDF2", salt, iterations: 250000, hash: "SHA-256" },
-    keyMaterial, { name: "AES-GCM", length: 256 }, false, ["encrypt"]
-  );
+  const key = await crypto.subtle.deriveKey({ name: "PBKDF2", salt, iterations: 250000, hash: "SHA-256" }, keyMaterial, { name: "AES-GCM", length: 256 }, false, ["encrypt"]);
   const iv = crypto.getRandomValues(new Uint8Array(12));
   const encrypted = await crypto.subtle.encrypt({ name: "AES-GCM", iv }, key, dadosBytes);
   return { encrypted: btoa(String.fromCharCode(...new Uint8Array(encrypted))), iv: btoa(String.fromCharCode(...iv)), salt: btoa(String.fromCharCode(...salt)) };
@@ -63,27 +77,34 @@ async function decryptData(encryptedObj, senha) {
     const salt = Uint8Array.from(atob(encryptedObj.salt), c => c.charCodeAt(0));
     const data = Uint8Array.from(atob(encryptedObj.encrypted), c => c.charCodeAt(0));
     const keyMaterial = await crypto.subtle.importKey("raw", encoder.encode(senha), "PBKDF2", false, ["deriveKey"]);
-    const key = await crypto.subtle.deriveKey(
-      { name: "PBKDF2", salt, iterations: 250000, hash: "SHA-256" },
-      keyMaterial, { name: "AES-GCM", length: 256 }, false, ["decrypt"]
-    );
+    const key = await crypto.subtle.deriveKey({ name: "PBKDF2", salt, iterations: 250000, hash: "SHA-256" }, keyMaterial, { name: "AES-GCM", length: 256 }, false, ["decrypt"]);
     const decrypted = await crypto.subtle.decrypt({ name: "AES-GCM", iv }, key, data);
     return JSON.parse(decoder.decode(decrypted));
   } catch (e) { throw new Error("Senha incorreta."); }
 }
 
 // ================= UTILITÁRIOS =================
-
 function formatar(v) { return "R$ " + (Number(v) || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+function parseValor(v) { if (!v) return 0; if (typeof v === 'number') return v; let str = v.toString(); if (str.includes('.') && str.includes(',')) str = str.replace(/\./g, '').replace(',', '.'); else str = str.replace(',', '.'); const limpo = str.replace(/[^\d.]/g, ""); return parseFloat(limpo) || 0; }
 
-function parseValor(v) {
-    if (!v) return 0;
-    if (typeof v === 'number') return v;
-    let str = v.toString();
-    if (str.includes('.') && str.includes(',')) str = str.replace(/\./g, '').replace(',', '.');
-    else str = str.replace(',', '.');
-    const limpo = str.replace(/[^\d.]/g, "");
-    return parseFloat(limpo) || 0;
+function salvarDadosLocal(pendente = true) {
+  localStorage.setItem("financas", JSON.stringify(dados)); localStorage.setItem("parcelas", JSON.stringify(parcelasMemoria));
+  localStorage.setItem("contasFixas", JSON.stringify(contasFixas)); localStorage.setItem("receitasFixas", JSON.stringify(receitasFixas));
+  localStorage.setItem("salarioFixoBase", JSON.stringify(salarioFixoBase)); localStorage.setItem("categorias", JSON.stringify(categorias));
+  localStorage.setItem("configuracoes", JSON.stringify(configuracoes)); localStorage.setItem("cartoes", JSON.stringify(cartoes));
+  localStorage.setItem("gastosDetalhes", JSON.stringify(gastosDetalhes));
+  const a = document.getElementById("statusAlteracao"); if(a) a.style.display = pendente ? "inline" : "none";
+}
+
+async function salvarFirebase() {
+  if (!usuarioLogado || !senhaDoUsuario) return;
+  try {
+    const btn = document.getElementById("salvarNuvemBtn"); btn.innerText = "⌛ SALVANDO...";
+    const pacote = await encryptData({ dados, parcelasMemoria, contasFixas, receitasFixas, salarioFixoBase, categorias, configuracoes, cartoes, gastosDetalhes }, senhaDoUsuario);
+    await setDoc(doc(db, "financas", usuarioLogado.uid), pacote);
+    btn.innerText = "✅ SALVO NA NUVEM"; salvarDadosLocal(false);
+    setTimeout(() => { if(btn) btn.innerText = "☁️ SALVAR NA NUVEM"; }, 2000);
+  } catch (e) { console.error(e); }
 }
 
 function aplicarComportamentoInput(input, getV, setV, anoVinculado = null) {
@@ -98,273 +119,105 @@ function aplicarComportamentoInput(input, getV, setV, anoVinculado = null) {
 }
 
 // ================= MOTOR DE CÁLCULO =================
-
 function atualizarTudo(anoParaVisualizar, pendente = true) {
-  const hojeSync = new Date();
-  const diaV = parseInt(configuracoes?.diaVirada) || 1;
-  const refMes = configuracoes?.referenciaMes || "atual";
-  
-  let baseDate = new Date();
-  if (refMes === "proximo") baseDate.setMonth(baseDate.getMonth() + 1);
-
-  let mesAt = baseDate.getMonth();
-  let anoAt = baseDate.getFullYear();
-  if (hojeSync.getDate() < diaV) { mesAt--; if (mesAt < 0) { mesAt = 11; anoAt--; } }
-
+  const { mesAt, anoAt } = getMesReferenciaAtivo();
   const anosOrdenados = Object.keys(dados).map(Number).sort((a, b) => a - b);
-  let saldoAcumulado = 0;
-  let ehOPrimeiroMesDeTodos = true;
+  let saldoAcumulado = 0; let ehOPrimeiroMesDeTodos = true;
 
   anosOrdenados.forEach(ano => {
     if (!dados[ano] || !dados[ano].meses) return;
-    
     dados[ano].meses.forEach((m, idx) => {
       if (!ehOPrimeiroMesDeTodos && m.contaManual !== true) m.conta = saldoAcumulado;
-      const dTotal = (m.despesas || []).filter(x => x.checked).reduce((acc, b) => acc + b.valor, 0);
+      const dTotalManuais = (m.despesas || []).filter(x => x.checked).reduce((acc, b) => acc + b.valor, 0);
+      const gastosMes = (gastosDetalhes[ano] || []).filter(g => g.mes === idx);
+      const totalCartoesCredito = gastosMes.filter(g => {
+          const cObj = cartoes.find(c => c.id == g.cartaoId);
+          return cObj && cObj.tipo === 'Crédito';
+      }).reduce((acc, g) => acc + g.valor, 0);
+
       const eTotal = (m.empresa || []).filter(x => x.checked).reduce((acc, b) => acc + b.valor, 0);
       const totalDisponivel = (m.salario || 0) + (m.conta || 0) + eTotal;
-      const saldoFinal = totalDisponivel - dTotal;
-      saldoAcumulado = saldoFinal;
-      ehOPrimeiroMesDeTodos = false;
+      const saldoFinal = totalDisponivel - (dTotalManuais + totalCartoesCredito);
+      saldoAcumulado = saldoFinal; ehOPrimeiroMesDeTodos = false;
 
       if (ano === Number(anoParaVisualizar)) {
         const info = mesesDOM.find(item => item.index === idx);
         if (info) {
           const dom = info.dom;
-          dom.querySelector(".totalDespesas").textContent = formatar(dTotal);
+          const listaCartoesDiv = dom.querySelector(".listaCartoesDinamica");
+          if (listaCartoesDiv) {
+              listaCartoesDiv.innerHTML = "";
+              const crdGastos = gastosMes.filter(g => cartoes.find(c => c.id == g.cartaoId)?.tipo === 'Crédito');
+              if (crdGastos.length > 0) {
+                  const totaisPorCartao = {};
+                  crdGastos.forEach(g => { totaisPorCartao[g.cartaoId] = (totaisPorCartao[g.cartaoId] || 0) + g.valor; });
+                  listaCartoesDiv.innerHTML = "<small style='display:block;margin-bottom:5px;opacity:0.6'>RESUMO DE CARTÕES (CRÉDITO):</small>";
+                  Object.keys(totaisPorCartao).forEach(cid => {
+                      const cObj = cartoes.find(c => c.id == cid);
+                      const itemC = document.createElement("div"); itemC.className = "item-cartao-resumo";
+                      itemC.innerHTML = `<span>💳 ${cObj.nome}</span> <span>${formatar(totaisPorCartao[cid])}</span>`;
+                      listaCartoesDiv.appendChild(itemC);
+                  });
+              }
+          }
+          dom.querySelector(".totalDespesas").textContent = formatar(dTotalManuais + totalCartoesCredito);
           dom.querySelector(".totalDinheiro").textContent = formatar(totalDisponivel);
-          const sEl = dom.querySelector(".saldo");
-          sEl.textContent = formatar(saldoFinal);
+          const sEl = dom.querySelector(".saldo"); sEl.textContent = formatar(saldoFinal);
           sEl.className = "saldo " + (saldoFinal >= 0 ? "positivo" : "negativo");
           dom.querySelector(".mesTotal").textContent = formatar(saldoFinal);
-          const inS = dom.querySelector("input.salario");
-          const inC = dom.querySelector("input.conta");
+          const inS = dom.querySelector("input.salario"); const inC = dom.querySelector("input.conta");
           if (document.activeElement !== inS) inS.value = formatar(m.salario);
           if (document.activeElement !== inC) {
             inC.value = formatar(m.conta);
-            if (m.contaManual === true) inC.classList.add("manual");
-            else inC.classList.remove("manual");
+            if (m.contaManual === true) inC.classList.add("manual"); else inC.classList.remove("manual");
           }
-          if (ano === anoAt && idx === mesAt) dom.classList.add("mesAtual");
-          else dom.classList.remove("mesAtual");
+          if (ano === anoAt && idx === mesAt) dom.classList.add("mesAtual"); else dom.classList.remove("mesAtual");
         }
       }
     });
   });
-
-  const titulo = document.getElementById("tituloSite");
-  if (titulo) titulo.textContent = configuracoes.nomeUsuario ? `CONTAS DE ${configuracoes.nomeUsuario.toUpperCase()}` : "CONTAS MENSAIS";
-
-  salvarDadosLocal(pendente);
   atualizarGrafico(Number(anoParaVisualizar));
 }
 
-function liberarCascataFutura(anoInicial, mesIdxInicial) {
-  const anosOrdenados = Object.keys(dados).map(Number).sort((a, b) => a - b);
-  let encontrouAtual = false;
-  anosOrdenados.forEach(ano => {
-    if (!dados[ano] || !dados[ano].meses) return;
-    dados[ano].meses.forEach((m, idx) => {
-      if (encontrouAtual) m.contaManual = false;
-      if (ano === Number(anoInicial) && idx === mesIdxInicial) encontrouAtual = true;
+function atualizarGrafico(ano) {
+    const ctx = document.getElementById("grafico");
+    if (!ctx || !dados[ano]) return;
+
+    // --- A MÁGICA ESTÁ AQUI ---
+    // Pega o valor da variável --P03 direto do CSS do Body
+    const corDestaqueTema = getComputedStyle(document.body).getPropertyValue('--P06').trim();
+    const corTextoTema = getComputedStyle(document.body).getPropertyValue('--P07').trim();
+
+    const saldos = (dados[ano].meses || []).map((m, idx) => {
+        const dM = (m.despesas || []).filter(x => x.checked).reduce((acc, b) => acc + b.valor, 0);
+        const dC = (gastosDetalhes[ano] || []).filter(g => {
+            const card = cartoes.find(c => c.id == g.cartaoId);
+            return card && card.tipo === 'Crédito';
+        }).reduce((acc, g) => acc + g.valor, 0);
+        const eT = (m.empresa || []).filter(x => x.checked).reduce((acc, b) => acc + b.valor, 0);
+        return parseFloat(((m.salario || 0) + (m.conta || 0) + eT - (dM + dC)).toFixed(2));
     });
-  });
-  atualizarTudo(anoInicial);
-}
 
-function aplicarParcelas() {
-  parcelasMemoria.forEach(p => {
-    if (!dados[p.ano] || !dados[p.ano].meses) return;
-    const meses = dados[p.ano].meses;
-    for (let i = 0; i < p.parcelas; i++) {
-      const idx = p.inicio + i;
-      if (!meses[idx]) continue;
-      const nomeP = `${p.nome} (${i+1}/${p.parcelas})`;
-      if (!meses[idx].despesas.some(d => d.parcelaId === p.id && d.nome === nomeP)) {
-        meses[idx].despesas.push({ nome: nomeP, valor: p.valorParcela, checked: true, parcelaId: p.id });
-      }
-    }
-  });
-}
+    const options = {
+        series: [{ name: 'Saldo', data: saldos }],
+        chart: { type: 'bar', height: 250, toolbar: { show: false } },
+        
+        // Aplica a cor que pegamos do CSS
+        colors: [corDestaqueTema], 
+        
+        xaxis: { 
+            categories: nomesMesesFull,
+            labels: { style: { colors: corTextoTema } } // Opcional: cor das letras dos meses
+        },
+        yaxis: {
+            labels: { style: { colors: corTextoTema } } // Opcional: cor das letras dos valores
+        },
+        legend: { labels: { colors: corTextoTema } }
+    };
 
-function adicionarMes(ano) {
-  let anoNum = Number(ano);
-  if (!dados[anoNum]) dados[anoNum] = { meses: [] };
-  const mesesArray = dados[anoNum].meses;
-  const novoMesIndice = mesesArray.length;
-  let novoMes = { despesas: [], empresa: [], salario: salarioFixoBase, conta: 0, contaManual: false };
-
-  contasFixas.forEach(cf => {
-    if (cf.ativo) {
-      let deve = (cf.frequencia === "mensal") || (cf.frequencia === "bimestral" && novoMesIndice % 2 === 0) || (cf.frequencia === "anual" && novoMesIndice === 0) || (cf.frequencia === "personalizado" && novoMesIndice % (parseInt(cf.intervalo) || 1) === 0);
-      if (deve) novoMes.despesas.push({ nome: cf.nome, valor: cf.valor || 0, checked: true, categoria: cf.categoria });
-    }
-  });
-
-  receitasFixas.forEach(rf => {
-    if (rf.ativo) {
-      let deve = (rf.frequencia === "mensal") || (rf.frequencia === "anual" && novoMesIndice === 0);
-      if (deve) novoMes.empresa.push({ nome: rf.nome, valor: rf.valor || 0, checked: true, categoria: rf.categoria });
-    }
-  });
-
-  if (mesesArray.length >= 12) {
-    let novoAnoNum = anoNum + 1;
-    if (!dados[novoAnoNum]) dados[novoAnoNum] = { meses: [] };
-    dados[novoAnoNum].meses.push(novoMes);
-    const seletor = document.getElementById("ano");
-    if(seletor) seletor.value = novoAnoNum;
-  } else {
-    mesesArray.push(novoMes);
-  }
-  aplicarParcelas();
-  carregarAno();
-}
-
-// ================= RENDERERS TEMPLATES =================
-
-function renderContasFixas() {
-  const lista = document.getElementById("listaContasFixas");
-  if (!lista) return;
-  if (sortableFixas) { sortableFixas.destroy(); sortableFixas = null; }
-  lista.innerHTML = "";
-  contasFixas.forEach((cf) => {
-    if (!cf.id) cf.id = Date.now() + Math.random();
-    const div = document.createElement("div");
-    div.className = "item item-fixo";
-    div.setAttribute("data-id", cf.id);
-    div.innerHTML = `<div class="drag-handle">☰</div><input type="checkbox" ${cf.ativo ? 'checked' : ''} class="check-fixo"><input type="text" class="inputPadrao nome-fixo" value="${cf.nome}" placeholder="Nome" style="flex:2"><input type="text" class="inputPadrao valor-fixo" value="${cf.valor > 0 ? formatar(cf.valor) : ''}" placeholder="Valor" style="width:110px"><select class="inputPadrao cat-fixo" style="width:110px">${categorias.map(c => `<option value="${c}" ${cf.categoria === c ? 'selected' : ''}>${c}</option>`).join('')}</select><select class="inputPadrao freq-fixo" style="width:110px"><option value="mensal" ${cf.frequencia === 'mensal' ? 'selected' : ''}>Mensal</option><option value="bimestral" ${cf.frequencia === 'bimestral' ? 'selected' : ''}>Bimestral</option><option value="anual" ${cf.frequencia === 'anual' ? 'selected' : ''}>Anual</option><option value="personalizado" ${cf.frequencia === 'personalizado' ? 'selected' : ''}>A cada X meses</option></select>${cf.frequencia === 'personalizado' ? `<input type="number" class="inputPadrao int-fixo" value="${cf.intervalo || 2}" style="width:50px">` : ''}<button class="removeItem">×</button>`;
-    div.querySelector('.check-fixo').onchange = (e) => { cf.ativo = e.target.checked; salvarDadosLocal(); };
-    div.querySelector('.nome-fixo').onblur = (e) => { cf.nome = e.target.value; salvarDadosLocal(); };
-    aplicarComportamentoInput(div.querySelector('.valor-fixo'), () => cf.valor, (v) => { cf.valor = v; });
-    div.querySelector('.cat-fixo').onchange = (e) => { cf.categoria = e.target.value; salvarDadosLocal(); };
-    div.querySelector('.freq-fixo').onchange = (e) => { cf.frequencia = e.target.value; renderContasFixas(); salvarDadosLocal(); };
-    if (cf.frequencia === 'personalizado') div.querySelector('.int-fixo').onblur = (e) => { cf.intervalo = e.target.value; salvarDadosLocal(); };
-    div.querySelector('.removeItem').onclick = () => { contasFixas = contasFixas.filter(c => c.id !== cf.id); renderContasFixas(); salvarDadosLocal(); };
-    lista.appendChild(div);
-  });
-  setTimeout(() => {
-    if(typeof Sortable !== 'undefined') {
-        sortableFixas = Sortable.create(lista, { handle: '.drag-handle', animation: 150, ghostClass: 'sortable-ghost', onEnd: () => {
-          const novaOrdem = [];
-          lista.querySelectorAll('.item-fixo').forEach(itemDOM => {
-            const id = itemDOM.getAttribute("data-id");
-            const conta = contasFixas.find(c => c.id.toString() === id);
-            if (conta) novaOrdem.push(conta);
-          });
-          contasFixas = novaOrdem; salvarDadosLocal();
-        }});
-    }
-  }, 10);
-}
-
-function renderReceitasFixas() {
-  const lista = document.getElementById("listaReceitasFixas");
-  const inSalarioBase = document.getElementById("salarioFixoBase");
-  if (!lista || !inSalarioBase) return;
-  if (sortableReceitas) { sortableReceitas.destroy(); sortableReceitas = null; }
-  inSalarioBase.value = formatar(salarioFixoBase);
-  const novoIn = inSalarioBase.cloneNode(true);
-  inSalarioBase.parentNode.replaceChild(novoIn, inSalarioBase);
-  aplicarComportamentoInput(novoIn, () => salarioFixoBase, (v) => { salarioFixoBase = v; });
-
-  lista.innerHTML = "";
-  receitasFixas.forEach((rf) => {
-    if (!rf.id) rf.id = Date.now() + Math.random();
-    const div = document.createElement("div");
-    div.className = "item item-fixo";
-    div.setAttribute("data-id", rf.id);
-    div.innerHTML = `<div class="drag-handle">☰</div><input type="checkbox" ${rf.ativo ? 'checked' : ''} class="check-rf"><input type="text" class="inputPadrao nome-rf" value="${rf.nome}" placeholder="Ex: Aluguel" style="flex:2"><input type="text" class="inputPadrao valor-rf" value="${rf.valor > 0 ? formatar(rf.valor) : ''}" placeholder="Valor" style="width:110px"><select class="inputPadrao cat-rf" style="width:110px">${categoriasReceitas.map(c => `<option value="${c}" ${rf.categoria === c ? 'selected' : ''}>${c}</option>`).join('')}</select><select class="inputPadrao freq-rf" style="width:110px"><option value="mensal" ${rf.frequencia === 'mensal' ? 'selected' : ''}>Mensal</option><option value="anual" ${rf.frequencia === 'anual' ? 'selected' : ''}>Anual</option></select><button class="removeItem">×</button>`;
-    div.querySelector('.check-rf').onchange = (e) => { rf.ativo = e.target.checked; salvarDadosLocal(); };
-    div.querySelector('.nome-rf').onblur = (e) => { rf.nome = e.target.value; salvarDadosLocal(); };
-    aplicarComportamentoInput(div.querySelector('.valor-rf'), () => rf.valor, (v) => { rf.valor = v; });
-    div.querySelector('.cat-rf').onchange = (e) => { rf.categoria = e.target.value; salvarDadosLocal(); };
-    div.querySelector('.freq-rf').onchange = (e) => { rf.frequencia = e.target.value; renderReceitasFixas(); salvarDadosLocal(); };
-    div.querySelector('.removeItem').onclick = () => { receitasFixas = receitasFixas.filter(r => r.id !== rf.id); renderReceitasFixas(); salvarDadosLocal(); };
-    lista.appendChild(div);
-  });
-  setTimeout(() => {
-    if(typeof Sortable !== 'undefined') {
-        sortableReceitas = Sortable.create(lista, { handle: '.drag-handle', animation: 150, ghostClass: 'sortable-ghost', onEnd: () => {
-          const novaOrdem = [];
-          lista.querySelectorAll('.item-fixo').forEach(itemDOM => {
-            const id = itemDOM.getAttribute("data-id");
-            const item = receitasFixas.find(r => r.id.toString() === id);
-            if (item) novaOrdem.push(item);
-          });
-          receitasFixas = novaOrdem; salvarDadosLocal();
-        }});
-    }
-  }, 10);
-}
-
-// ================= INTERFACE DOM MESES =================
-
-function criarMesDOM(ano, index, data) {
-  const mes = document.createElement("div");
-  const hojeSync = new Date();
-  const diaV = parseInt(configuracoes.diaVirada) || 1;
-  const refMes = configuracoes.referenciaMes || "atual";
-  let baseDate = new Date();
-  if (refMes === "proximo") baseDate.setMonth(baseDate.getMonth() + 1);
-  let mesAt = baseDate.getMonth();
-  let anoAt = baseDate.getFullYear();
-  if (hojeSync.getDate() < diaV) { mesAt--; if (mesAt < 0) { mesAt = 11; anoAt--; } }
-  
-  let estaAberto = mesesAbertos.has(index);
-  if (mesesAbertos.size === 0 && Number(ano) === anoAt && index === mesAt) { estaAberto = true; mesesAbertos.add(index); }
-  
-  mes.className = "mes" + (estaAberto ? "" : " collapsed");
-  if (Number(ano) === anoAt && index === mesAt) mes.classList.add("mesAtual");
-
-  const header = document.createElement("div"); header.className = "mesHeader";
-  header.innerHTML = `<span>${nomesMesesFull[index]} ${ano}</span><div><span class="mesTotal">0,00</span><button class="duplicarMes"><svg viewBox="0 0 24 24"><path d="M8 8h12v12H8zM4 4h12v2H6v10H4z"/></svg></button><button class="removeMes">×</button></div>`;
-  header.onclick = () => { const isCollapsed = mes.classList.toggle("collapsed"); if (isCollapsed) mesesAbertos.delete(index); else mesesAbertos.add(index); };
-  header.querySelector(".duplicarMes").onclick = (e) => { e.stopPropagation(); dados[ano].meses.splice(index + 1, 0, JSON.parse(JSON.stringify(data))); carregarAno(); };
-  header.querySelector(".removeMes").onclick = (e) => { e.stopPropagation(); if(confirm("Excluir mês?")) { dados[ano].meses.splice(index, 1); carregarAno(); } };
-
-  const body = document.createElement("div"); body.className = "mesBody";
-  body.innerHTML = `<div class="container"><div class="coluna despesas"><div class="topoColuna"><h4>DESPESAS</h4></div><div class="conteudoColuna"><div class="listaDesp"></div><div class="acoesDesp"><button class="addDesp">+ Despesa</button><button class="addParcela">+ Parcela</button></div></div><p class="rodapeColuna">Total: <span class="totalDespesas">0,00</span></p></div><div class="coluna dinheiro"><div class="topoColuna"><h4>RENDAS</h4></div><div class="conteudoColuna"><div class="linhaInputs"><div class="campo"><label>Salário</label><input type="text" class="salario inputPadrao"></div><div class="campo"><label>Conta</label><input type="text" class="conta inputPadrao"></div><button class="btn-cascata" title="Vincular meses seguintes">🔗</button></div><h5>OUTROS</h5><div class="listaEmp"></div><button class="addEmp inputPadrao" style="height:35px; cursor:pointer">+</button></div><p class="rodapeColuna">Total: <span class="totalDinheiro">0,00</span></p></div></div><div class="totalFinal">TOTAL: <span class="saldo">0,00</span></div>`;
-
-  const listD = body.querySelector(".listaDesp"); 
-  const listE = body.querySelector(".listaEmp");
-  data.despesas.forEach(item => criarItem(listD, item, data.despesas, ano));
-  (data.empresa || []).forEach(item => criarItem(listE, item, data.empresa, ano));
-
-  const inSal = body.querySelector("input.salario"); 
-  const inCon = body.querySelector("input.conta");
-  const btnC = body.querySelector(".btn-cascata");
-  inSal.value = formatar(data.salario || 0);
-  inCon.value = formatar(data.conta || 0);
-
-  aplicarComportamentoInput(inSal, () => data.salario, (v) => { data.salario = v; atualizarTudo(ano); }, ano);
-  inCon.addEventListener("focus", () => { inCon.dataset.old = inCon.value; inCon.value = ""; });
-  inCon.addEventListener("blur", () => {
-    const txt = inCon.value.trim();
-    if (txt === "") data.contaManual = false;
-    else { data.conta = parseValor(txt); data.contaManual = true; }
-    atualizarTudo(ano);
-  });
-  inCon.addEventListener("keydown", (e) => { if(e.key === "Enter") inCon.blur(); });
-  btnC.onclick = () => liberarCascataFutura(ano, index);
-  body.querySelector(".addDesp").onclick = () => { data.despesas.push({nome:"", valor:0, checked:true}); carregarAno(); };
-  
-  // CORRIGIDO: LOGICA DO BOTÃO PARCELA
-  body.querySelector(".addParcela").onclick = () => {
-    const nome = prompt("Nome da despesa:");
-    const valorTotal = parseValor(prompt("Valor TOTAL da compra:"));
-    const numParcelas = parseInt(prompt("Quantidade de parcelas:"));
-    if(nome && valorTotal > 0 && numParcelas > 0) {
-      parcelasMemoria.push({ id: Date.now(), nome: nome, valorParcela: Number((valorTotal / numParcelas).toFixed(2)), parcelas: numParcelas, inicio: index, ano: Number(ano) });
-      aplicarParcelas(); // Injeta no objeto dados imediatamente
-      salvarDadosLocal(); // Salva
-      carregarAno(); // Recarrega visualmente
-    }
-  };
-  
-  body.querySelector(".addEmp").onclick = () => { if(!data.empresa) data.empresa=[]; data.empresa.push({nome:"", valor:0, checked:true}); carregarAno(); };
-  mes.appendChild(header); mes.appendChild(body);
-  return mes;
+    if (chartResumo) chartResumo.destroy();
+    chartResumo = new ApexCharts(ctx, options);
+    chartResumo.render();
 }
 
 function criarItem(lista, d, dataArray, ano) {
@@ -373,281 +226,204 @@ function criarItem(lista, d, dataArray, ano) {
   const [check, nome, valor, btn] = div.children;
   check.onchange = () => { d.checked = check.checked; atualizarTudo(ano); };
   nome.onblur = () => { d.nome = nome.value; salvarDadosLocal(true); };
-  nome.addEventListener("keydown", (e) => { if(e.key === "Enter") nome.blur(); });
   aplicarComportamentoInput(valor, () => d.valor, (v) => { d.valor = v; atualizarTudo(ano); }, ano);
-  btn.onclick = () => { 
-    if(d.parcelaId) {
-      if(confirm("Excluir todas as parcelas?")) {
-        parcelasMemoria = parcelasMemoria.filter(p => p.id !== d.parcelaId);
-        Object.keys(dados).forEach(a => { if(dados[a] && dados[a].meses) dados[a].meses.forEach(m => { m.despesas = m.despesas.filter(item => item.parcelaId !== d.parcelaId); }); });
-        carregarAno();
-      }
-    } else { dataArray.splice(dataArray.indexOf(d), 1); carregarAno(); }
-  };
+  btn.onclick = () => { if(d.parcelaId) { if(confirm("Deseja apagar TODAS as parcelas desta compra?")) { Object.keys(dados).forEach(a => { dados[a].meses.forEach(m => { m.despesas = m.despesas.filter(item => item.parcelaId !== d.parcelaId); }); }); carregarAno(); } } else { dataArray.splice(dataArray.indexOf(d), 1); carregarAno(); } };
   lista.appendChild(div);
 }
 
-// ================= MODAIS E CONFIGURAÇÕES =================
+function criarMesDOM(ano, index, data) {
+  const mes = document.createElement("div"); mes.className = mesesAbertos.has(index) ? "mes" : "mes collapsed";
+  const header = document.createElement("div"); header.className = "mesHeader";
+  header.innerHTML = `<span>${nomesMesesFull[index]} ${ano}</span><div><span class="mesTotal">0,00</span><button class="duplicarMes" title="Duplicar">📑</button><button class="removeMes">×</button></div>`;
+  header.onclick = () => { mes.classList.toggle("collapsed"); if(mes.classList.contains("collapsed")) mesesAbertos.delete(index); else mesesAbertos.add(index); };
+  header.querySelector(".duplicarMes").onclick = (e) => { e.stopPropagation(); dados[ano].meses.splice(index + 1, 0, JSON.parse(JSON.stringify(data))); carregarAno(); };
+  header.querySelector(".removeMes").onclick = (e) => { e.stopPropagation(); if(confirm("Excluir mês?")) { dados[ano].meses.splice(index, 1); carregarAno(); } };
+  const body = document.createElement("div"); body.className = "mesBody";
+  body.innerHTML = `<div class="container"><div class="coluna despesas"><div class="topoColuna"><h4>DESPESAS</h4></div><div class="conteudoColuna"><div class="listaDesp"></div><div class="acoesDesp" style="display:flex; gap:5px; margin-top:10px;"><button class="addDesp btn" style="font-size:11px; padding:5px 10px;">+ Despesa</button><button class="addParcela btn" style="font-size:11px; padding:5px 10px;">+ Parcela</button></div><div class="listaCartoesDinamica"></div></div><p class="rodapeColuna">Total: <span class="totalDespesas">0,00</span></p></div><div class="coluna dinheiro"><div class="topoColuna"><h4>RENDAS</h4></div><div class="conteudoColuna"><div class="linhaInputs"><div class="campo"><label>Salário</label><input type="text" class="salario inputPadrao"></div><div class="campo"><label>Conta</label><input type="text" class="conta inputPadrao"></div><button class="btn-cascata" title="Vincular meses seguintes">🔗</button></div><h5>OUTROS</h5><div class="listaEmp"></div><button class="addEmp btn" style="height:35px; cursor:pointer; width:100%; margin-top:10px;">+</button></div><p class="rodapeColuna">Total: <span class="totalDinheiro">0,00</span></p></div></div><div class="totalFinal">TOTAL: <span class="saldo">0,00</span></div>`;
+  const listD = body.querySelector(".listaDesp"); const listE = body.querySelector(".listaEmp");
+  data.despesas.forEach(item => criarItem(listD, item, data.despesas, ano)); (data.empresa || []).forEach(item => criarItem(listE, item, data.empresa, ano));
+  const inSal = body.querySelector("input.salario"); const inCon = body.querySelector("input.conta"); const btnC = body.querySelector(".btn-cascata");
+  inSal.value = formatar(data.salario || 0); inCon.value = formatar(data.conta || 0);
+  aplicarComportamentoInput(inSal, () => data.salario, (v) => { data.salario = v; atualizarTudo(ano); }, ano);
+  inCon.addEventListener("blur", () => { const txt = inCon.value.trim(); if (txt === "") data.contaManual = false; else { data.conta = parseValor(txt); data.contaManual = true; } atualizarTudo(ano); });
+  inCon.addEventListener("keydown", (e) => { if(e.key === "Enter") inCon.blur(); });
+  btnC.onclick = () => { const anosOrdenados = Object.keys(dados).map(Number).sort((a,b)=>a-b); let found = false; anosOrdenados.forEach(a => dados[a].meses.forEach((m, i) => { if(a == ano && i == index) found = true; else if(found) m.contaManual = false; })); atualizarTudo(ano); };
+  body.querySelector(".addDesp").onclick = () => { data.despesas.push({nome:"", valor:0, checked:true}); carregarAno(); };
+  body.querySelector(".addParcela").onclick = () => { const n = prompt("Nome:"); const vt = parseValor(prompt("Valor TOTAL:")); const np = parseInt(prompt("Parcelas:")); if(n && vt > 0 && np > 0) { parcelasMemoria.push({ id: Date.now(), nome: n, valorParcela: Number((vt / np).toFixed(2)), parcelas: np, inicio: index, ano: Number(ano) }); carregarAno(); } };
+  body.querySelector(".addEmp").onclick = () => { if(!data.empresa) data.empresa=[]; data.empresa.push({nome:"", valor:0, checked:true}); carregarAno(); };
+  mes.appendChild(header); mes.appendChild(body); return mes;
+}
 
-function renderCategoriasModal() {
-  const lista = document.getElementById("listaCategoriasModal");
-  if (!lista) return;
-  lista.innerHTML = "";
-  categorias.forEach((cat, index) => {
-    const li = document.createElement("li");
-    li.innerHTML = `<span>${cat}</span><div><button class="btn-acao-lista" onclick="renomearCategoria(${index})">✏️</button><button class="btn-acao-lista btn-excluir-modal" onclick="removerCategoria(${index})">×</button></div>`;
-    lista.appendChild(li);
+function renderPaginaGastos() {
+    const area = document.getElementById("areaGastosMensais"); const anoView = document.getElementById("anoGastos").value; const { mesAt, anoAt } = getMesReferenciaAtivo();
+    area.innerHTML = "";
+    for (let m = 0; m < 12; m++) {
+        const mesBox = document.createElement("div"); const isMesAtual = (m === mesAt && Number(anoView) === anoAt); const isOpen = mesesGastosAbertos.has(m) || isMesAtual;
+        mesBox.className = "mes " + (isOpen ? "" : "collapsed") + (isMesAtual ? " mesAtual" : "");
+        let gastosMes = (gastosDetalhes[anoView] || []).filter(g => g.mes === m); const filtroAtual = filtrosPorMes[m] || "todos";
+        if(filtroAtual !== "todos") gastosMes = gastosMes.filter(g => g.cartaoId == filtroAtual);
+        const tCr = gastosMes.filter(g => cartoes.find(c => c.id == g.cartaoId)?.tipo === 'Crédito').reduce((a,b) => a + b.valor, 0);
+        const tDb = gastosMes.filter(g => cartoes.find(c => c.id == g.cartaoId)?.tipo === 'Débito').reduce((a,b) => a + b.valor, 0);
+        mesBox.innerHTML = `<div class="mesHeader"><span>${nomesMesesFull[m]} ${anoView}</span><span>${formatar(tCr + tDb)}</span></div><div class="mesBody"><div class="texto-claro" style="margin-bottom: 15px; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 10px; display:flex; align-items:center; gap:10px;"><span style="font-size:12px; opacity:0.8">Exibir cartão:</span><select class="inputPadrao sel-filtro-mes" style="width:auto; height:30px; font-size:12px;"><option value="todos">Todos</option>${cartoes.map(c => `<option value="${c.id}" ${filtroAtual == c.id ? 'selected' : ''}>${c.nome}</option>`).join('')}</select></div><div id="chart-pizza-${m}" style="display:flex; justify-content:center; margin: 15px 0;"></div><table class="tabela-gastos"><thead><tr><th>Gasto</th><th>Categoria</th><th>Cartão</th><th>Valor</th><th></th></tr></thead><tbody id="tbody-gastos-${m}"></tbody><tfoot><tr><td><input type="text" placeholder="Gasto..." id="add-nome-${m}" class="inputPadrao"></td><td><select id="add-cat-${m}" class="inputPadrao">${categorias.map(c => `<option value="${c.name}">${c.name}</option>`).join('')}</select></td><td><select id="add-card-${m}" class="inputPadrao">${cartoes.map(c => `<option value="${c.id}">${c.nome}</option>`).join('')}</select></td><td><input type="text" placeholder="0,00" id="add-val-${m}" class="inputPadrao input-valor-add"></td><td><div style="display:flex; gap:5px"><button class="btn" id="btn-add-${m}">+</button><button class="btn" style="background:#8e44ad" id="btn-add-parcela-${m}">🗓️</button></div></td></tr></tfoot></table><div class="resumo-gastos-inferior"><div class="barra-resumo credito">Crédito <span>${formatar(tCr)}</span></div><div class="barra-resumo debito">Débito <span>${formatar(tDb)}</span></div><div class="barra-resumo total">TOTAL <span>${formatar(tCr + tDb)}</span></div></div></div>`;
+        mesBox.querySelector(".mesHeader").onclick = () => { mesBox.classList.toggle("collapsed"); if(mesBox.classList.contains("collapsed")) mesesGastosAbertos.delete(m); else { mesesGastosAbertos.add(m); renderPizza(m, gastosMes); } };
+        const selF = mesBox.querySelector(".sel-filtro-mes"); selF.onclick = (e) => e.stopPropagation(); selF.onchange = (e) => { filtrosPorMes[m] = e.target.value; renderPaginaGastos(); };
+        area.appendChild(mesBox); if(isOpen) setTimeout(() => renderPizza(m, gastosMes), 50);
+        const tbody = document.getElementById(`tbody-gastos-${m}`);
+        gastosMes.forEach((g, idx) => {
+            const tr = document.createElement("tr"); const catI = categorias.find(c => c.name === g.categoria) || {color: "#888"};
+            tr.innerHTML = `<td><input type="text" class="input-tabela-edit" value="${g.nome}" data-key="nome"></td><td><select class="input-tabela-edit" data-key="categoria" style="border-left: 5px solid ${catI.color}">${categorias.map(c => `<option value="${c.name}" ${g.categoria === c.name ? 'selected' : ''}>${c.name}</option>`).join('')}</select></td><td><select class="input-tabela-edit" data-key="cartaoId">${cartoes.map(c => `<option value="${c.id}" ${g.cartaoId == c.id ? 'selected' : ''}>${c.nome}</option>`).join('')}</select></td><td><input type="text" class="input-tabela-edit" value="${formatar(g.valor)}" data-key="valor"></td><td><button class="removeItem" id="rem-${m}-${idx}">×</button></td>`;
+            tr.querySelectorAll('.input-tabela-edit').forEach(input => { input.onblur = (e) => { const key = input.getAttribute('data-key'); let val = e.target.value; if(key === 'valor') val = parseValor(val); g[key] = val; salvarDadosLocal(); renderPaginaGastos(); }; if(input.tagName === 'INPUT') input.onkeydown = (e) => { if(e.key === 'Enter') input.blur(); }; });
+            tr.querySelector(".removeItem").onclick = () => { if(g.parcelaId) { if(confirm("Apagar todas as parcelas?")) { Object.keys(gastosDetalhes).forEach(ano => { gastosDetalhes[ano] = gastosDetalhes[ano].filter(item => item.parcelaId !== g.parcelaId); }); salvarDadosLocal(); renderPaginaGastos(); } } else { gastosDetalhes[anoView] = gastosDetalhes[anoView].filter(item => item !== g); salvarDadosLocal(); renderPaginaGastos(); } };
+            tbody.appendChild(tr);
+        });
+        document.getElementById(`add-val-${m}`).onkeydown = (e) => { if(e.key === 'Enter') document.getElementById(`btn-add-${m}`).click(); };
+        document.getElementById(`btn-add-${m}`).onclick = () => { const n = document.getElementById(`add-nome-${m}`).value, c = document.getElementById(`add-cat-${m}`).value, crd = document.getElementById(`add-card-${m}`).value, v = parseValor(document.getElementById(`add-val-${m}`).value); if(!n || v <= 0) return; if(!gastosDetalhes[anoView]) gastosDetalhes[anoView] = []; gastosDetalhes[anoView].push({ mes: m, nome: n, valor: v, categoria: c, cartaoId: crd }); salvarDadosLocal(); renderPaginaGastos(); };
+        document.getElementById(`btn-add-parcela-${m}`).onclick = () => { contextParcelaCartao = { mes: m, ano: Number(anoView) }; document.getElementById("pcNome").value = document.getElementById(`add-nome-${m}`).value; document.getElementById("pcValorTotal").value = document.getElementById(`add-val-${m}`).value; const sCard = document.getElementById("pcCartao"); sCard.innerHTML = cartoes.map(c => `<option value="${c.id}">${c.nome}</option>`).join(''); sCard.value = document.getElementById(`add-card-${m}`).value; const sCat = document.getElementById("pcCategoria"); sCat.innerHTML = categorias.map(c => `<option value="${c.name}">${c.name}</option>`).join(''); sCat.value = document.getElementById(`add-cat-${m}`).value; document.getElementById("modalParcelaCartao").style.display = "flex"; };
+    }
+}
+
+document.getElementById("btnSalvarParcelaCartao").onclick = () => {
+    const n = document.getElementById("pcNome").value, cId = document.getElementById("pcCartao").value, cat = document.getElementById("pcCategoria").value, t = parseValor(document.getElementById("pcValorTotal").value), q = parseInt(document.getElementById("pcQtd").value), pId = Date.now();
+    if(!n || t <= 0 || q <= 0) return;
+    const vP = Number((t / q).toFixed(2)); let mesC = contextParcelaCartao.mes, anoC = contextParcelaCartao.ano;
+    for(let i = 1; i <= q; i++) { if(!gastosDetalhes[anoC]) gastosDetalhes[anoC] = []; gastosDetalhes[anoC].push({ mes: mesC, nome: `${n} (${i}/${q})`, valor: vP, categoria: cat, cartaoId: cId, parcelaId: pId }); mesC++; if(mesC > 11) { mesC = 0; anoC++; } }
+    document.getElementById("modalParcelaCartao").style.display = "none"; salvarDadosLocal(); renderPaginaGastos();
+};
+
+function renderPizza(mesIdx, gastos) {
+    const div = document.querySelector(`#chart-pizza-${mesIdx}`); if (!div || gastos.length === 0) return;
+    const res = {}; gastos.forEach(g => res[g.categoria] = (res[g.categoria] || 0) + g.valor);
+    const options = { series: Object.values(res), labels: Object.keys(res), chart: { type: 'donut', height: 220 }, colors: Object.keys(res).map(n => (categorias.find(c => c.name === n)?.color || "#888")), legend: { position: 'bottom', labels: { colors: getComputedStyle(document.body).getPropertyValue('--P05').trim() } } };
+    div.innerHTML = ""; new ApexCharts(div, options).render();
+}
+
+function renderContasFixas() {
+  const lista = document.getElementById("listaContasFixas"); if (!lista) return; lista.innerHTML = "";
+  contasFixas.forEach((cf) => {
+    const div = document.createElement("div"); div.className = "item-fixo"; div.setAttribute("data-id", cf.id);
+    div.innerHTML = `<div class="drag-handle">☰</div><input type="checkbox" ${cf.ativo?'checked':''} class="check-fixo"><input type="text" class="inputPadrao" value="${cf.nome}" placeholder="Nome" style="flex:2"><input type="text" class="inputPadrao valor-fixo" value="${formatar(cf.valor)}" style="width:110px"><select class="inputPadrao cat-fixo">${categorias.map(c=>`<option value="${c.name}" ${cf.categoria===c.name?'selected':''}>${c.name}</option>`).join('')}</select><button class="removeItem">×</button>`;
+    const [dr, ch, inN, inV, seC, btR] = div.children;
+    ch.onchange = () => { cf.ativo = ch.checked; salvarDadosLocal(); }; inN.onblur = () => { cf.nome = inN.value; salvarDadosLocal(); };
+    aplicarComportamentoInput(inV, () => cf.valor, (v) => { cf.valor = v; }); seC.onchange = () => { cf.categoria = seC.value; salvarDadosLocal(); };
+    btR.onclick = () => { contasFixas = contasFixas.filter(c => c.id !== cf.id); renderContasFixas(); salvarDadosLocal(); }; lista.appendChild(div);
+  });
+  if(typeof Sortable !== 'undefined') Sortable.create(lista, { handle: '.drag-handle', animation: 150, onEnd: () => { const n = []; lista.querySelectorAll('.item-fixo').forEach(el => { const f = contasFixas.find(x => x.id == el.getAttribute('data-id')); if(f) n.push(f); }); contasFixas = n; salvarDadosLocal(); } });
+}
+
+function renderReceitasFixas() {
+  const lista = document.getElementById("listaReceitasFixas"); if (!lista) return;
+  const iS = document.getElementById("salarioFixoBase"); iS.value = formatar(salarioFixoBase);
+  aplicarComportamentoInput(iS, () => salarioFixoBase, (v) => { salarioFixoBase = v; }); lista.innerHTML = "";
+  receitasFixas.forEach((rf) => {
+    const div = document.createElement("div"); div.className = "item-fixo";
+    div.innerHTML = `<input type="checkbox" ${rf.ativo?'checked':''} class="check-rf"><input type="text" class="inputPadrao" value="${rf.nome}" style="flex:2"><input type="text" class="inputPadrao valor-rf" value="${formatar(rf.valor)}" style="width:110px"><button class="removeItem">×</button>`;
+    const [ch, inN, inV, btR] = div.children;
+    ch.onchange = () => { rf.ativo = ch.checked; salvarDadosLocal(); }; inN.onblur = () => { rf.nome = inN.value; salvarDadosLocal(); };
+    aplicarComportamentoInput(inV, () => rf.valor, (v) => { rf.valor = v; }); btR.onclick = () => { receitasFixas = receitasFixas.filter(r => r.id !== rf.id); renderReceitasFixas(); salvarDadosLocal(); }; lista.appendChild(div);
   });
 }
 
-window.removerCategoria = (index) => { if (confirm(`Excluir categoria?`)) { categorias.splice(index, 1); renderCategoriasModal(); salvarDadosLocal(); } };
-window.renomearCategoria = (index) => { const novo = prompt("Novo nome:", categorias[index]); if (novo) { categorias[index] = novo; renderCategoriasModal(); salvarDadosLocal(); } };
-
-async function mudarSenha() {
-    const pAntiga = document.getElementById("pwdAntiga").value;
-    const pNova = document.getElementById("pwdNova").value;
-    if(!pAntiga || !pNova) return alert("Preencha as senhas.");
-    try {
-        const credential = EmailAuthProvider.credential(usuarioLogado.email, pAntiga);
-        await reauthenticateWithCredential(auth.currentUser, credential);
-        await updatePassword(auth.currentUser, pNova);
-        senhaDoUsuario = pNova;
-        sessionStorage.setItem("temp_key", pNova);
-        alert("Senha atualizada!");
-        document.getElementById("pwdAntiga").value = "";
-        document.getElementById("pwdNova").value = "";
-    } catch (e) { alert("Erro ao mudar senha."); }
+function renderCategoriasModal() {
+    const lista = document.getElementById("listaCategoriasModal"); lista.innerHTML = "";
+    categorias.forEach((cat, index) => {
+      const li = document.createElement("li"); li.style.display = "flex"; li.style.gap = "10px"; li.style.padding = "8px 0"; li.style.alignItems = "center";
+      li.innerHTML = `<input type="color" class="seletor-cor-quadrado" value="${cat.color}" style="width:30px; height:30px;"><input type="text" class="inputPadrao cat-name-edit" value="${cat.name}" style="flex:2"><button class="removeItem" style="width:22px;height:22px">×</button>`;
+      const [col, nam, btR] = li.children;
+      col.onchange = (e) => { categorias[index].color = e.target.value; salvarDadosLocal(); }; nam.onblur = (e) => { categorias[index].name = e.target.value; salvarDadosLocal(); };
+      nam.onkeydown = (e) => { if(e.key === 'Enter') nam.blur(); }; btR.onclick = () => { categorias.splice(index, 1); renderCategoriasModal(); salvarDadosLocal(); }; lista.appendChild(li);
+    });
 }
 
-// ================= FIREBASE E PERSISTÊNCIA =================
-
-function salvarDadosLocal(pendente = true) {
-  localStorage.setItem("financas", JSON.stringify(dados));
-  localStorage.setItem("parcelas", JSON.stringify(parcelasMemoria));
-  localStorage.setItem("contasFixas", JSON.stringify(contasFixas));
-  localStorage.setItem("receitasFixas", JSON.stringify(receitasFixas));
-  localStorage.setItem("salarioFixoBase", JSON.stringify(salarioFixoBase));
-  localStorage.setItem("categorias", JSON.stringify(categorias));
-  localStorage.setItem("configuracoes", JSON.stringify(configuracoes));
-  const a = document.getElementById("statusAlteracao");
-  if(a) a.style.display = pendente ? "inline" : "none";
-}
-
-async function salvarFirebase() {
-  const btn = document.getElementById("salvarNuvemBtn");
-  if (!usuarioLogado || !senhaDoUsuario) return;
-  try {
-    btn.innerText = "⌛ SALVANDO..."; btn.disabled = true;
-    const pacote = await encryptData({ 
-        dados, parcelasMemoria, contasFixas, receitasFixas, salarioFixoBase, categorias, configuracoes 
-    }, senhaDoUsuario);
-    await setDoc(doc(db, "financas", usuarioLogado.uid), pacote);
-    btn.innerText = "✅ SALVO NA NUVEM";
-    salvarDadosLocal(false);
-  } catch (e) { btn.innerText = "❌ ERRO"; }
-  finally { setTimeout(() => { if(btn) btn.innerText = "☁️ SALVAR NA NUVEM"; btn.disabled = false; }, 2000); }
-}
-
-async function carregarFirebase(senha) {
-  if (!usuarioLogado) return;
-  try {
-    const snap = await getDoc(doc(db, "financas", usuarioLogado.uid));
-    if (snap.exists()) {
-      const res = await decryptData(snap.data(), senha);
-      dados = res.dados || {};
-      parcelasMemoria = res.parcelasMemoria || [];
-      contasFixas = res.contasFixas || [];
-      receitasFixas = res.receitasFixas || [];
-      salarioFixoBase = res.salarioFixoBase || 0;
-      categorias = res.categorias || ["Essencial", "Alimentação", "Cartões", "Contas"];
-      configuracoes = res.configuracoes || { diaVirada: 1, nomeUsuario: "", referenciaMes: "atual" };
-      
-      aplicarParcelas(); // Aplica as parcelas ao carregar
-      salvarDadosLocal(false);
-    }
-  } catch (e) { alert("Senha incorreta."); }
-  carregarAno();
-  renderContasFixas();
-  renderReceitasFixas();
+function renderCartoesModal() {
+    const lista = document.getElementById("listaCartoesModal"); lista.innerHTML = "";
+    cartoes.forEach((c, index) => {
+        const div = document.createElement("div"); div.className = "item";
+        div.innerHTML = `<input type="text" class="inputPadrao" value="${c.nome}" style="flex:2"><select class="inputPadrao" style="width:100px"><option value="Crédito" ${c.tipo=='Crédito'?'selected':''}>Crédito</option><option value="Débito" ${c.tipo=='Débito'?'selected':''}>Débito</option></select><input type="number" class="inputPadrao" value="${c.vencimento}" style="width:60px"><button class="removeItem">×</button>`;
+        const [iN, sT, iV, bR] = div.children;
+        iN.onblur = (e) => { cartoes[index].nome = e.target.value; salvarDadosLocal(); }; sT.onchange = (e) => { cartoes[index].tipo = e.target.value; salvarDadosLocal(); }; iV.onblur = (e) => { cartoes[index].vencimento = e.target.value; salvarDadosLocal(); };
+        bR.onclick = () => { cartoes.splice(index, 1); renderCartoesModal(); salvarDadosLocal(); }; lista.appendChild(div);
+    });
 }
 
 onAuthStateChanged(auth, async (user) => {
   if (user) {
-    usuarioLogado = user;
-    const dispEmail = document.getElementById("displayEmail");
-    if(dispEmail) dispEmail.textContent = `Autenticado como ${user.email}`;
-    document.getElementById("authContainer").style.display = "none";
-    document.getElementById("appContainer").style.display = "block";
-    if (senhaDoUsuario) await carregarFirebase(senhaDoUsuario);
-    else carregarAno();
-  } else {
-    usuarioLogado = null;
-    document.getElementById("authContainer").style.display = "flex";
-    document.getElementById("appContainer").style.display = "none";
-  }
+    usuarioLogado = user; document.getElementById("displayEmail").textContent = user.email;
+    const snap = await getDoc(doc(db, "financas", user.uid));
+    if (snap.exists()) {
+        const res = await decryptData(snap.data(), senhaDoUsuario);
+        dados = res.dados || {}; parcelasMemoria = res.parcelasMemoria || []; contasFixas = res.contasFixas || []; receitasFixas = res.receitasFixas || [];
+        salarioFixoBase = res.salarioFixoBase || 0; categorias = migrarCategorias(res.categorias); configuracoes = res.configuracoes || configuracoes; cartoes = res.cartoes || []; gastosDetalhes = res.gastosDetalhes || {};
+    }
+    aplicarTema(configuracoes.tema);
+    document.getElementById("authContainer").style.display = "none"; document.getElementById("appContainer").style.display = "block";
+    const { mesAt } = getMesReferenciaAtivo(); mesesAbertos.add(mesAt); carregarAno(); renderContasFixas(); renderReceitasFixas();
+  } else { document.getElementById("authContainer").style.display = "flex"; document.getElementById("appContainer").style.display = "none"; }
 });
 
-// ================= EVENTOS DE BOTÕES =================
-
-const loginBtn = document.getElementById("loginBtn");
-if(loginBtn) loginBtn.onclick = async () => {
-    const e = document.getElementById("email").value;
-    const s = document.getElementById("senha").value;
-    try { await signInWithEmailAndPassword(auth, e, s); senhaDoUsuario = s; sessionStorage.setItem("temp_key", s); } catch (err) { alert("Erro login."); }
+document.getElementById("exportarTudoBtn").onclick = () => { const b = { dados, parcelasMemoria, contasFixas, receitasFixas, salarioFixoBase, categorias, configuracoes, cartoes, gastosDetalhes }; const blob = new Blob([JSON.stringify(b, null, 2)], { type: "application/json" }); const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = `backup.json`; a.click(); };
+document.getElementById("inputImport").onchange = (e) => { const r = new FileReader(); r.onload = (ev) => { const res = JSON.parse(ev.target.result); dados = res.dados || {}; parcelasMemoria = res.parcelasMemoria || []; contasFixas = res.contasFixas || []; receitasFixas = res.receitasFixas || []; salarioFixoBase = res.salarioFixoBase || 0; categorias = migrarCategorias(res.categorias); configuracoes = res.configuracoes || configuracoes; cartoes = res.cartoes || []; gastosDetalhes = res.gastosDetalhes || {}; carregarAno(); renderContasFixas(); renderReceitasFixas(); }; r.readAsText(e.target.files[0]); };
+document.getElementById("btnSalvarSenha").onclick = async () => { const a = document.getElementById("pwdAntiga").value, n = document.getElementById("pwdNova").value; if(!n) return; try { const cred = EmailAuthProvider.credential(usuarioLogado.email, a); await reauthenticateWithCredential(usuarioLogado, cred); await updatePassword(usuarioLogado, n); senhaDoUsuario = n; sessionStorage.setItem("temp_key", n); alert("Sucesso!"); } catch (e) { alert("Erro!"); } };
+document.getElementById("loginBtn").onclick = async () => { const e = document.getElementById("email").value, s = document.getElementById("senha").value; try { await signInWithEmailAndPassword(auth, e, s); senhaDoUsuario = s; sessionStorage.setItem("temp_key", s); } catch (err) { alert("Erro!"); } };
+document.getElementById("cadastroBtn").onclick = async () => { const e = document.getElementById("email").value, s = document.getElementById("senha").value; try { await createUserWithEmailAndPassword(auth, e, s); senhaDoUsuario = s; sessionStorage.setItem("temp_key", s); await salvarFirebase(); } catch (err) { alert("Erro!"); } };
+document.getElementById("logoutBtn").onclick = () => { signOut(auth); sessionStorage.clear(); location.reload(); };
+document.getElementById("navResumo").onclick = (e) => { e.preventDefault(); document.getElementById("viewResumo").style.display = "block"; document.getElementById("viewGastos").style.display = "none"; document.getElementById("navResumo").className = "active"; document.getElementById("navGastos").className = ""; carregarAno(); };
+document.getElementById("navGastos").onclick = (e) => { e.preventDefault(); document.getElementById("viewResumo").style.display = "none"; document.getElementById("viewGastos").style.display = "block"; document.getElementById("navResumo").className = ""; document.getElementById("navGastos").className = "active"; renderPaginaGastos(); };
+document.getElementById("btnSettings").onclick = () => { 
+    document.getElementById("cfgNomeUsuario").value = configuracoes.nomeUsuario; 
+    document.getElementById("cfgDiaVirada").value = configuracoes.diaVirada; 
+    document.getElementById("cfgTema").value = configuracoes.tema || "planetario";
+    const ref = configuracoes.referenciaMes || "atual"; 
+    document.getElementById("refAtual").checked = (ref === "atual");
+    document.getElementById("refProximo").checked = (ref === "proximo");
+    document.getElementById("modalConfiguracoes").style.display = "flex"; 
 };
+document.getElementById("btnSalvarConfig").onclick = async () => { 
+    configuracoes.nomeUsuario = document.getElementById("cfgNomeUsuario").value; 
+    configuracoes.diaVirada = document.getElementById("cfgDiaVirada").value; 
+    configuracoes.tema = document.getElementById("cfgTema").value;
+    configuracoes.referenciaMes = document.querySelector('input[name="refMes"]:checked')?.value || "atual"; 
 
-const cadastroBtn = document.getElementById("cadastroBtn");
-if(cadastroBtn) cadastroBtn.onclick = async () => {
-    const e = document.getElementById("email").value;
-    const s = document.getElementById("senha").value;
-    try { await createUserWithEmailAndPassword(auth, e, s); senhaDoUsuario = s; sessionStorage.setItem("temp_key", s); dados = {}; parcelasMemoria = []; await salvarFirebase(); } catch (err) { alert("Erro cadastro."); }
+    aplicarTema(configuracoes.tema); // Aplica o novo tema no body
+    
+    await salvarFirebase(); 
+    document.getElementById("modalConfiguracoes").style.display = "none"; 
+    
+    carregarAno(); // Isso vai forçar o gráfico a ser redesenhado com as novas cores!
 };
-
-const logoutBtn = document.getElementById("logoutBtn");
-if(logoutBtn) logoutBtn.onclick = () => { signOut(auth); localStorage.clear(); sessionStorage.clear(); location.reload(); };
-
-document.getElementById("salvarNuvemBtn").onclick = salvarFirebase;
-
-document.getElementById("exportarTudoBtn").onclick = () => {
-    const blob = new Blob([JSON.stringify({ dados, parcelasMemoria, contasFixas, receitasFixas, salarioFixoBase, categorias, configuracoes }, null, 2)], { type: "application/json" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a"); a.href = url; a.download = `backup.json`; a.click();
-};
-
-document.getElementById("inputImport").onchange = (e) => {
-    const file = e.target.files[0];
-    const reader = new FileReader();
-    reader.onload = (ev) => {
-        try {
-            const j = JSON.parse(ev.target.result);
-            if(j.dados) { 
-                dados = j.dados; parcelasMemoria = j.parcelasMemoria || []; 
-                contasFixas = j.contasFixas || []; receitasFixas = j.receitasFixas || []; 
-                salarioFixoBase = j.salarioFixoBase || 0; categorias = j.categorias || categorias;
-                configuracoes = j.configuracoes || { diaVirada: 1, nomeUsuario: "", referenciaMes: "atual" };
-                aplicarParcelas();
-                mesesAbertos.clear(); carregarAno(); renderContasFixas(); renderReceitasFixas(); alert("Importado!"); 
-            }
-        } catch(err) { alert("Erro no arquivo."); }
-    };
-    reader.readAsText(file);
-};
-
-// Tooltip lógica
-const helpTrigger = document.getElementById("helpTrigger");
-if(helpTrigger) helpTrigger.onclick = (e) => {
-    e.stopPropagation();
-    const popup = document.getElementById("helpPopup");
-    const rect = e.currentTarget.getBoundingClientRect();
-    popup.style.display = popup.style.display === "none" ? "block" : "none";
-    popup.style.top = (rect.bottom + window.scrollY + 10) + "px";
-    popup.style.left = (rect.left + window.scrollX - 100) + "px";
-};
-
-document.addEventListener("click", () => { 
-  const popup = document.getElementById("helpPopup");
-  if(popup) popup.style.display = "none"; 
-});
-
-document.getElementById("btnAddContaFixa").onclick = () => {
-  contasFixas.push({ id: Date.now(), nome: "", valor: 0, ativo: true, categoria: categorias[0], frequencia: "mensal", intervalo: 1 });
-  renderContasFixas();
-};
-
-document.getElementById("btnAddReceitaFixa").onclick = () => {
-  receitasFixas.push({ id: Date.now(), nome: "", valor: 0, ativo: true, categoria: "Extra", frequencia: "mensal" });
-  renderReceitasFixas();
-};
-
-document.getElementById("btnGerenciarCategorias").onclick = () => { document.getElementById("modalCategorias").style.display = "flex"; renderCategoriasModal(); };
-document.getElementById("btnFecharModal").onclick = () => { document.getElementById("modalCategorias").style.display = "none"; renderContasFixas(); };
-
-document.getElementById("btnSettings").onclick = () => {
-    document.getElementById("cfgNomeUsuario").value = configuracoes.nomeUsuario || "";
-    document.getElementById("cfgDiaVirada").value = configuracoes.diaVirada || 1;
-    if(configuracoes.referenciaMes === "proximo") document.getElementById("refProximo").checked = true;
-    else document.getElementById("refAtual").checked = true;
-    document.getElementById("modalConfiguracoes").style.display = "flex";
-};
-
 document.getElementById("btnFecharConfig").onclick = () => document.getElementById("modalConfiguracoes").style.display = "none";
-
-document.getElementById("btnSalvarConfig").onclick = async () => {
-    configuracoes.nomeUsuario = document.getElementById("cfgNomeUsuario").value;
-    configuracoes.diaVirada = parseInt(document.getElementById("cfgDiaVirada").value) || 1;
-    const refCheck = document.querySelector('input[name="refMes"]:checked');
-    configuracoes.referenciaMes = refCheck ? refCheck.value : "atual";
-    salvarDadosLocal();
-    await salvarFirebase();
-    document.getElementById("modalConfiguracoes").style.display = "none";
-    atualizarTudo(seletorAno.value);
-};
-
-document.getElementById("btnSalvarSenha").onclick = mudarSenha;
-
-document.getElementById("btnAddCategoria").onclick = () => {
-  const input = document.getElementById("novaCategoriaNome");
-  const nome = input.value.trim();
-  if (nome && !categorias.includes(nome)) { categorias.push(nome); input.value = ""; renderCategoriasModal(); salvarDadosLocal(); }
-};
-
+document.getElementById("btnGerenciarCategorias").onclick = () => { document.getElementById("modalCategorias").style.display = "flex"; renderCategoriasModal(); };
+document.getElementById("btnGerenciarCartoes").onclick = () => { document.getElementById("modalCartoes").style.display = "flex"; renderCartoesModal(); };
+document.getElementById("btnFecharModal").onclick = () => { document.getElementById("modalCategorias").style.display = "none"; carregarAno(); renderContasFixas(); };
+document.getElementById("btnFecharCartoes").onclick = () => document.getElementById("modalCartoes").style.display = "none";
+document.getElementById("btnSalvarCartoes").onclick = async () => { await salvarFirebase(); document.getElementById("modalCartoes").style.display = "none"; carregarAno(); renderPaginaGastos(); };
+document.getElementById("btnAddCartao").onclick = () => { cartoes.push({ id: Date.now(), nome: "", tipo: "Crédito", vencimento: 10 }); renderCartoesModal(); };
+document.getElementById("btnAddContaFixa").onclick = () => { contasFixas.push({ id: Date.now(), nome: "", valor: 0, ativo: true, categoria: categorias[0].name }); renderContasFixas(); };
+document.getElementById("btnAddReceitaFixa").onclick = () => { receitasFixas.push({ id: Date.now(), nome: "", valor: 0, ativo: true }); renderReceitasFixas(); };
+document.getElementById("salvarNuvemBtn").onclick = salvarFirebase;
 document.getElementById("headerContasFixas").onclick = () => document.getElementById("moduloContasFixas").classList.toggle("collapsed");
 document.getElementById("headerReceitasFixas").onclick = () => document.getElementById("moduloReceitasFixas").classList.toggle("collapsed");
-
-const showSignup = document.getElementById("showSignup");
-if(showSignup) showSignup.onclick = (e) => { e.preventDefault(); document.getElementById("loginActions").style.display = "none"; document.getElementById("signupActions").style.display = "block"; };
-
-const showLogin = document.getElementById("showLogin");
-if(showLogin) showLogin.onclick = (e) => { e.preventDefault(); document.getElementById("signupActions").style.display = "none"; document.getElementById("loginActions").style.display = "block"; };
+document.getElementById("showSignup").onclick = (e) => { e.preventDefault(); document.getElementById("loginActions").style.display = "none"; document.getElementById("signupActions").style.display = "block"; };
+document.getElementById("showLogin").onclick = (e) => { e.preventDefault(); document.getElementById("signupActions").style.display = "none"; document.getElementById("loginActions").style.display = "block"; };
+document.getElementById("btnFecharParcelaCartao").onclick = () => document.getElementById("modalParcelaCartao").style.display = "none";
 
 function carregarAno() {
-  const seletor = document.getElementById("ano");
-  const ano = seletor ? seletor.value : hoje.getFullYear();
-  if (!dados[ano]) dados[ano] = { meses: [] };
-  const area = document.getElementById("areaAno");
-  if(!area) return;
-  mesesDOM.forEach(m => { if (!m.dom.classList.contains("collapsed")) mesesAbertos.add(m.index); else mesesAbertos.delete(m.index); });
+  const sel = document.getElementById("ano"); const ano = sel ? sel.value : hoje.getFullYear(); if (!dados[ano]) dados[ano] = { meses: [] };
+  const area = document.getElementById("areaAno"); if(!area) return;
   area.innerHTML = ""; mesesDOM = [];
   const container = document.createElement("div"); area.appendChild(container);
   const addBox = document.createElement("div"); addBox.className = "addMesBox";
-  const btnAdd = document.createElement("button"); 
-  btnAdd.innerText = dados[ano].meses.length >= 12 ? "✨ COMEÇAR NOVO ANO" : "+ ADICIONAR MÊS";
-  btnAdd.onclick = () => adicionarMes(ano);
+  const btnAdd = document.createElement("button"); btnAdd.innerText = "+ ADICIONAR MÊS";
+  btnAdd.onclick = () => {
+    let anoNum = Number(ano); if (!dados[anoNum]) dados[anoNum] = { meses: [] };
+    const n = { despesas: [], empresa: [], salario: salarioFixoBase, conta: 0, contaManual: false };
+    contasFixas.forEach(cf => { if (cf.ativo) n.despesas.push({ nome: cf.nome, valor: cf.valor || 0, checked: true, categoria: cf.categoria }); });
+    receitasFixas.forEach(rf => { if (rf.ativo) n.empresa.push({ nome: rf.nome, valor: rf.valor || 0, checked: true }); });
+    dados[anoNum].meses.push(n); carregarAno();
+  };
   addBox.appendChild(btnAdd); area.prepend(addBox);
   dados[ano].meses.forEach((m, i) => { const mDOM = criarMesDOM(ano, i, m); container.prepend(mDOM); mesesDOM.push({ dom: mDOM, index: i }); });
-  atualizarTudo(ano, false);
+  atualizarTudo(ano);
 }
 
-function atualizarGrafico(ano) {
-  if(!dados[ano] || !dados[ano].meses) return;
-  const valores = dados[ano].meses.map(m => {
-    const d = (m.despesas || []).filter(x => x.checked).reduce((acc, b) => acc + b.valor, 0);
-    const e = (m.empresa || []).filter(x => x.checked).reduce((acc, b) => acc + b.valor, 0);
-    return Number(((m.salario + m.conta + e) - d).toFixed(2));
-  });
-  const graficoEl = document.querySelector("#grafico");
-  if(!graficoEl) return;
-  if (chart) chart.updateSeries([{ data: valores }]);
-  else {
-    chart = new ApexCharts(graficoEl, {
-      chart: { type: "bar", height: 280, toolbar:{show:false} },
-      series: [{ name: "Saldo", data: valores }],
-      xaxis: { categories: nomesMesesFull.map(n => n.slice(0,3).toUpperCase()) },
-      colors: ['#3C5558']
-    });
-    chart.render();
-  }
-}
-
-const seletorAnoInit = document.getElementById("ano");
-if(seletorAnoInit) {
-    for (let a = 2024; a <= 2035; a++) {
-      const o = document.createElement("option"); o.value = a; o.text = a;
-      if(a === hoje.getFullYear()) o.selected = true;
-      seletorAnoInit.appendChild(o);
-    }
-    seletorAnoInit.onchange = carregarAno;
-}
-
-renderContasFixas();
-renderReceitasFixas();
+const s1 = document.getElementById("ano"); const s2 = document.getElementById("anoGastos");
+[s1, s2].forEach(s => { if(!s) return; for (let a = 2024; a <= 2035; a++) { const o = document.createElement("option"); o.value = a; o.text = a; if(a === hoje.getFullYear()) o.selected = true; s.appendChild(o); } s.onchange = () => { carregarAno(); renderPaginaGastos(); }; });
