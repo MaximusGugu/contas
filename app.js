@@ -344,7 +344,7 @@ document.getElementById("btnSalvarParcelaCartao").onclick = () => {
 
 function renderPizza(mesIdx, gastos) {
     const div = document.querySelector(`#chart-pizza-${mesIdx}`); if (!div || gastos.length === 0) return;
-    const tColor = getComputedStyle(document.body).getPropertyValue('--P05').trim() || '#000000';
+    const tColor = getComputedStyle(document.body).getPropertyValue('--P02').trim() || '#000000';
     const res = {}; gastos.forEach(g => res[g.categoria] = (res[g.categoria] || 0) + g.valor);
     const options = { series: Object.values(res), labels: Object.keys(res), chart: { type: 'donut', height: 220, background: 'transparent' }, colors: Object.keys(res).map(n => (categorias.find(c => c.name === n)?.color || "#888")), legend: { position: 'bottom', labels: { colors: tColor } }, plotOptions: { pie: { donut: { labels: { show: true, name: { color: tColor }, value: { color: tColor } } } } } };
     div.innerHTML = ""; new ApexCharts(div, options).render();
