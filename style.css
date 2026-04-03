@@ -82,6 +82,20 @@ body.theme-grayscale {
   --BG-IMG: url('https://raw.githubusercontent.com/MaximusGugu/contas/refs/heads/main/img/bg-site-grayscale.webp');
 }
 
+body.theme-natureza {
+  --P01: #F1F8E9; /* Super claro (Fundo) */
+  --P02: #F1F8E9; /* Super claro (Fundo Colunas) */
+  --P03: #DCEDC8; /* Verde menta (Fundo Inputs) */
+  --P04: #8BC34A; /* Verde folha (Destaque/Botões) */
+  --P05: #4CAF50; /* Verde natureza (Corpo dos Cards) */
+  --P06: #2E7D32; /* Verde floresta (Cabeçalhos) */
+  --P07: #1B5E20; /* Verde musgo escuro (Rodapé/Bordas) */
+  --P08: #102A12; /* Verde quase preto (Texto Principal) */
+  --P09: #051406; /* O mais escuro (Sombras/Textos) */
+  --BG-INPUT: #a8d07b;
+  --BG-IMG: url('https://raw.githubusercontent.com/MaximusGugu/contas/refs/heads/main/img/bg-site-natureza.webp'); /* Deixei vazio conforme pedido */
+}
+
 body {
   font-family: 'DM Sans', sans-serif;
   font-optical-sizing: auto;
@@ -102,6 +116,10 @@ body {
 
 #grafico {
   margin: 20px 0;
+  border-radius: 15px;
+  padding: 10px;
+  overflow: hidden; /* Garante que o fundo do gráfico respeite o arredondamento */
+  background: var(--P06); /* Garante que não pisque branco ao carregar */
 }
 
 /* ================= ESTRUTURA DO MÊS ================= */
@@ -532,21 +550,66 @@ body {
 }
 
 /* ================= FOOTER ================= */
+/* Ajuste do Rodapé para comportar o Tema */
 .siteFooter {
-  background-color: var(--P07);
-  color: var(--P02);
-  text-align: center;
-  padding: 15px 10px;
-  border-radius: 10px;
-  margin-top: 30px;
-  font-size: 14px;
-  margin-bottom: 40px;
-  margin-top: 50px;
+    background-color: var(--P07);
+    color: var(--P02);
+    padding: 15px 20px;
+    border-radius: 10px;
+    margin-top: 50px;
+    margin-bottom: 40px;
 }
 
 .siteFooter a {
-  color: var(--P04);
-  text-decoration: none; }
+  color: var(--P04)
+}
+
+.siteFooter a:hover {
+  color: var(--P02);
+  transition-duration: 0.4ms;
+}
+
+.footer-container {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    max-width: 1080px;
+    margin: 0 auto;
+}
+
+.footer-container p {
+    margin: 0;
+    font-size: 14px;
+}
+
+.theme-selector-footer {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 13px;
+    font-weight: bold;
+    color: var(--P02); /* Cor de destaque */
+}
+
+/* Deixa o select do rodapé mais discreto */
+#cfgTemaFooter {
+    height: 30px;
+    width: 160px;
+    font-size: 12px;
+    padding: 0 8px;
+    background-color: var(--P05);
+    color: var(--P02);
+    border: 1px solid var(--P04);
+}
+
+/* Ajuste mobile */
+@media (max-width: 600px) {
+    .footer-container {
+        flex-direction: column;
+        gap: 15px;
+        text-align: center;
+    }
+}
 
 /* ================= MOBILE ================= */
 @media (max-width: 768px) {
@@ -760,7 +823,7 @@ input.conta:not(.manual) {
     width: 90%;
     max-width: 400px;
     box-shadow: 0 15px 35px rgba(0, 0, 0, 0.4);
-    color: var(--P05);
+    color: var(--P03);
 }
 
 .modal-content h3 {
@@ -943,7 +1006,7 @@ element.style {
 
 .help-icon {
     background: var(--P03);
-    color: white;
+    color: var(--P07);
     border-radius: 50%;
     width: 16px;
     height: 18px;

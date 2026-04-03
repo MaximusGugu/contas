@@ -39,7 +39,10 @@ const nomesMesesFull = ["Janeiro","Fevereiro","Março","Abril","Maio","Junho","J
 let contextParcelaCartao = { mes: 0, ano: 2024 };
 
 // ================= FUNÇÕES DE APOIO =================
-function aplicarTema(tema) { document.body.className = "theme-" + (tema || "planetario"); }
+function aplicarTema(tema) { 
+    const t = tema || "planetario";
+    document.body.className = "theme-" + t; 
+}
 
 function getMesReferenciaAtivo() {
     const diaV = parseInt(configuracoes.diaVirada) || 1;
@@ -88,21 +91,28 @@ function formatar(v) { return "R$ " + (Number(v) || 0).toLocaleString("pt-BR", {
 function parseValor(v) { if (!v) return 0; if (typeof v === 'number') return v; let str = v.toString(); if (str.includes('.') && str.includes(',')) str = str.replace(/\./g, '').replace(',', '.'); else str = str.replace(',', '.'); const limpo = str.replace(/[^\d.]/g, ""); return parseFloat(limpo) || 0; }
 
 function salvarDadosLocal(pendente = true) {
-  localStorage.setItem("financas", JSON.stringify(dados)); localStorage.setItem("parcelas", JSON.stringify(parcelasMemoria));
-  localStorage.setItem("contasFixas", JSON.stringify(contasFixas)); localStorage.setItem("receitasFixas", JSON.stringify(receitasFixas));
-  localStorage.setItem("salarioFixoBase", JSON.stringify(salarioFixoBase)); localStorage.setItem("categorias", JSON.stringify(categorias));
-  localStorage.setItem("configuracoes", JSON.stringify(configuracoes)); localStorage.setItem("cartoes", JSON.stringify(cartoes));
+  localStorage.setItem("financas", JSON.stringify(dados)); 
+  localStorage.setItem("parcelas", JSON.stringify(parcelasMemoria));
+  localStorage.setItem("contasFixas", JSON.stringify(contasFixas)); 
+  localStorage.setItem("receitasFixas", JSON.stringify(receitasFixas));
+  localStorage.setItem("salarioFixoBase", JSON.stringify(salarioFixoBase)); 
+  localStorage.setItem("categorias", JSON.stringify(categorias));
+  localStorage.setItem("configuracoes", JSON.stringify(configuracoes)); 
+  localStorage.setItem("cartoes", JSON.stringify(cartoes));
   localStorage.setItem("gastosDetalhes", JSON.stringify(gastosDetalhes));
-  const a = document.getElementById("statusAlteracao"); if(a) a.style.display = pendente ? "inline" : "none";
+  const a = document.getElementById("statusAlteracao"); 
+  if(a) a.style.display = pendente ? "inline" : "none";
 }
 
 async function salvarFirebase() {
   if (!usuarioLogado || !senhaDoUsuario) return;
   try {
-    const btn = document.getElementById("salvarNuvemBtn"); btn.innerText = "⌛ SALVANDO...";
+    const btn = document.getElementById("salvarNuvemBtn"); 
+    btn.innerText = "⌛ SALVANDO...";
     const pacote = await encryptData({ dados, parcelasMemoria, contasFixas, receitasFixas, salarioFixoBase, categorias, configuracoes, cartoes, gastosDetalhes }, senhaDoUsuario);
     await setDoc(doc(db, "financas", usuarioLogado.uid), pacote);
-    btn.innerText = "✅ SALVO NA NUVEM"; salvarDadosLocal(false);
+    btn.innerText = "✅ SALVO NA NUVEM"; 
+    salvarDadosLocal(false);
     setTimeout(() => { if(btn) btn.innerText = "☁️ SALVAR NA NUVEM"; }, 2000);
   } catch (e) { console.error(e); }
 }
@@ -122,14 +132,20 @@ function aplicarComportamentoInput(input, getV, setV, anoVinculado = null) {
 function atualizarTudo(anoParaVisualizar, pendente = true) {
   const { mesAt, anoAt } = getMesReferenciaAtivo();
   const anosOrdenados = Object.keys(dados).map(Number).sort((a, b) => a - b);
-  let saldoAcumulado = 0; let ehOPrimeiroMesDeTodos = true;
+  
+  let saldoAcumulado = 0; 
+  let ehOPrimeiroMesDeTodos = true;
 
   anosOrdenados.forEach(ano => {
     if (!dados[ano] || !dados[ano].meses) return;
     dados[ano].meses.forEach((m, idx) => {
-      if (!ehOPrimeiroMesDeTodos && m.contaManual !== true) m.conta = saldoAcumulado;
+      if (!ehOPrimeiroMesDeTodos && m.contaManual !== true) {
+          m.conta = saldoAcumulado;
+      }
+
       const dTotalManuais = (m.despesas || []).filter(x => x.checked).reduce((acc, b) => acc + b.valor, 0);
       const gastosMes = (gastosDetalhes[ano] || []).filter(g => g.mes === idx);
+      
       const totalCartoesCredito = gastosMes.filter(g => {
           const cObj = cartoes.find(c => c.id == g.cartaoId);
           return cObj && cObj.tipo === 'Crédito';
@@ -138,7 +154,10 @@ function atualizarTudo(anoParaVisualizar, pendente = true) {
       const eTotal = (m.empresa || []).filter(x => x.checked).reduce((acc, b) => acc + b.valor, 0);
       const totalDisponivel = (m.salario || 0) + (m.conta || 0) + eTotal;
       const saldoFinal = totalDisponivel - (dTotalManuais + totalCartoesCredito);
-      saldoAcumulado = saldoFinal; ehOPrimeiroMesDeTodos = false;
+      
+      m.saldoCalculadoFinal = saldoFinal; 
+      saldoAcumulado = saldoFinal; 
+      ehOPrimeiroMesDeTodos = false;
 
       if (ano === Number(anoParaVisualizar)) {
         const info = mesesDOM.find(item => item.index === idx);
@@ -154,18 +173,23 @@ function atualizarTudo(anoParaVisualizar, pendente = true) {
                   listaCartoesDiv.innerHTML = "<small style='display:block;margin-bottom:5px;opacity:0.6'>RESUMO DE CARTÕES (CRÉDITO):</small>";
                   Object.keys(totaisPorCartao).forEach(cid => {
                       const cObj = cartoes.find(c => c.id == cid);
-                      const itemC = document.createElement("div"); itemC.className = "item-cartao-resumo";
-                      itemC.innerHTML = `<span>💳 ${cObj.nome}</span> <span>${formatar(totaisPorCartao[cid])}</span>`;
+                      const itemC = document.createElement("div"); 
+                      itemC.className = "item-cartao-resumo";
+                      itemC.innerHTML = `<span>💳 ${cObj ? cObj.nome : 'Cartão'}</span> <span>${formatar(totaisPorCartao[cid])}</span>`;
                       listaCartoesDiv.appendChild(itemC);
                   });
               }
           }
+
           dom.querySelector(".totalDespesas").textContent = formatar(dTotalManuais + totalCartoesCredito);
           dom.querySelector(".totalDinheiro").textContent = formatar(totalDisponivel);
-          const sEl = dom.querySelector(".saldo"); sEl.textContent = formatar(saldoFinal);
+          const sEl = dom.querySelector(".saldo"); 
+          sEl.textContent = formatar(saldoFinal);
           sEl.className = "saldo " + (saldoFinal >= 0 ? "positivo" : "negativo");
           dom.querySelector(".mesTotal").textContent = formatar(saldoFinal);
-          const inS = dom.querySelector("input.salario"); const inC = dom.querySelector("input.conta");
+          
+          const inS = dom.querySelector("input.salario"); 
+          const inC = dom.querySelector("input.conta");
           if (document.activeElement !== inS) inS.value = formatar(m.salario);
           if (document.activeElement !== inC) {
             inC.value = formatar(m.conta);
@@ -176,50 +200,53 @@ function atualizarTudo(anoParaVisualizar, pendente = true) {
       }
     });
   });
+
+  salvarDadosLocal(pendente);
   atualizarGrafico(Number(anoParaVisualizar));
 }
 
 function atualizarGrafico(ano) {
-    const ctx = document.getElementById("grafico");
-    if (!ctx || !dados[ano]) return;
+    const ctx = document.getElementById("grafico"); 
+    if (!ctx || !dados[ano] || !dados[ano].meses || dados[ano].meses.length === 0) return;
 
-    // --- A MÁGICA ESTÁ AQUI ---
-    // Pega o valor da variável --P03 direto do CSS do Body
-    const corDestaqueTema = getComputedStyle(document.body).getPropertyValue('--P06').trim();
-    const corTextoTema = getComputedStyle(document.body).getPropertyValue('--P07').trim();
+    // Pegamos a cor clara do tema para os textos (P01) e a cor de destaque para as barras (P04)
+    const tColor = getComputedStyle(document.body).getPropertyValue('--P02').trim() || '#000000';
+    const pColor = getComputedStyle(document.body).getPropertyValue('--P04').trim() || '#D78341';
+    const bgColor = getComputedStyle(document.body).getPropertyValue('--P06').trim() || '#ffffff';
 
-    const saldos = (dados[ano].meses || []).map((m, idx) => {
-        const dM = (m.despesas || []).filter(x => x.checked).reduce((acc, b) => acc + b.valor, 0);
-        const dC = (gastosDetalhes[ano] || []).filter(g => {
-            const card = cartoes.find(c => c.id == g.cartaoId);
-            return card && card.tipo === 'Crédito';
-        }).reduce((acc, g) => acc + g.valor, 0);
-        const eT = (m.empresa || []).filter(x => x.checked).reduce((acc, b) => acc + b.valor, 0);
-        return parseFloat(((m.salario || 0) + (m.conta || 0) + eT - (dM + dC)).toFixed(2));
-    });
+    const saldos = dados[ano].meses.map(m => parseFloat((m.saldoCalculadoFinal || 0).toFixed(2)));
+    const labels = dados[ano].meses.map((_, i) => nomesMesesFull[i]);
 
-    const options = {
-        series: [{ name: 'Saldo', data: saldos }],
-        chart: { type: 'bar', height: 250, toolbar: { show: false } },
-        
-        // Aplica a cor que pegamos do CSS
-        colors: [corDestaqueTema], 
-        
-        xaxis: { 
-            categories: nomesMesesFull,
-            labels: { style: { colors: corTextoTema } } // Opcional: cor das letras dos meses
+    const options = { 
+        series: [{ name: 'Saldo Final', data: saldos }], 
+        chart: { 
+            type: 'bar', 
+            height: 250, 
+            toolbar: { show: false },
+            background: bgColor,
+            foreColor: tColor
+        }, 
+        colors: [pColor], 
+        xaxis: { categories: labels, labels: { style: { colors: tColor } } }, 
+        yaxis: { labels: { style: { colors: tColor }, formatter: (val) => "R$ " + val.toLocaleString('pt-BR') } }, 
+        grid: { borderColor: 'rgba(255,255,255,0.1)' },
+        tooltip: { theme: 'dark', y: { formatter: (val) => formatar(val) } },
+        dataLabels: {
+            enabled: true,
+            formatter: (val) => "R$ " + val.toLocaleString('pt-BR'),
+            style: { fontSize: '10px', colors: [tColor] },
+            offsetY: -20
         },
-        yaxis: {
-            labels: { style: { colors: corTextoTema } } // Opcional: cor das letras dos valores
-        },
-        legend: { labels: { colors: corTextoTema } }
+        plotOptions: { bar: { dataLabels: { position: 'top' }, borderRadius: 4 } },
+        legend: { labels: { colors: tColor } } 
     };
 
     if (chartResumo) chartResumo.destroy();
-    chartResumo = new ApexCharts(ctx, options);
+    chartResumo = new ApexCharts(ctx, options); 
     chartResumo.render();
 }
 
+// ================= INTERFACE RESUMO =================
 function criarItem(lista, d, dataArray, ano) {
   const div = document.createElement("div"); div.className = "item";
   div.innerHTML = `<input type="checkbox" ${d.checked?'checked':''}> <input class="nome inputPadrao" value="${d.nome}"> <input class="valor inputPadrao" value="${formatar(d.valor)}"> <button class="removeItem">×</button>`;
@@ -227,7 +254,15 @@ function criarItem(lista, d, dataArray, ano) {
   check.onchange = () => { d.checked = check.checked; atualizarTudo(ano); };
   nome.onblur = () => { d.nome = nome.value; salvarDadosLocal(true); };
   aplicarComportamentoInput(valor, () => d.valor, (v) => { d.valor = v; atualizarTudo(ano); }, ano);
-  btn.onclick = () => { if(d.parcelaId) { if(confirm("Deseja apagar TODAS as parcelas desta compra?")) { Object.keys(dados).forEach(a => { dados[a].meses.forEach(m => { m.despesas = m.despesas.filter(item => item.parcelaId !== d.parcelaId); }); }); carregarAno(); } } else { dataArray.splice(dataArray.indexOf(d), 1); carregarAno(); } };
+  btn.onclick = () => {
+      if(d.parcelaId) {
+          if(confirm("Deseja apagar TODAS as parcelas desta compra?")) {
+              parcelasMemoria = parcelasMemoria.filter(p => p.id !== d.parcelaId);
+              Object.keys(dados).forEach(a => { dados[a].meses.forEach(m => { m.despesas = m.despesas.filter(item => item.parcelaId !== d.parcelaId); }); });
+              carregarAno();
+          }
+      } else { dataArray.splice(dataArray.indexOf(d), 1); carregarAno(); }
+  };
   lista.appendChild(div);
 }
 
@@ -254,6 +289,8 @@ function criarMesDOM(ano, index, data) {
   mes.appendChild(header); mes.appendChild(body); return mes;
 }
 
+// ================= GESTÃO DE GASTOS DETALHADOS =================
+
 function renderPaginaGastos() {
     const area = document.getElementById("areaGastosMensais"); const anoView = document.getElementById("anoGastos").value; const { mesAt, anoAt } = getMesReferenciaAtivo();
     area.innerHTML = "";
@@ -264,7 +301,7 @@ function renderPaginaGastos() {
         if(filtroAtual !== "todos") gastosMes = gastosMes.filter(g => g.cartaoId == filtroAtual);
         const tCr = gastosMes.filter(g => cartoes.find(c => c.id == g.cartaoId)?.tipo === 'Crédito').reduce((a,b) => a + b.valor, 0);
         const tDb = gastosMes.filter(g => cartoes.find(c => c.id == g.cartaoId)?.tipo === 'Débito').reduce((a,b) => a + b.valor, 0);
-        mesBox.innerHTML = `<div class="mesHeader"><span>${nomesMesesFull[m]} ${anoView}</span><span>${formatar(tCr + tDb)}</span></div><div class="mesBody"><div class="texto-claro" style="margin-bottom: 15px; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 10px; display:flex; align-items:center; gap:10px;"><span style="font-size:12px; opacity:0.8">Exibir cartão:</span><select class="inputPadrao sel-filtro-mes" style="width:auto; height:30px; font-size:12px;"><option value="todos">Todos</option>${cartoes.map(c => `<option value="${c.id}" ${filtroAtual == c.id ? 'selected' : ''}>${c.nome}</option>`).join('')}</select></div><div id="chart-pizza-${m}" style="display:flex; justify-content:center; margin: 15px 0;"></div><table class="tabela-gastos"><thead><tr><th>Gasto</th><th>Categoria</th><th>Cartão</th><th>Valor</th><th></th></tr></thead><tbody id="tbody-gastos-${m}"></tbody><tfoot><tr><td><input type="text" placeholder="Gasto..." id="add-nome-${m}" class="inputPadrao"></td><td><select id="add-cat-${m}" class="inputPadrao">${categorias.map(c => `<option value="${c.name}">${c.name}</option>`).join('')}</select></td><td><select id="add-card-${m}" class="inputPadrao">${cartoes.map(c => `<option value="${c.id}">${c.nome}</option>`).join('')}</select></td><td><input type="text" placeholder="0,00" id="add-val-${m}" class="inputPadrao input-valor-add"></td><td><div style="display:flex; gap:5px"><button class="btn" id="btn-add-${m}">+</button><button class="btn" style="background:#8e44ad" id="btn-add-parcela-${m}">🗓️</button></div></td></tr></tfoot></table><div class="resumo-gastos-inferior"><div class="barra-resumo credito">Crédito <span>${formatar(tCr)}</span></div><div class="barra-resumo debito">Débito <span>${formatar(tDb)}</span></div><div class="barra-resumo total">TOTAL <span>${formatar(tCr + tDb)}</span></div></div></div>`;
+        mesBox.innerHTML = `<div class="mesHeader"><span>${nomesMesesFull[m]} ${anoView}</span><span>${formatar(tCr + tDb)}</span></div><div class="mesBody"><div class="filtro-interno" style="margin-bottom: 15px; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 10px; display:flex; align-items:center; gap:10px;"><span style="font-size:12px; opacity:0.8">Exibir cartão:</span><select class="inputPadrao sel-filtro-mes" style="width:auto; height:30px; font-size:12px;"><option value="todos">Todos</option>${cartoes.map(c => `<option value="${c.id}" ${filtroAtual == c.id ? 'selected' : ''}>${c.nome}</option>`).join('')}</select></div><div id="chart-pizza-${m}" style="display:flex; justify-content:center; margin: 15px 0;"></div><table class="tabela-gastos"><thead><tr><th>Gasto</th><th>Categoria</th><th>Cartão</th><th>Valor</th><th></th></tr></thead><tbody id="tbody-gastos-${m}"></tbody><tfoot><tr><td><input type="text" placeholder="Gasto..." id="add-nome-${m}" class="inputPadrao"></td><td><select id="add-cat-${m}" class="inputPadrao">${categorias.map(c => `<option value="${c.name}">${c.name}</option>`).join('')}</select></td><td><select id="add-card-${m}" class="inputPadrao">${cartoes.map(c => `<option value="${c.id}">${c.nome}</option>`).join('')}</select></td><td><input type="text" placeholder="0,00" id="add-val-${m}" class="inputPadrao input-valor-add"></td><td><div style="display:flex; gap:5px"><button class="btn" id="btn-add-${m}">+</button><button class="btn" style="background:#8e44ad" id="btn-add-parcela-${m}">🗓️</button></div></td></tr></tfoot></table><div class="resumo-gastos-inferior"><div class="barra-resumo credito">Crédito <span>${formatar(tCr)}</span></div><div class="barra-resumo debito">Débito <span>${formatar(tDb)}</span></div><div class="barra-resumo total">TOTAL <span>${formatar(tCr + tDb)}</span></div></div></div>`;
         mesBox.querySelector(".mesHeader").onclick = () => { mesBox.classList.toggle("collapsed"); if(mesBox.classList.contains("collapsed")) mesesGastosAbertos.delete(m); else { mesesGastosAbertos.add(m); renderPizza(m, gastosMes); } };
         const selF = mesBox.querySelector(".sel-filtro-mes"); selF.onclick = (e) => e.stopPropagation(); selF.onchange = (e) => { filtrosPorMes[m] = e.target.value; renderPaginaGastos(); };
         area.appendChild(mesBox); if(isOpen) setTimeout(() => renderPizza(m, gastosMes), 50);
@@ -283,10 +320,10 @@ function renderPaginaGastos() {
 }
 
 document.getElementById("btnSalvarParcelaCartao").onclick = () => {
-    const n = document.getElementById("pcNome").value, cId = document.getElementById("pcCartao").value, cat = document.getElementById("pcCategoria").value, t = parseValor(document.getElementById("pcValorTotal").value), q = parseInt(document.getElementById("pcQtd").value), pId = Date.now();
-    if(!n || t <= 0 || q <= 0) return;
-    const vP = Number((t / q).toFixed(2)); let mesC = contextParcelaCartao.mes, anoC = contextParcelaCartao.ano;
-    for(let i = 1; i <= q; i++) { if(!gastosDetalhes[anoC]) gastosDetalhes[anoC] = []; gastosDetalhes[anoC].push({ mes: mesC, nome: `${n} (${i}/${q})`, valor: vP, categoria: cat, cartaoId: cId, parcelaId: pId }); mesC++; if(mesC > 11) { mesC = 0; anoC++; } }
+    const nome = document.getElementById("pcNome").value, cartaoId = document.getElementById("pcCartao").value, categoria = document.getElementById("pcCategoria").value, total = parseValor(document.getElementById("pcValorTotal").value), qtd = parseInt(document.getElementById("pcQtd").value), pId = Date.now();
+    if(!nome || total <= 0 || qtd <= 0) return;
+    const valP = Number((total / qtd).toFixed(2)); let mesC = contextParcelaCartao.mes, anoC = contextParcelaCartao.ano;
+    for(let i = 1; i <= qtd; i++) { if(!gastosDetalhes[anoC]) gastosDetalhes[anoC] = []; gastosDetalhes[anoC].push({ mes: mesC, nome: `${nome} (${i}/${qtd})`, valor: valP, categoria: categoria, cartaoId: cartaoId, parcelaId: pId }); mesC++; if(mesC > 11) { mesC = 0; anoC++; } }
     document.getElementById("modalParcelaCartao").style.display = "none"; salvarDadosLocal(); renderPaginaGastos();
 };
 
@@ -357,8 +394,22 @@ onAuthStateChanged(auth, async (user) => {
     aplicarTema(configuracoes.tema);
     document.getElementById("authContainer").style.display = "none"; document.getElementById("appContainer").style.display = "block";
     const { mesAt } = getMesReferenciaAtivo(); mesesAbertos.add(mesAt); carregarAno(); renderContasFixas(); renderReceitasFixas();
+    const seletorTemaFooter = document.getElementById("cfgTemaFooter");
+    if(seletorTemaFooter) seletorTemaFooter.value = configuracoes.tema || "planetario";
   } else { document.getElementById("authContainer").style.display = "flex"; document.getElementById("appContainer").style.display = "none"; }
 });
+
+// EVENT LISTENERS
+const seletorTemaFooter = document.getElementById("cfgTemaFooter");
+if(seletorTemaFooter) {
+    seletorTemaFooter.onchange = async () => {
+        configuracoes.tema = seletorTemaFooter.value;
+        aplicarTema(configuracoes.tema);
+        const anoAtual = document.getElementById("ano").value;
+        atualizarTudo(anoAtual);
+        await salvarFirebase();
+    };
+}
 
 document.getElementById("exportarTudoBtn").onclick = () => { const b = { dados, parcelasMemoria, contasFixas, receitasFixas, salarioFixoBase, categorias, configuracoes, cartoes, gastosDetalhes }; const blob = new Blob([JSON.stringify(b, null, 2)], { type: "application/json" }); const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = `backup.json`; a.click(); };
 document.getElementById("inputImport").onchange = (e) => { const r = new FileReader(); r.onload = (ev) => { const res = JSON.parse(ev.target.result); dados = res.dados || {}; parcelasMemoria = res.parcelasMemoria || []; contasFixas = res.contasFixas || []; receitasFixas = res.receitasFixas || []; salarioFixoBase = res.salarioFixoBase || 0; categorias = migrarCategorias(res.categorias); configuracoes = res.configuracoes || configuracoes; cartoes = res.cartoes || []; gastosDetalhes = res.gastosDetalhes || {}; carregarAno(); renderContasFixas(); renderReceitasFixas(); }; r.readAsText(e.target.files[0]); };
@@ -369,26 +420,20 @@ document.getElementById("logoutBtn").onclick = () => { signOut(auth); sessionSto
 document.getElementById("navResumo").onclick = (e) => { e.preventDefault(); document.getElementById("viewResumo").style.display = "block"; document.getElementById("viewGastos").style.display = "none"; document.getElementById("navResumo").className = "active"; document.getElementById("navGastos").className = ""; carregarAno(); };
 document.getElementById("navGastos").onclick = (e) => { e.preventDefault(); document.getElementById("viewResumo").style.display = "none"; document.getElementById("viewGastos").style.display = "block"; document.getElementById("navResumo").className = ""; document.getElementById("navGastos").className = "active"; renderPaginaGastos(); };
 document.getElementById("btnSettings").onclick = () => { 
-    document.getElementById("cfgNomeUsuario").value = configuracoes.nomeUsuario; 
-    document.getElementById("cfgDiaVirada").value = configuracoes.diaVirada; 
-    document.getElementById("cfgTema").value = configuracoes.tema || "planetario";
+    const modalCfg = document.getElementById("modalConfiguracoes");
+    if(!modalCfg) return;
+    document.getElementById("cfgNomeUsuario").value = configuracoes.nomeUsuario || ""; 
+    document.getElementById("cfgDiaVirada").value = configuracoes.diaVirada || 1; 
     const ref = configuracoes.referenciaMes || "atual"; 
     document.getElementById("refAtual").checked = (ref === "atual");
     document.getElementById("refProximo").checked = (ref === "proximo");
-    document.getElementById("modalConfiguracoes").style.display = "flex"; 
+    modalCfg.style.display = "flex"; 
 };
 document.getElementById("btnSalvarConfig").onclick = async () => { 
     configuracoes.nomeUsuario = document.getElementById("cfgNomeUsuario").value; 
     configuracoes.diaVirada = document.getElementById("cfgDiaVirada").value; 
-    configuracoes.tema = document.getElementById("cfgTema").value;
     configuracoes.referenciaMes = document.querySelector('input[name="refMes"]:checked')?.value || "atual"; 
-
-    aplicarTema(configuracoes.tema); // Aplica o novo tema no body
-    
-    await salvarFirebase(); 
-    document.getElementById("modalConfiguracoes").style.display = "none"; 
-    
-    carregarAno(); // Isso vai forçar o gráfico a ser redesenhado com as novas cores!
+    await salvarFirebase(); document.getElementById("modalConfiguracoes").style.display = "none"; carregarAno(); renderPaginaGastos();
 };
 document.getElementById("btnFecharConfig").onclick = () => document.getElementById("modalConfiguracoes").style.display = "none";
 document.getElementById("btnGerenciarCategorias").onclick = () => { document.getElementById("modalCategorias").style.display = "flex"; renderCategoriasModal(); };

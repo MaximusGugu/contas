@@ -122,7 +122,21 @@
       </div>
 
       <footer class="siteFooter">
-        <p>© 2026 <a href="https://www.behance.net/gustavojsantos">Gustavo Santos</a></p>
+          <div class="footer-container">
+              <p>© 2026 <a href="https://www.behance.net/gustavojsantos">Gustavo Santos</a></p>
+              
+              <div class="theme-selector-footer">
+                  <span>Tema:</span>
+                  <select id="cfgTemaFooter" class="inputPadrao">
+                      <option value="planetario">Planetário (Padrão)</option>
+                      <option value="noite">Noite (Dark Mode)</option>
+                      <option value="doce">Algodão-doce</option>
+                      <option value="amanhecer">Amanhecer</option>
+                      <option value="grayscale">Grayscale</option>
+                      <option value="natureza">Natureza</option>
+                  </select>
+              </div>
+          </div>
       </footer>
     </div>
 
@@ -132,17 +146,6 @@
         <h3>Configurações do App</h3>
         <div class="campo" style="margin-bottom: 15px;"><label>Seu Nome</label><input type="text" id="cfgNomeUsuario" class="inputPadrao"></div>
         
-        <div class="campo" style="margin-bottom: 15px;">
-            <label>Aparência (Tema)</label>
-            <select id="cfgTema" class="inputPadrao">
-                <option value="planetario">Planetário (Padrão)</option>
-                <option value="noite">Noite (Dark Mode)</option>
-                <option value="doce">Algodão-doce</option>
-                <option value="amanhecer">Amanhecer</option>
-                <option value="grayscale">Grayscale</option>
-            </select>
-        </div>
-
         <div class="campo" style="margin-bottom: 15px;">
             <label style="display: flex; align-items: center; gap: 5px;">Mês de Referência <span class="help-icon" title="Configura se o destaque segue o calendário ou se você quer ver o próximo mês de pagamentos antecipadamente.">?</span></label>
             <div style="display:flex; gap:20px; margin-top:5px;">
