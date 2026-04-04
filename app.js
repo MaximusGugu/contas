@@ -66,31 +66,100 @@ function renderLembretesHome() {
     if (!lista) return;
     lista.innerHTML = "";
 
-    const hojeSimples = new Date().toISOString().split('T')[0];
+    // 1. CALCULAR O INTERVALO DA SEMANA (Domingo a Sábado)
+    const hoje = new Date();
+    const domingo = new Date(hoje);
+    domingo.setDate(hoje.getDate() - hoje.getDay());
+    domingo.setHours(0,0,0,0);
 
-    // Filtra lembretes de hoje em diante e ordena por data
-    const proximos = lembretes
-        .filter(l => l.data >= hojeSimples)
-        .sort((a, b) => a.data.localeCompare(b.data))
-        .slice(0, 3); // Mostra apenas os 3 primeiros
+    const sabado = new Date(domingo);
+    sabado.setDate(domingo.getDate() + 6);
+    sabado.setHours(23,59,59,999);
 
-    if (proximos.length === 0) {
-        lista.innerHTML = `<div class="lembrete-vazio">Nenhum lembrete próximo...</div>`;
+    // PASSO 3: Captura o ano selecionado no seletor do topo
+    const anoSelecionado = Number(document.getElementById("ano")?.value) || hoje.getFullYear();
+
+    let eventosSemana = [];
+
+    // 2. COLETAR TUDO QUE CAI NESSA SEMANA
+    for (let d = new Date(domingo); d <= sabado; d.setDate(d.getDate() + 1)) {
+        const diaNum = d.getDate();
+        const mesIdx = d.getMonth();
+        const anoDoDia = d.getFullYear(); // Ano real do dia sendo processado
+        const isoData = d.toISOString().split('T')[0];
+
+        // A. Lembretes manuais
+        lembretes.filter(l => l.data === isoData).forEach(l => {
+            eventosSemana.push({ nome: l.nome, info: l.hora || "Lembrete", valor: null, data: new Date(d), tipo: "reminder" });
+        });
+
+        // B. Cartões (Soma Variáveis do ano selecionado + Fixas)
+        cartoes.forEach(c => {
+            if (parseInt(c.vencimento) === diaNum) {
+                // Busca gastos variáveis usando o ano selecionado no seletor
+                const totalVariavel = (gastosDetalhes[anoSelecionado] || [])
+                    .filter(g => g.mes === mesIdx && String(g.cartaoId) === String(c.id))
+                    .reduce((acc, g) => acc + g.valor, 0);
+
+                // Soma despesas fixas vinculadas ao cartão
+                const totalFixoNoCard = contasFixas
+                    .filter(f => f.ativo && String(f.cartaoId) === String(c.id))
+                    .reduce((acc, f) => acc + f.valor, 0);
+
+                const totalGeral = totalVariavel + totalFixoNoCard;
+                
+                eventosSemana.push({ 
+                    nome: `Fatura: ${c.nome}`, 
+                    info: "Cartão", 
+                    valor: totalGeral, 
+                    data: new Date(d), 
+                    tipo: "card" 
+                });
+            }
+        });
+
+        // C. Despesas Fixas (Apenas as que NÃO são em cartão)
+        contasFixas.forEach(f => {
+            if (f.ativo && parseInt(f.dia) === diaNum && !f.cartaoId) {
+                eventosSemana.push({ nome: f.nome, info: "Despesa Fixa", valor: f.valor, data: new Date(d), tipo: "expense" });
+            }
+        });
+
+        // D. Receitas Fixas
+        receitasFixas.forEach(r => {
+            if (r.ativo && parseInt(r.dia) === diaNum) {
+                eventosSemana.push({ nome: r.nome, info: "Recebimento", valor: r.valor, data: new Date(d), tipo: "income" });
+            }
+        });
+
+        // E. Quinto dia útil (Salário)
+        const diaSalario = calcularDiaPagamento(configuracoes.diaSalario || 5, mesIdx, anoDoDia);
+        if (diaNum === diaSalario) {
+            eventosSemana.push({ nome: "Pagamento Salário", info: "Dinheiro", valor: salarioFixoBase, data: new Date(d), tipo: "salary" });
+        }
+    }
+
+    // 3. RENDERIZAR
+    if (eventosSemana.length === 0) {
+        lista.innerHTML = `<div class="lembrete-vazio">Nada planejado para esta semana.</div>`;
         return;
     }
 
-    proximos.forEach(l => {
-        const dataBr = l.data.split('-').reverse().join('/');
+    eventosSemana.sort((a, b) => a.data - b.data);
+
+    eventosSemana.forEach(ev => {
+        const dataFormatada = ev.data.toLocaleDateString('pt-BR', { weekday: 'short', day: '2-digit' });
         const div = document.createElement("div");
-        div.className = "item-lembrete-home";
+        div.className = `item-lembrete-home agenda-tipo-${ev.tipo}`;
+        
+        const textoValor = (ev.valor !== null && ev.valor !== 0) ? ` | <b>${formatar(ev.valor)}</b>` : "";
+
         div.innerHTML = `
             <div class="info">
-                <span class="titulo">${l.nome}</span>
-                <span class="data">📅 ${dataBr} ${l.hora ? ' às ' + l.hora : ''}</span>
+                <span class="titulo" style="font-size:12px">${ev.nome}</span>
+                <span class="data" style="font-size:10px">${dataFormatada.toUpperCase()} • ${ev.info}${textoValor}</span>
             </div>
-            <button class="btn-postit" style="background:none; color:var(--P04); font-size:18px;"> </button>
         `;
-        div.onclick = () => abrirPostit(l);
         lista.appendChild(div);
     });
 }
@@ -197,8 +266,9 @@ const dManuais = (m.despesas || []).filter(x => x.checked).reduce((acc, b) => ac
       const gastosMes = (gastosDetalhes[ano] || []).filter(g => g.mes === idx);
       const tCr = gastosMes.filter(g => cartoes.find(c => c.id == g.cartaoId)?.tipo === 'Crédito').reduce((acc, g) => acc + g.valor, 0);
       const fixasNoCard = contasFixas.filter(f => f.ativo && f.cartaoId).reduce((acc, f) => acc + f.valor, 0);
+// Soma "Outros" da Home + Receitas Fixas que tenham dia definido
       const eTotal = (m.empresa || []).filter(x => x.checked).reduce((acc, b) => acc + b.valor, 0);
-      const tDisp = (m.salario || 0) + (m.conta || 0) + eTotal;
+      const rFixasNoMes = receitasFixas.filter(rf => rf.ativo).reduce((acc, rf) => acc + rf.valor, 0);      const tDisp = (m.salario || 0) + (m.conta || 0) + eTotal;
       const saldoFinal = tDisp - (dManuais + tCr + fixasNoCard);
       m.saldoCalculadoFinal = saldoFinal; 
       saldoAcumulado = saldoFinal; ehOPrimeiroMesDeTodos = false;
@@ -265,6 +335,7 @@ const dManuais = (m.despesas || []).filter(x => x.checked).reduce((acc, b) => ac
     });
   });
   salvarDadosLocal(pendente); atualizarGrafico(Number(anoParaVisualizar));
+  renderLembretesHome();
 }
 
 function atualizarGrafico(ano) {
@@ -502,21 +573,23 @@ function renderPaginaGastos() {
                         </tr>
                     </thead>
                     <tbody id="tbody-gastos-${m}"></tbody>
-                    <tfoot>
-                        <tr>
-                            <td><input type="text" placeholder="Gasto..." id="add-nome-${m}" class="inputPadrao"></td>
-                            <td><select id="add-cat-${m}" class="inputPadrao">${categorias.map(c => `<option value="${c.name}">${c.name}</option>`).join('')}</select></td>
-                            <td><select id="add-card-${m}" class="inputPadrao">${cartoes.map(c => `<option value="${c.id}">${c.nome}</option>`).join('')}</select></td>
-                            <td><input type="text" placeholder="0,00" id="add-val-${m}" class="inputPadrao input-valor-add"></td>
-                            <td>
-                                <div style="display:flex; gap:5px">
-                                    <button class="btn" id="btn-add-${m}">+</button>
-                                    <button class="btn" style="background:#8e44ad" id="btn-add-parcela-${m}">🗓️</button>
-                                </div>
-                            </td>
-                        </tr>
-                    </tfoot>
+                                        <tfoot>
+                                            <tr>
+                                                <td><input type="text" placeholder="Gasto..." id="add-nome-${m}" class="inputPadrao"></td>
+                                                <td><select id="add-cat-${m}" class="inputPadrao">${categorias.map(c => `<option value="${c.name}">${c.name}</option>`).join('')}</select></td>
+                                                <td><select id="add-card-${m}" class="inputPadrao">${cartoes.map(c => `<option value="${c.id}">${c.nome}</option>`).join('')}</select></td>
+                                                <td><input type="text" placeholder="0,00" id="add-val-${m}" class="inputPadrao input-valor-add"></td>
+                                                <td><button class="btn" id="btn-add-${m}" style="width:40px">+</button></td>
+                                            </tr>
+                                        </tfoot>
                 </table>
+                <!-- BOTÃO DE PARCELAMENTO CENTRALIZADO -->
+                <div style="display: flex; justify-content: center; margin-bottom: 15px;">
+                    <button class="btn" style="background: var(--P05); width: auto; font-size: 11px; padding: 10px 20px;" id="btn-add-parcela-${m}">
+                        + NOVO PARCELAMENTO
+                    </button>
+                </div>
+
                 <div class="resumo-gastos-inferior">
                     <div class="barra-resumo credito">Crédito <span>${formatar(tCr)}</span></div>
                     <div class="barra-resumo debito">Débito <span>${formatar(tDb)}</span></div>
@@ -599,6 +672,7 @@ function renderPaginaGastos() {
                 } else { 
                     gastosDetalhes[anoView] = gastosDetalhes[anoView].filter(item => item !== g); 
                     salvarDadosLocal(); 
+                    atualizarTudo(anoView); // Força o recalculo global
                     renderPaginaGastos(); 
                 } 
             };
@@ -615,6 +689,7 @@ function renderPaginaGastos() {
             if(!gastosDetalhes[anoView]) gastosDetalhes[anoView] = []; 
             gastosDetalhes[anoView].push({ mes: m, nome: n, valor: v, categoria: c, cartaoId: crd }); 
             salvarDadosLocal(); 
+            atualizarTudo(anoView); // Força o recalculo global
             renderPaginaGastos(); 
         };
 
@@ -742,23 +817,54 @@ function renderContasFixas() {
 }
 
 function renderReceitasFixas() {
-  const lista = document.getElementById("listaReceitasFixas"); if (!lista) return;
+  const container = document.getElementById("listaReceitasFixas"); 
+  if (!container) return;
+  
   const iS = document.getElementById("salarioFixoBase"); 
   iS.value = formatar(salarioFixoBase);
   aplicarComportamentoInput(iS, () => salarioFixoBase, (v) => { salarioFixoBase = v; }); 
   
-  lista.innerHTML = "";
+  container.innerHTML = `
+    <table class="tabela-gastos">
+      <thead>
+        <tr>
+          <th style="width: 1%;">ok</th>
+          <th>Origem da Renda</th>
+          <th style="width: 80px;">Dia</th>
+          <th style="width: 120px; text-align:right;">Valor</th>
+          <th style="width: 1%;"></th>
+        </tr>
+      </thead>
+      <tbody id="tbodyReceitasFixas"></tbody>
+    </table>
+  `;
+
+  const tbody = document.getElementById("tbodyReceitasFixas");
+
   receitasFixas.forEach((rf) => {
-    const div = document.createElement("div"); div.className = "item-fixo";
-    // HTML simplificado: Checkbox, Nome, Valor e Botão Remover
-    div.innerHTML = `<input type="checkbox" ${rf.ativo?'checked':''} class="check-rf"><input type="text" class="inputPadrao" value="${rf.nome}" placeholder="Nome da Renda" style="flex:2"><input type="text" class="inputPadrao valor-rf" value="${formatar(rf.valor)}" style="width:110px"><button class="removeItem">×</button>`;
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td><input type="checkbox" ${rf.ativo?'checked':''} class="check-rf"></td>
+      <td><input type="text" class="input-tabela-edit" value="${rf.nome}" placeholder="Ex: Aluguel, Extra..."></td>
+      <td><input type="number" class="input-tabela-edit" value="${rf.dia||1}" min="1" max="31"></td>
+      <td><input type="text" class="input-tabela-edit" value="${formatar(rf.valor)}" style="text-align:right;"></td>
+      <td><button class="removeItem">×</button></td>
+    `;
     
-    const [ch, inN, inV, btR] = div.children;
-    ch.onchange = () => { rf.ativo = ch.checked; salvarDadosLocal(); }; 
-    inN.onblur = () => { rf.nome = inN.value; salvarDadosLocal(); };
-    aplicarComportamentoInput(inV, () => rf.valor, (v) => { rf.valor = v; }); 
-    btR.onclick = () => { receitasFixas = receitasFixas.filter(r => r.id !== rf.id); renderReceitasFixas(); salvarDadosLocal(); }; 
-    lista.appendChild(div);
+    const [tdCheck, tdNome, tdDia, tdVal, tdBtn] = tr.children;
+    
+    tdCheck.querySelector("input").onchange = (e) => { rf.ativo = e.target.checked; salvarDadosLocal(); }; 
+    tdNome.querySelector("input").onblur = (e) => { rf.nome = e.target.value; salvarDadosLocal(); };
+    tdDia.querySelector("input").onblur = (e) => { rf.dia = parseInt(e.target.value) || 1; salvarDadosLocal(); };
+    
+    aplicarComportamentoInput(tdVal.querySelector("input"), () => rf.valor, (v) => { rf.valor = v; }); 
+    
+    tdBtn.querySelector("button").onclick = () => { 
+        receitasFixas = receitasFixas.filter(r => r.id !== rf.id); 
+        renderReceitasFixas(); 
+        salvarDadosLocal(); 
+    }; 
+    tbody.appendChild(tr);
   });
 }
 
@@ -783,23 +889,60 @@ function renderCartoesModal() {
     const lista = document.getElementById("listaCartoesModal"); if(!lista) return; lista.innerHTML = "";
     cartoes.forEach((c, index) => {
         const div = document.createElement("div"); div.className = "item";
-        div.innerHTML = `<input type="text" class="inputPadrao" value="${c.nome}" style="flex:2"><select class="inputPadrao" style="width:100px"><option value="Crédito" ${c.tipo=='Crédito'?'selected':''}>Crédito</option><option value="Débito" ${c.tipo=='Débito'?'selected':''}>Débito</option></select><input type="number" class="inputPadrao" value="${c.vencimento}" style="width:60px"><button class="removeItem">×</button>`;
-        const [iN, sT, iV, bR] = div.children;
-        iN.onblur = (e) => { cartoes[index].nome = e.target.value; salvarDadosLocal(); }; sT.onchange = (e) => { cartoes[index].tipo = e.target.value; salvarDadosLocal(); }; iV.onblur = (e) => { cartoes[index].vencimento = e.target.value; salvarDadosLocal(); };
-        bR.onclick = () => { cartoes.splice(index, 1); renderCartoesModal(); salvarDadosLocal(); }; lista.appendChild(div);
+        div.innerHTML = `
+            <input type="text" class="inputPadrao" value="${c.nome}" style="flex:2">
+            <select class="inputPadrao" style="width:100px">
+                <option value="Crédito" ${c.tipo=='Crédito'?'selected':''}>Crédito</option>
+                <option value="Débito" ${c.tipo=='Débito'?'selected':''}>Débito</option>
+            </select>
+            <input type="number" class="inputPadrao" value="${c.fechamento || 25}" style="width:50px" title="Fechamento">
+            <input type="number" class="inputPadrao" value="${c.vencimento}" style="width:50px" title="Vencimento">
+            <button class="removeItem">×</button>`;
+            
+        const [iN, sT, iF, iV, bR] = div.children;
+        iN.onblur = (e) => { cartoes[index].nome = e.target.value; salvarDadosLocal(); };
+        sT.onchange = (e) => { cartoes[index].tipo = e.target.value; salvarDadosLocal(); };
+        iF.onblur = (e) => { cartoes[index].fechamento = parseInt(e.target.value); salvarDadosLocal(); };
+        iV.onblur = (e) => { cartoes[index].vencimento = parseInt(e.target.value); salvarDadosLocal(); };
+        bR.onclick = () => { cartoes.splice(index, 1); renderCartoesModal(); salvarDadosLocal(); };
+        lista.appendChild(div);
     });
 }
 
 onAuthStateChanged(auth, async (user) => {
-  if (user) {
-    usuarioLogado = user; document.getElementById("displayEmail").textContent = user.email;
+if (user) {
+    usuarioLogado = user; 
+    document.getElementById("displayEmail").textContent = user.email;
+    
+    // Recupera a senha do armazenamento caso a página tenha sido recarregada
+    if (!senhaDoUsuario) {
+        senhaDoUsuario = sessionStorage.getItem("temp_key") || "";
+    }
+
     const snap = await getDoc(doc(db, "financas", user.uid));
     if (snap.exists()) {
-        const res = await decryptData(snap.data(), senhaDoUsuario);
-        dados = res.dados || {}; parcelasMemoria = res.parcelasMemoria || []; contasFixas = res.contasFixas || []; receitasFixas = res.receitasFixas || [];
-        lembretes = res.lembretes || [];
-        salarioFixoBase = res.salarioFixoBase || 0; categorias = migrarCategorias(res.categorias); configuracoes = res.configuracoes || configuracoes; cartoes = res.cartoes || []; gastosDetalhes = res.gastosDetalhes || {};
-        aplicarParcelas();
+        try {
+            // Só tenta descriptografar se houver uma senha na memória
+            if (!senhaDoUsuario) throw new Error("Senha ausente");
+
+            const res = await decryptData(snap.data(), senhaDoUsuario);
+            dados = res.dados || {}; 
+            parcelasMemoria = res.parcelasMemoria || []; 
+            contasFixas = res.contasFixas || []; 
+            receitasFixas = res.receitasFixas || [];
+            lembretes = res.lembretes || [];
+            salarioFixoBase = res.salarioFixoBase || 0; 
+            categorias = migrarCategorias(res.categorias); 
+            configuracoes = res.configuracoes || configuracoes; 
+            cartoes = res.cartoes || []; 
+            gastosDetalhes = res.gastosDetalhes || {};
+            aplicarParcelas();
+        } catch (err) {
+            console.error("Erro na descriptografia:", err);
+            alert("Sua sessão expirou ou a chave de segurança é inválida. Por favor, faça login novamente.");
+            signOut(auth);
+            return;
+        }
     }
     aplicarTema(configuracoes.tema);
     atualizarTituloSite();
@@ -873,8 +1016,7 @@ function roteador() {
         renderPaginaGastos();
     } else if (hash === "#calendario") {
         document.getElementById("navCalendario").classList.add("active");
-        renderCalendario({cartoes, contasFixas, receitasFixas, lembretes, configuracoes}, { abrirPostit });
-    }
+    renderCalendario({cartoes, contasFixas, receitasFixas, lembretes, configuracoes, gastosDetalhes}, { abrirPostit });    }
 }
 
 window.addEventListener("hashchange", roteador);
@@ -894,7 +1036,39 @@ window.addEventListener("hashchange", roteador);
     };
 });
 
-document.getElementById("btnSalvarSenha").onclick = async () => { const a = document.getElementById("pwdAntiga").value, n = document.getElementById("pwdNova").value; if(!n) return; try { const cred = EmailAuthProvider.credential(usuarioLogado.email, a); await reauthenticateWithCredential(usuarioLogado, cred); await updatePassword(usuarioLogado, n); senhaDoUsuario = n; sessionStorage.setItem("temp_key", n); alert("Sucesso!"); } catch (e) { alert("Erro!"); } };
+document.getElementById("btnSalvarSenha").onclick = async () => { 
+    const a = document.getElementById("pwdAntiga").value;
+    const n = document.getElementById("pwdNova").value; 
+    
+    if(!a || !n) {
+        alert("Preencha a senha antiga e a nova senha.");
+        return;
+    }
+
+    try { 
+        // 1. Reautentica o usuário para ter permissão de trocar a senha
+        const cred = EmailAuthProvider.credential(usuarioLogado.email, a); 
+        await reauthenticateWithCredential(usuarioLogado, cred); 
+        
+        // 2. Atualiza a senha no Firebase Auth
+        await updatePassword(usuarioLogado, n); 
+        
+        // 3. Atualiza a chave de criptografia na memória e na sessão
+        senhaDoUsuario = n; 
+        sessionStorage.setItem("temp_key", n); 
+        
+        // 4. Salva os dados novamente na nuvem usando a NOVA SENHA
+        await salvarFirebase(); 
+        
+        alert("Senha e criptografia atualizadas com sucesso!"); 
+        document.getElementById("pwdAntiga").value = "";
+        document.getElementById("pwdNova").value = "";
+    } catch (e) { 
+        console.error("Erro detalhado:", e);
+        alert("Erro: Verifique se a senha antiga está correta ou se a nova tem pelo menos 6 caracteres."); 
+    } 
+}; // <-- Aqui estava o erro: precisava fechar a função
+
 document.getElementById("loginBtn").onclick = async () => { const e = document.getElementById("email").value, s = document.getElementById("senha").value; try { await signInWithEmailAndPassword(auth, e, s); senhaDoUsuario = s; sessionStorage.setItem("temp_key", s); } catch (err) { alert("Erro login"); } };
 document.getElementById("cadastroBtn").onclick = async () => { const e = document.getElementById("email").value, s = document.getElementById("senha").value; try { await createUserWithEmailAndPassword(auth, e, s); senhaDoUsuario = s; sessionStorage.setItem("temp_key", s); await salvarFirebase(); } catch (err) { alert("Erro cadastro"); } };
 document.getElementById("logoutBtn").onclick = () => { signOut(auth); sessionStorage.clear(); location.reload(); };
@@ -910,7 +1084,7 @@ document.getElementById("btnFecharCartoes").onclick = () => document.getElementB
 document.getElementById("btnSalvarCartoes").onclick = async () => { await salvarFirebase(); document.getElementById("modalCartoes").style.display = "none"; carregarAno(); renderPaginaGastos(); };
 document.getElementById("btnAddCartao").onclick = () => { cartoes.push({ id: Date.now(), nome: "", tipo: "Crédito", vencimento: 10 }); renderCartoesModal(); };
 document.getElementById("btnAddContaFixa").onclick = () => { contasFixas.push({ id: Date.now(), nome: "", valor: 0, ativo: true, categoria: categorias[0].name }); renderContasFixas(); };
-document.getElementById("btnAddReceitaFixa").onclick = () => { receitasFixas.push({ id: Date.now(), nome: "", valor: 0, ativo: true }); renderReceitasFixas(); };
+document.getElementById("btnAddReceitaFixa").onclick = () => { receitasFixas.push({ id: Date.now(), nome: "", valor: 0, dia: 1, ativo: true }); renderReceitasFixas(); };
 document.getElementById("salvarNuvemBtn").onclick = salvarFirebase;
 document.getElementById("headerContasFixas").onclick = () => document.getElementById("moduloContasFixas").classList.toggle("collapsed");
 document.getElementById("headerReceitasFixas").onclick = () => document.getElementById("moduloReceitasFixas").classList.toggle("collapsed");
@@ -944,29 +1118,56 @@ function carregarAno() {
 
 const s1 = document.getElementById("ano"); const s2 = document.getElementById("anoGastos");
 [s1, s2].forEach(s => { if(!s) return; for (let a = 2024; a <= 2035; a++) { const o = document.createElement("option"); o.value = a; o.text = a; if(a === hoje.getFullYear()) o.selected = true; s.appendChild(o); } s.onchange = () => { carregarAno(); renderPaginaGastos(); }; });
+
+// Exibe/Esconde dias da semana no modal
+document.getElementById("lemRecorrente").onchange = (e) => {
+    document.getElementById("escolhaDiasSemana").style.display = e.target.checked ? "grid" : "none";
+};
+
 document.getElementById("btnSalvarLembrete").onclick = async () => {
-    const l = { id: Date.now(), nome: document.getElementById("lemTitulo").value, data: document.getElementById("lemData").value, hora: document.getElementById("lemHora").value };
+    const recorrente = document.getElementById("lemRecorrente").checked;
+    const diasSelecionados = Array.from(document.querySelectorAll("#escolhaDiasSemana input:checked")).map(i => parseInt(i.value));
+
+    const l = { 
+        id: Date.now(), 
+        nome: document.getElementById("lemTitulo").value, 
+        data: document.getElementById("lemData").value, 
+        hora: document.getElementById("lemHora").value,
+        valor: parseValor(document.getElementById("lemValor").value),
+        recorrente: recorrente,
+        diasSemana: diasSelecionados
+    };
+    
     lembretes.push(l);
     await salvarFirebase();
     renderLembretesHome();
-    roteador();
+    
+    // Limpeza
     document.getElementById("modalLembrete").style.display = "none";
-    if(document.getElementById("viewCalendario").style.display === "block") renderCalendario({cartoes, contasFixas, receitasFixas, lembretes, configuracoes}, { abrirPostit });
-};
+    document.getElementById("lemTitulo").value = "";
+    document.getElementById("lemValor").value = "";
+    document.getElementById("lemRecorrente").checked = false;
+    document.getElementById("escolhaDiasSemana").style.display = "none";
 
+    renderCalendario({cartoes, contasFixas, receitasFixas, lembretes, configuracoes, gastosDetalhes, abrirPostit});
+};
 
 function abrirPostit(l) {
     const overlay = document.createElement("div"); 
     overlay.className = "modal-overlay"; 
     overlay.id = "popupPostit";
-    overlay.innerHTML = `<div class="modal-content postit-amarelo" style="background:#f1c40f; color:#000; padding:20px; border-radius:5px; min-width:250px;"><h3 style="margin-top:0; border-bottom:1px solid rgba(0,0,0,0.1); padding-bottom:5px;">${l.nome}</h3><p style="margin: 10px 0 5px 0;"><strong>📅 Data:</strong> ${l.data}</p><p style="margin: 0 0 20px 0;"><strong>⏰ Hora:</strong> ${l.hora || 'Não definida'}</p><div style="display:flex; gap:10px;"><button class="btn sair" id="btnDelPostit" style="flex:1">Excluir</button><button class="btn" onclick="this.closest('.modal-overlay').remove()" style="flex:1; background:#333; color:#fff;">Fechar</button></div></div>`;
+    overlay.innerHTML = `<div class="modal-content postit-amarelo" style="background:#f1c40f; color:#000; padding:20px; border-radius:5px; min-width:250px;"><h3 style="margin-top:0; border-bottom:1px solid rgba(0,0,0,0.1); padding-bottom:5px;">${l.nome}</h3><p style="margin: 10px 0 5px 0;"><strong>📅 Data:</strong> ${l.data}</p><p style="margin: 0 0 5px 0;"><strong>⏰ Hora:</strong> ${l.hora || 'Não definida'}</p><p style="margin: 0 0 20px 0;"><strong>💰 Valor:</strong> ${l.valor ? formatar(l.valor) : '---'}</p><div style="display:flex; gap:10px;"><button class="btn sair" id="btnDelPostit" style="flex:1">Excluir</button><button class="btn" onclick="this.closest('.modal-overlay').remove()" style="flex:1; background:#333; color:#fff;">Fechar</button></div></div>`;
     document.body.appendChild(overlay);
     document.getElementById("btnDelPostit").onclick = async () => { 
-        if(confirm("Excluir este lembrete?")) {
-            lembretes = lembretes.filter(x => x.id !== l.id); 
-            await salvarFirebase(); 
-            renderCalendario({cartoes, contasFixas, receitasFixas, lembretes, configuracoes}, { abrirPostit }); 
-            overlay.remove(); 
-        }
-    };
+            if(confirm("Excluir este lembrete?")) {
+                lembretes = lembretes.filter(x => x.id !== l.id); 
+                await salvarFirebase(); 
+                
+                // ATUALIZAÇÃO AQUI:
+                renderLembretesHome(); // Atualiza a agenda na Home
+                renderCalendario({cartoes, contasFixas, receitasFixas, lembretes, configuracoes, gastosDetalhes, abrirPostit}); // Atualiza o Calendário
+                
+                overlay.remove(); 
+            }
+        };
 }

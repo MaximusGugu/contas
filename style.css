@@ -514,6 +514,24 @@ body {
   margin-bottom: 10px;
 }
 
+/* Muda a cor do placeholder para todos os navegadores */
+.inputPadrao::placeholder {
+    color: var(--P02);
+    opacity: 0.5; /* Deixa um pouco transparente para dar o aspecto de placeholder */
+}
+
+/* Para navegadores baseados em Chrome, Edge e Safari */
+.inputPadrao::-webkit-input-placeholder {
+    color: var(--P02);
+    opacity: 0.5;
+}
+
+/* Para Firefox */
+.inputPadrao::-moz-placeholder {
+    color: var(--P02);
+    opacity: 0.5;
+}
+
 .campo {
   display: flex;
   flex-direction: column;
@@ -906,6 +924,7 @@ input.conta:not(.manual) {
     max-width: 400px;
     box-shadow: 0 15px 35px rgba(0, 0, 0, 0.4);
     color: var(--P07);
+    rotate: -3deg !important;
 }
 
 .modal-content postit-amarelo h3 {
@@ -1210,6 +1229,7 @@ element.style {
 .btn:hover {
     background: var(--P04) !important;
      transition: 0.2s;
+     opacity: 100% !important;
 }
 
 .btn.sair { 
@@ -1262,6 +1282,15 @@ input.conta { border-left: 5px solid #2ecc71 !important; color: #27ae60; }
 .tabela-gastos td:first-child {
     width: auto;          /* Ela volta a ser flexível */
     white-space: normal;  /* Se o nome for gigante, ele pode quebrar linha aqui */
+}
+
+/* Força a última coluna da tabela de gastos a ser bem estreita */
+.tabela-gastos th:last-child, 
+.tabela-gastos td:last-child {
+    width: 1% !important;
+    white-space: nowrap !important;
+    text-align: center;
+    padding: 8px 5px !important;
 }
 
 .badge { padding: 4px 10px; border-radius: 15px; font-weight: bold; display: inline-block; min-width: 80px; text-align: center; color: white; font-size: 10px; }
@@ -1387,6 +1416,9 @@ input.conta:focus {
 /* Ajuste do botão de parcelamento na tabela */
 #btn-add-parcela- {
     transition: background 0.2s;
+    filter: brightness(1.2);
+    transform: translateY(-2px);
+    transition: 0.2s;
 }
 
 #btn-add-parcela-:hover {
@@ -1452,6 +1484,7 @@ input.conta:focus {
     gap: 5px;
     border: 1px solid transparent;
     min-height: 100px;
+    min-width: 100px;
 }
 
 .cal-day .event-reminder {
@@ -1460,6 +1493,20 @@ input.conta:focus {
 
 .cal-day.today { border-color: var(--P04); background: rgba(215, 131, 65, 0.1); }
 .cal-day.other-month { opacity: 0.2; pointer-events: none; }
+
+/* Efeito de destaque ao passar o mouse nos dias do calendário */
+.cal-day:not(.other-month) {
+    cursor: pointer;
+    transition: all 0.2s ease-in-out;
+}
+
+.cal-day:not(.other-month):hover {
+    background: rgba(255, 255, 255, 0.15) !important;
+    border-color: var(--P04) !important;
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+}
+
 .cal-number { font-size: 14px; font-weight: bold; margin-bottom: 5px; }
 
 /* EVENTOS */
@@ -1471,8 +1518,10 @@ input.conta:focus {
     overflow: hidden;
     text-overflow: ellipsis;
     font-weight: bold;
+    pointer-events: auto;
 }
 
+.event-closing { background: #555 !important; color: white !important; }
 .event-salary { background: #f1c40f; color: #000; }
 .event-expense { background: #e74c3c; color: #fff; }
 .event-income { background: #27ae60; color: #fff; }
@@ -1487,12 +1536,19 @@ box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
   transform: scale(1.1);
 }
 
+/* Evento de Renda (Verde) */
+.event-income { 
+    background: #27ae60 !important; 
+    color: white !important; 
+}
+
 /* POST-IT */
 .postit {
     background: #f1c40f;
     width: 250px;
+    min-height: 300px;
     padding: 25px;
-    transform: rotate(-2deg);
+    transform: rotate(-3deg);
     box-shadow: 10px 10px 20px rgba(0,0,0,0.3);
     position: relative;
 }
@@ -1512,6 +1568,18 @@ box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
 
 .cal-top-actions { display: flex; justify-content: flex-end; margin-bottom: 15px; }
 
+/* Indicador de feriado: Borda tracejada */
+.cal-day.holiday {
+    border: 1px dashed var(--P04) !important; /* Aumentamos para 2px e usamos !important */
+    background: rgba(255, 255, 255, 0.05); /* Um leve brilho no fundo */
+}
+
+/* Se for hoje e feriado, mantemos a borda sólida mas destacada */
+.cal-day.today.holiday {
+    border: 1px solid var(--P04) !important;
+    outline: 1px dashed var(--P04); /* Cria uma borda dupla */
+    outline-offset: -4px;
+}
 
 
 /* Navegação do Calendário */
@@ -1625,4 +1693,66 @@ box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
     filter: invert(80%) sepia(50%) saturate(1000%) hue-rotate(340deg);
     opacity: 1;
     transform: scale(1.1);
+}
+
+.dashboard-resumo {
+    margin-bottom: 30px;
+}
+
+.titulo-secao {
+    color: var(--P07);
+    font-size: 20px;
+    margin-bottom: 15px;
+    font-weight: bold;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+
+.dashboard-row {
+    display: flex;
+    gap: 20px;
+    align-items: stretch; /* Faz as duas colunas terem a mesma altura */
+    padding: 20px;
+    background-color: var(--P06);
+    border-radius: 20px;
+}
+
+.dashboard-col-grafico {
+    flex: 7; /* Ocupa 70% */
+    min-width: 0;
+}
+
+.dashboard-col-agenda {
+    flex: 3; /* Ocupa 30% */
+    min-width: 250px;
+}
+
+/* Responsivo para Celular */
+@media (max-width: 900px) {
+    .dashboard-row {
+        flex-direction: column;
+    }
+    .dashboard-col-grafico, .dashboard-col-agenda {
+        flex: none;
+        width: 100%;
+    }
+}
+
+/* Ajuste no gráfico para não sobrar espaço branco */
+#grafico {
+    margin: 0 !important;
+    height: 100%;
+}
+
+/* Cores dinâmicas para a agenda lateral */
+.agenda-tipo-reminder { border-left-color: var(--POSTIT) !important; }
+.agenda-tipo-card { border-left-color: #9b59b6 !important; } /* Roxo */
+.agenda-tipo-expense { border-left-color: #e74c3c !important; } /* Vermelho */
+.agenda-tipo-income { border-left-color: #27ae60 !important; } /* Verde */
+.agenda-tipo-salary { border-left-color: #f1c40f !important; } /* Amarelo */
+
+/* Ajuste para caber mais itens na coluna estreita */
+.item-lembrete-home {
+    padding: 8px 12px;
+    margin-bottom: 4px;
 }

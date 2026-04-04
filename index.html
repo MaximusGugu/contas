@@ -58,64 +58,80 @@
 
     <div class="container-central">
       <!-- VIEW RESUMO -->
-      <section id="viewResumo">
+<section id="viewResumo">
+  <div class="controles-topo">
+    <div class="ano-selector">
+      <span>Selecione o ano:</span>
+      <select id="ano" class="inputPadrao" style="width: auto;"></select>
+    </div>
+  </div>
 
-        <div class="controles-topo">
-          <div class="ano-selector">
-            <span>Selecione o ano:</span>
-            <select id="ano" class="inputPadrao" style="width: auto;"></select>
-          </div>
-        </div>
-
-        <!-- NOVO: MÓDULO DE LEMBRETES PRÓXIMOS -->
-        <div id="moduloLembretesHome" class="mes">
-            <div class="despHeader" style="background: var(--P04) !important;">
-                <span>Agenda</span>
-            </div>
-            <div class="mesBody" style="padding: 15px;">
-                <div id="listaLembretesHome" class="lista-lembretes-home">
-                    <!-- Gerado via JS -->
-                </div>
-                <button class="btn" id="btnIrCalendario" style="width:100%; margin-top:10px; background: var(--P05); color: var(--P02);">CALENDÁRIO</button>
-            </div>
-        </div>
-
-        <div id="moduloContasFixas" class="mes collapsed">
-          <div class="despHeader" id="headerContasFixas">
-            <span>Configurar Despesas Fixas</span>
-          </div>
-          <div class="receitasBody">
-            <div class="fixed-list-header">
-              <p>Arraste para ordenar. Configure cartões e categorias aqui.</p>
-              <div class="acoes-categorias">
-                <span id="btnGerenciarCategorias">✏️ Categorias</span>
-                <span id="btnGerenciarCartoes">💳 Cartões</span>
-              </div>
-            </div>
-            <div id="listaContasFixas"></div>
-            <button class="btn" id="btnAddContaFixa" style="width:100%; margin-top:15px;">+ Nova Despesa Fixa</button>
-          </div>
-        </div>
-
-        <div id="moduloReceitasFixas" class="mes collapsed">
-          <div class="despHeader" id="headerReceitasFixas">
-            <span>Configurar Receitas Fixas</span>
-          </div>
-          <div class="receitasBody">
-            <div class="item-fixo-destaque" style="background: rgba(255,255,255,0.1);margin-bottom: 20px;border-left: 5px solid var(--P04); display: flex; align-items: center; padding: 10px; border-radius: 8px;">
-              <div class="icon" style="margin-right: 10px;">🏠</div>
-              <span class="label" style="flex: 1; font-weight: bold; color: var(--P03);">Salário Padrão</span>
-              <input type="text" id="salarioFixoBase" class="inputPadrao" placeholder="R$ 0,00" style="width:150px">
-            </div>
-            <div id="listaReceitasFixas"></div>
-            <button class="btn" id="btnAddReceitaFixa" style="width:100%; margin-top:15px;">+ Nova Renda Recorrente</button>
-          </div>
-        </div>
-
+  <!-- CONTAINER DASHBOARD (GRÁFICO + AGENDA) -->
+  <div class="dashboard-resumo">
+    <h2 class="titulo-secao">Resumo</h2>
+    
+    <div class="dashboard-row">
+      <!-- Coluna do Gráfico (70%) -->
+      <div class="dashboard-col-grafico">
         <div id="grafico"></div>
-        <div id="areaAno"></div>
+      </div>
 
-      </section>
+      <!-- Coluna da Agenda (30%) -->
+      <div class="dashboard-col-agenda">
+        <div id="moduloLembretesHome" class="mes" style="margin-bottom: 0; height: 100%;">
+          <div class="despHeader" style="background: var(--P04) !important;">
+            <span>Esta semana</span>
+          </div>
+          <div class="mesBody" style="padding: 15px; display: flex; flex-direction: column; height: calc(100% - 40px);">
+            <div id="listaLembretesHome" class="lista-lembretes-home" style="flex: 1;">
+              <!-- Gerado via JS -->
+            </div>
+            <button class="btn" id="btnIrCalendario" style="width:100%; margin-top:10px; background: var(--P05); color: var(--P03);">CALENDÁRIO</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Módulos de Configuração (abaixo do dashboard) -->
+  <div id="moduloContasFixas" class="mes collapsed">
+    <div class="despHeader" id="headerContasFixas">
+      <span>Configurar Despesas Fixas</span>
+    </div>
+    <div class="receitasBody">
+      <div class="fixed-list-header">
+        <p>Arraste para ordenar. Configure cartões e categorias aqui.</p>
+        <div class="acoes-categorias">
+          <span id="btnGerenciarCategorias">✏️ Categorias</span>
+          <span id="btnGerenciarCartoes">💳 Cartões</span>
+        </div>
+      </div>
+      <div id="listaContasFixas"></div>
+        <span style="display: flex; justify-content: center; margin-bottom: 15px;">
+          <button class="btn" id="btnAddContaFixa">+ Nova Despesa Fixa</button>
+        </span>
+    </div>
+  </div>
+
+  <div id="moduloReceitasFixas" class="mes collapsed">
+    <div class="despHeader" id="headerReceitasFixas">
+      <span>Configurar Receitas Fixas</span>
+    </div>
+    <div class="receitasBody">
+      <div class="item-fixo-destaque" style="background: rgba(255,255,255,0.1);margin-bottom: 20px;border-left: 5px solid var(--P04); display: flex; align-items: center; padding: 10px; border-radius: 8px;">
+        <div class="icon" style="margin-right: 10px;">🏠</div>
+        <span class="label" style="flex: 1; font-weight: bold; color: var(--P03);">Salário Padrão</span>
+        <input type="text" id="salarioFixoBase" class="inputPadrao" placeholder="R$ 0,00" style="width:150px">
+      </div>
+      <div id="listaReceitasFixas"></div>
+      <span style="display: flex; justify-content: center; margin-bottom: 15px;">
+        <button class="btn" id="btnAddReceitaFixa">+ Nova Renda Recorrente</button>
+      </span>
+    </div>
+  </div>
+
+  <div id="areaAno"></div>
+</section>
 
       <!-- VIEW GASTOS -->
       <section id="viewGastos" style="display: none;">
@@ -144,7 +160,7 @@
       <footer class="siteFooter">
           <div class="footer-container">
               <p>© 2026 <a href="http://planetario.framer.website/">Planetário Oficina Estúdio</a></p>
-              <spann><small>Versão 2.6</small></spann>
+              <spann><small>Versão 2.7</small></spann>
               <div class="theme-selector-footer">
                   <span>Tema:</span>
                   <select id="cfgTemaFooter" class="inputPadrao">
@@ -179,7 +195,9 @@
       <h4 style="margin-bottom:10px;">Segurança</h4>
       <div class="campo"><label>Senha Antiga</label><input type="password" id="pwdAntiga" class="inputPadrao"></div>
       <div class="campo"><label>Nova Senha</label><input type="password" id="pwdNova" class="inputPadrao"></div>
-      <button class="btn" id="btnSalvarSenha" style="width: 100%; margin-top: 10px; background: #8e44ad;">Atualizar Senha</button>
+      <div style="display: flex; justify-content: center; margin-bottom: 15px;">
+      <button class="btn" id="btnSalvarSenha" style="margin-top: 10px; opacity: 50%;">Atualizar Senha</button>
+      </div>
       <div style="display:flex; gap:10px; margin-top:20px; border-top: 1px solid rgba(255,255,255,0.1); padding-top:15px;">
         <button class="btn" id="btnSalvarConfig" style="flex:1">Salvar Tudo</button>
         <button class="btn sair" id="btnFecharConfig" style="flex:1">Fechar</button>
@@ -187,15 +205,36 @@
     </div>
   </div>
 
-  <!-- MODAL LEMBRETE -->
+<!-- MODAL LEMBRETE ATUALIZADO -->
   <div id="modalLembrete" class="modal-overlay" style="display:none;">
     <div class="modal-content">
       <h3>Novo Lembrete</h3>
       <div style="display: flex; flex-direction: column; gap: 15px;">
         <input type="text" id="lemTitulo" class="inputPadrao" placeholder="Título">
-        <input type="date" id="lemData" class="inputPadrao">
-        <input type="time" id="lemHora" class="inputPadrao">
+        
+        <div style="display: flex; gap: 10px;">
+            <input type="date" id="lemData" class="inputPadrao">
+            <input type="time" id="lemHora" class="inputPadrao">
+        </div>
+
+        <input type="text" id="lemValor" class="inputPadrao" placeholder="Valor (opcional)">
+
+        <!-- CAMPOS DE RECORRÊNCIA -->
+        <label style="font-size: 13px; color: var(--P02); display: flex; align-items: center; gap: 8px;">
+            <input type="checkbox" id="lemRecorrente"> Repetir semanalmente?
+        </label>
+        
+        <div id="escolhaDiasSemana" style="display: none; grid-template-columns: repeat(7, 1fr); gap: 5px;">
+            <label title="Domingo" style="font-size: 10px; text-align: center; color: var(--P02);"><input type="checkbox" value="0">D</label>
+            <label title="Segunda" style="font-size: 10px; text-align: center; color: var(--P02);"><input type="checkbox" value="1">S</label>
+            <label title="Terça" style="font-size: 10px; text-align: center; color: var(--P02);"><input type="checkbox" value="2">T</label>
+            <label title="Quarta" style="font-size: 10px; text-align: center; color: var(--P02);"><input type="checkbox" value="3">Q</label>
+            <label title="Quinta" style="font-size: 10px; text-align: center; color: var(--P02);"><input type="checkbox" value="4">Q</label>
+            <label title="Sexta" style="font-size: 10px; text-align: center; color: var(--P02);"><input type="checkbox" value="5">S</label>
+            <label title="Sábado" style="font-size: 10px; text-align: center; color: var(--P02);"><input type="checkbox" value="6">S</label>
+        </div>
       </div>
+
       <div style="display:flex; gap:10px; margin-top:15px;">
         <button class="btn" id="btnSalvarLembrete">Salvar</button>
         <button class="btn sair" onclick="document.getElementById('modalLembrete').style.display='none'">Fechar</button>
