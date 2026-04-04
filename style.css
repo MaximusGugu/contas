@@ -504,7 +504,7 @@ body {
 
 .inputPadrao option {
     background: var(--P03);
-    color: var(--P07);
+    color: var(--P08);
 }
 
 
@@ -1451,6 +1451,7 @@ input.conta:focus {
     flex-direction: column;
     gap: 5px;
     border: 1px solid transparent;
+    min-height: 100px;
 }
 
 .cal-day .event-reminder {

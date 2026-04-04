@@ -115,21 +115,15 @@
         <div id="grafico"></div>
         <div id="areaAno"></div>
 
-        <div class="controles-topo" style="margin-top: 40px; border-top: 1px solid rgba(0,0,0,0.1); padding-top: 20px;">
-            <button id="exportarTudoBtn" class="btn-secundario">EXPORTAR JSON</button>
-            <label for="inputImport" class="btn-secundario" style="cursor:pointer">IMPORTAR JSON</label>
-            <input type="file" id="inputImport" style="display: none;">
-            <button id="salvarNuvemBtn" class="btn">☁️ SALVAR NA NUVEM</button>
-            <span id="statusAlteracao" style="display: none;">⚠️ Alterações pendentes</span>
-        </div>
-
       </section>
 
       <!-- VIEW GASTOS -->
       <section id="viewGastos" style="display: none;">
         <div class="controles-topo">
-          <span>Selecione o ano:</span>
+            <div class="ano-selector">
+            <span>Selecione o ano:</span>
             <select id="anoGastos" class="inputPadrao" style="width: auto;"></select>
+          </div>
         </div>
         <div id="areaGastosMensais"></div>
       </section>
@@ -139,9 +133,18 @@
         <div id="areaCalendario"></div>
       </section>
 
+        <div class="controles-topo" style="padding-top: 40px;">
+            <button id="exportarTudoBtn" class="btn-secundario">EXPORTAR JSON</button>
+            <label for="inputImport" class="btn-secundario" style="cursor:pointer">IMPORTAR JSON</label>
+            <input type="file" id="inputImport" style="display: none;">
+            <button id="salvarNuvemBtn" class="btn">☁️ SALVAR NA NUVEM</button>
+            <span id="statusAlteracao" style="display: none;">⚠️ Alterações pendentes</span>
+        </div>
+
       <footer class="siteFooter">
           <div class="footer-container">
               <p>© 2026 <a href="http://planetario.framer.website/">Planetário Oficina Estúdio</a></p>
+              <spann><small>Versão 2.6</small></spann>
               <div class="theme-selector-footer">
                   <span>Tema:</span>
                   <select id="cfgTemaFooter" class="inputPadrao">
