@@ -23,7 +23,8 @@ body.theme-planetario {
   --P08: #191615;
   --P09: #070504;
   --BG-INPUT: #F8EED7;
-  --BG-IMG: url('https://raw.githubusercontent.com/MaximusGugu/contas/refs/heads/main/img/bg-site-planetario.webp')
+  --BG-IMG: url('https://raw.githubusercontent.com/MaximusGugu/contas/refs/heads/main/img/bg-site-planetario.webp');
+  --POSTIT: #f3db23;
 }
 
 body.theme-noite {
@@ -37,7 +38,8 @@ body.theme-noite {
   --P08: #1c2533;
   --P09: #0b0e14;
   --BG-INPUT: #1c2533;
-  --BG-IMG: url('https://raw.githubusercontent.com/MaximusGugu/contas/refs/heads/main/img/bg-site-dark.webp');
+  --BG-IMG: url('https://raw.githubusercontent.com/MaximusGugu/contas/refs/heads/main/img/bg-site-dark.webp');;
+  --POSTIT: #a7950f;
 }
 
 body.theme-doce {
@@ -51,7 +53,8 @@ body.theme-doce {
   --P08: #2d3436;
   --P09: #2d3436;
   --BG-INPUT: #ffeef2;
-  --BG-IMG: url('https://raw.githubusercontent.com/MaximusGugu/contas/refs/heads/main/img/bg-site-doce.webp')
+  --BG-IMG: url('https://raw.githubusercontent.com/MaximusGugu/contas/refs/heads/main/img/bg-site-doce.webp');
+  --POSTIT: #f3db23;
 }
 
 body.theme-amanhecer {
@@ -66,6 +69,7 @@ body.theme-amanhecer {
   --P09: #392B22;
   --BG-INPUT: #fff9e6;
   --BG-IMG: url('https://raw.githubusercontent.com/MaximusGugu/contas/refs/heads/main/img/bg-site-sunset.webp');
+  --POSTIT: #f3db23;
 }
 
 body.theme-grayscale {
@@ -80,6 +84,7 @@ body.theme-grayscale {
   --P09: #000000;
   --BG-INPUT: #565b5b;
   --BG-IMG: url('https://raw.githubusercontent.com/MaximusGugu/contas/refs/heads/main/img/bg-site-grayscale.webp');
+  --POSTIT: #f3db23;
 }
 
 body.theme-natureza {
@@ -93,7 +98,8 @@ body.theme-natureza {
   --P08: #102A12; /* Verde quase preto (Texto Principal) */
   --P09: #051406; /* O mais escuro (Sombras/Textos) */
   --BG-INPUT: #a8d07b;
-  --BG-IMG: url('https://raw.githubusercontent.com/MaximusGugu/contas/refs/heads/main/img/bg-site-natureza.webp'); /* Deixei vazio conforme pedido */
+  --BG-IMG: url('https://raw.githubusercontent.com/MaximusGugu/contas/refs/heads/main/img/bg-site-natureza.webp');
+  --POSTIT: #f3db23;
 }
 
 body {
@@ -140,7 +146,7 @@ body {
   cursor: pointer;
   font-weight: 500;
   font-size: 16px;
-  background: var(--P06);
+  background: var(--P05);
   color: var(--P03);
 }
 
@@ -152,7 +158,7 @@ body {
   cursor: pointer;
   font-weight: 500;
   font-size: 16px;
-  background: var(--P05);
+  background: var(--P06);
   color: var(--P03);
 }
 
@@ -268,7 +274,20 @@ body {
   overflow: hidden;
   /* Reduzi para 1000px: quanto mais perto da altura real, mais rápida a resposta */
   max-height: 3000px; 
-  background-color: var(--P05);
+  background-color: var(--P06);
+  opacity: 1;
+  transition:
+    max-height 0.3s ease-in-out,
+    padding 0.4s ease-in-out,
+    opacity 0.3s ease;
+}
+
+.receitasBody {
+  padding: 20px;
+  overflow: hidden;
+  /* Reduzi para 1000px: quanto mais perto da altura real, mais rápida a resposta */
+  max-height: 3000px; 
+  background-color: var(--P05) !important; 
   opacity: 1;
   transition:
     max-height 0.3s ease-in-out,
@@ -288,13 +307,25 @@ body {
     opacity 0.2s ease;
 }
 
+.mes.collapsed .receitasBody {
+  max-height: 0;
+  padding-top: 0;
+  padding-bottom: 0;
+  opacity: 0;
+  /* Mesma velocidade para fechar */
+  transition:
+    max-height 0.3s ease-in-out,
+    padding 0.4s ease-in-out,
+    opacity 0.2s ease;
+}
+
 .mes.collapsed .mesHeader {
   opacity: 0.85;
 }
 
 .mes.collapsed .mesHeader:hover {
   opacity: 1;
-  background: var(--P06);
+  background: var(--P04);
   transform: scale(1.005);
 }
 
@@ -306,7 +337,7 @@ body {
 }
 
 .mesAtual .mesHeader {
-  background-color: var(--P06);
+  background-color: var(--P07);
   color: var(--P02);
   font-weight: bold;
   transition: background 0.3s, color 0.3s;
@@ -321,7 +352,7 @@ body {
 }
 
 .mesAtual.collapsed .mesHeader:hover {
-  background-color: var(--P06);
+  background-color: var(--P04);
 }
 
 .mesAtual .mesHeader:hover {
@@ -339,7 +370,7 @@ body {
 .coluna {
   flex: 1;
   min-width: 0;
-  background: var(--P02);
+  background: var(--P05);
   padding: 15px;
   border-radius: 10px;
   display: flex;
@@ -347,7 +378,6 @@ body {
   justify-content: space-between;
   min-height: 100px;
   color: var(--P08);
-  background-color: var(--P06);
 }
 
 .coluna h4 {
@@ -369,7 +399,6 @@ body {
   border-radius: 8px;
   display: flex;
   justify-content: space-between;
-  margin-bottom: 30px;
 }
 
 .valor, .salario, .conta {
@@ -450,23 +479,34 @@ body {
 }
 
 /* ================= INPUTS PADRÃO ================= */
-.inputPadrao {
-  border: 2px solid transparent;
-  height: 2.5em;
-  padding-left: 0.8em;
-  outline: none;
-  border-radius: 10px;
-  transition: all 0.3s;
-  box-sizing: border-box;
-  width: 100%;
-  background: var(--P07);
-  color: var(--P02);
+.inputPadrao {  
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid var(--P07);
+    color: inherit; /* Segue a cor do texto do tema */
+    padding: 4px 8px;
+    border-radius: 4px;
+    width: 100%;
+    font-family: inherit;
+    font-size: 13px;
+    outline: none;
 }
 
-.inputPadrao:hover, .inputPadrao:focus {
-  border: 2px solid var(--P04);
-  background-color: var(--P08)
+.inputPadrao:hover {
+    background: rgba(255, 255, 255, 0.1);  
+    border: 1px solid var(--P04);
+    transition: 0.4s;
 }
+
+.inputPadrao:focus {
+    background: rgba(255, 255, 255, 0.2);
+    border-color: var(--P04);
+}
+
+.inputPadrao option {
+    background: var(--P03);
+    color: var(--P07);
+}
+
 
 .linhaInputs {
   display: flex;
@@ -569,7 +609,7 @@ body {
 /* Ajuste do Rodapé para comportar o Tema */
 .siteFooter {
     background-color: var(--P07);
-    color: var(--P02);
+    color: var(--P01);
     padding: 15px 20px;
     border-radius: 10px;
     margin-top: 50px;
@@ -577,7 +617,11 @@ body {
 }
 
 .siteFooter a {
-  color: var(--P04)
+  color: var(--P02)
+}
+
+.siteFooter option {
+  color: var(--P08);
 }
 
 .siteFooter a:hover {
@@ -727,11 +771,32 @@ input.conta {
 }
 
 /* Campo manual (Travado pelo usuário) */
-input.conta.manual {
-  border-left: 5px solid var(--P01) !important;
-  background-color: #fffdf8 !important;
-  color: var(--P05);
-  font-weight: bold;
+input.conta.manual {  
+    background: var(--P07);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    color: inherit; /* Segue a cor do texto do tema */
+    padding: 4px 8px;
+    border-radius: 4px;
+    width: 100%;
+    font-family: inherit;
+    font-size: 13px;
+    outline: none;
+}
+
+input.conta.manual:hover {
+    background: var(--P08);
+    border: 1px solid var(--P04);
+    transition: 0.4s;
+}
+
+input.conta.manualadrao:focus {
+    background: var(--P08);
+    border-color: var(--P04);
+}
+
+input.conta.manual option {
+    background: var(--P08);
+    color: white;
 }
 
 /* Indica campo automático (cascata) */
@@ -833,8 +898,22 @@ input.conta:not(.manual) {
     padding-bottom: 5vh; /* Puxa levemente para cima visualmente */
 }
 
-.modal-content {
+.modal-content postit-amarelo {
     background: var(--P06);
+    padding: 30px;
+    border-radius: 20px;
+    width: 90%;
+    max-width: 400px;
+    box-shadow: 0 15px 35px rgba(0, 0, 0, 0.4);
+    color: var(--P07);
+}
+
+.modal-content postit-amarelo h3 {
+    color: var(--P07) !important;
+}
+
+.modal-content {
+    background: var(--P05);
     padding: 30px;
     border-radius: 20px;
     width: 90%;
@@ -845,7 +924,6 @@ input.conta:not(.manual) {
 
 .modal-content h3 {
     margin-top: 0;
-    color: var(--P03);
     font-size: 20px;
     margin-bottom: 20px;
 }
@@ -955,14 +1033,18 @@ input.conta:not(.manual) {
 
 .drag-handle:active { cursor: grabbing; }
 
-/* Efeito visual enquanto arrasta */
+/* Efeito visual durante o arrasto da tabela */
 .sortable-ghost {
-    opacity: 0.3;
-    background: var(--P01) !important;
+    opacity: 0.4;
+    background-color: var(--P04) !important;
 }
 
 .sortable-chosen {
-    background: rgba(255,255,255,0.1) !important;
+    background-color: rgba(255, 255, 255, 0.1) !important;
+}
+
+.drag-handle {
+    user-select: none;
 }
 
 .item-fixo-destaque {
@@ -978,9 +1060,12 @@ input.conta:not(.manual) {
 }
 
 element.style {
-    background: rgba(255, 255, 255, 0.1);
-    margin-bottom: 20px;
-    border-left: 5px solid var(--P01);
+    background: none;
+    border: none;
+    color: var(--P02);
+    cursor: pointer;
+    font-size: 20px;
+    padding: 0 5px;
 }
 
 #moduloContasFixas {
@@ -1067,10 +1152,10 @@ element.style {
   justify-content: space-between;
   font-size: 12px;
   padding: 4px 8px;
-  background: #f0f0f0;
+  background: var(--P05);
   border-radius: 6px;
   margin-bottom: 4px;
-  color: #555;
+  color: var(--P02);
   font-weight: bold;
   transition: background 0.2s, transform 0.1s;
   
@@ -1086,7 +1171,7 @@ element.style {
     transform: scale(0.98);
 }
 
-.item-cartao-resumo span:last-child { color: #a04070; }
+.item-cartao-resumo span:last-child { color: var(--P02); }
 
 .totalFinal {
   text-align: center;
@@ -1116,14 +1201,15 @@ element.style {
 
 .btn { padding: 10px 16px;
   border: none; border-radius: 8px;
-  background: var(--P05);
+  background: var(--P06);
   color: var(--P03);
   font-weight: bold;
   cursor: pointer;
  }
 
-#btn:hover {
+.btn:hover {
     background: var(--P04) !important;
+     transition: 0.2s;
 }
 
 .btn.sair { 
@@ -1136,12 +1222,6 @@ element.style {
 .auth-wrapper { display: flex; justify-content: center; align-items: center; min-height: 80vh; }
 
 input.conta { border-left: 5px solid #2ecc71 !important; color: #27ae60; }
-input.conta.manual {
-   border-left: 5px solid var(--P01) !important;
-    background-color: var(--P08) !important;
-    color: var(--P04);
-    font-weight: bold;
-   }
 
 .btn-cascata {
   background: var(--P03); color: white; border: none; border-radius: 8px;
@@ -1170,7 +1250,19 @@ input.conta.manual {
 
 .tabela-gastos { width: 100%; border-collapse: collapse; background: var(--P06); color: white; border-radius: 10px; overflow: hidden; margin: 15px 0; }
 .tabela-gastos th { background: rgba(0,0,0,0.3); padding: 12px; text-align: left; color: var(--P01); font-size: 11px; text-transform: uppercase; }
-.tabela-gastos td { padding: 8px 12px; border-bottom: 1px solid rgba(255,255,255,0.05); font-size: 13px; }
+.tabela-gastos td {
+    padding: 8px 12px;
+    border-bottom: 1px solid rgba(255,255,255,0.05);
+    font-size: 13px;
+    width: auto;            /* Força a célula a encolher ao máximo */
+    white-space: nowrap;  /* Impede que o texto quebre linha */
+}
+
+/* Agora, precisamos dizer que a primeira coluna (Nome do Gasto) deve expandir */
+.tabela-gastos td:first-child {
+    width: auto;          /* Ela volta a ser flexível */
+    white-space: normal;  /* Se o nome for gigante, ele pode quebrar linha aqui */
+}
 
 .badge { padding: 4px 10px; border-radius: 15px; font-weight: bold; display: inline-block; min-width: 80px; text-align: center; color: white; font-size: 10px; }
 .badge.categoria { color: #D78341; border: 1px solid #D78341; }
@@ -1187,10 +1279,10 @@ input.conta.manual {
 }
 
 /* Inputs de edição dentro da tabela de gastos */
-.input-tabela-edit {
-    background: rgba(255, 255, 255, 0.1);
-    border: 1px solid rgba(255, 255, 255, 0.2);
-    color: white;
+.input-tabela-edit {  
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    color: inherit; /* Segue a cor do texto do tema */
     padding: 4px 8px;
     border-radius: 4px;
     width: 100%;
@@ -1199,14 +1291,20 @@ input.conta.manual {
     outline: none;
 }
 
+.input-tabela-edit:hover {
+    background: rgba(255, 255, 255, 0.1);  
+    border: 1px solid var(--P04);
+    transition: 0.4s;
+}
+
 .input-tabela-edit:focus {
     background: rgba(255, 255, 255, 0.2);
-    border-color: var(--P01);
+    border-color: var(--P04);
 }
 
 .input-tabela-edit option {
     background: var(--P03);
-    color: white;
+    color: var(--P07);
 }
 
 /* Ajuste fino nos botões de ação para caber tudo na Home */
@@ -1320,4 +1418,210 @@ input.conta:focus {
 
 .seletor-cor-quadrado::-moz-color-swatch {
     border: none;
+}
+
+/* GRID CALENDÁRIO */
+.calendario-container {
+    background: var(--P06);
+    border-radius: 20px;
+    padding: 20px;
+    color: var(--P02);
+}
+
+.cal-grid {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 8px;
+    margin-top: 15px;
+}
+
+.cal-day-name {
+    text-align: center;
+    font-weight: bold;
+    color: var(--P04);
+    font-size: 14px;
+    padding-bottom: 10px;
+}
+
+.cal-day {
+    background: rgba(255,255,255,0.05);
+    border-radius: 8px;
+    padding: 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    border: 1px solid transparent;
+}
+
+.cal-day .event-reminder {
+    margin-bottom: 5px;
+}
+
+.cal-day.today { border-color: var(--P04); background: rgba(215, 131, 65, 0.1); }
+.cal-day.other-month { opacity: 0.2; pointer-events: none; }
+.cal-number { font-size: 14px; font-weight: bold; margin-bottom: 5px; }
+
+/* EVENTOS */
+.cal-event {
+    font-size: 10px;
+    padding: 3px 6px;
+    border-radius: 4px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font-weight: bold;
+}
+
+.event-salary { background: #f1c40f; color: #000; }
+.event-expense { background: #e74c3c; color: #fff; }
+.event-income { background: #27ae60; color: #fff; }
+.event-card { background: var(--P04); color: #fff; }
+.event-reminder { background: var(--POSTIT); color: var(--P08); cursor: pointer; rotate: -3deg; scale: 1.2;
+box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+  transition: transform 0.1s ease-in-out;
+  will-change: transform;
+}
+
+.event-reminder:hover {
+  transform: scale(1.1);
+}
+
+/* POST-IT */
+.postit {
+    background: #f1c40f;
+    width: 250px;
+    padding: 25px;
+    transform: rotate(-2deg);
+    box-shadow: 10px 10px 20px rgba(0,0,0,0.3);
+    position: relative;
+}
+
+.postit-content { color: #2c3e50; }
+.postit-content h3 { margin-top: 0; border-bottom: 1px solid rgba(0,0,0,0.1); padding-bottom: 5px; }
+.postit-actions { display: flex; gap: 10px; margin-top: 15px; }
+.btn-postit {
+    background: rgba(0,0,0,0.05);
+    border: none;
+    cursor: pointer;
+    font-size: 18px;
+    padding: 5px;
+    border-radius: 4px;
+}
+.btn-postit:hover { background: rgba(0,0,0,0.1); }
+
+.cal-top-actions { display: flex; justify-content: flex-end; margin-bottom: 15px; }
+
+
+
+/* Navegação do Calendário */
+.cal-top-actions {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 15px;
+    gap: 10px;
+}
+
+.cal-nav-buttons {
+    display: flex;
+    gap: 5px;
+    align-items: center;
+}
+
+.cal-header {
+    text-align: center;
+    padding: 10px;
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 10px 10px 0 0;
+}
+
+.cal-header h2 {
+    margin: 0;
+    color: var(--P02);
+    text-transform: capitalize;
+}
+
+/* Ajuste para o botão de hoje */
+#btnToday {
+    background: var(--P06);
+    border: 1px solid var(--P04);
+    color: var(--P02);
+}
+
+#btnToday:hover {
+    background: var(--P04);
+    border: 1px solid var(--P04);
+    color: var(--P02);
+}
+
+.lista-lembretes-home {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.item-lembrete-home {
+    background: rgba(255, 255, 255, 0.05);
+    padding: 12px;
+    border-radius: 8px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-left: 4px solid var(--P04);
+}
+
+.item-lembrete-home:hover {
+  background:rgba(255, 255, 255, 0.5);
+  cursor: pointer;
+}
+
+.item-lembrete-home .info {
+    display: flex;
+    flex-direction: column;
+}
+
+.item-lembrete-home .titulo {
+    font-weight: bold;
+    color: var(--P02);
+    font-size: 14px;
+}
+
+.item-lembrete-home .data {
+    font-size: 11px;
+    opacity: 0.7;
+    color: var(--P02);
+}
+
+.lembrete-vazio {
+    text-align: center;
+    padding: 20px;
+    opacity: 0.5;
+    font-style: italic;
+    font-size: 13px;
+}
+
+/* Garante que tabelas dentro dos módulos fixos fiquem bonitas */
+.mesBody .tabela-gastos {
+    margin-top: 0;
+    background: rgba(0, 0, 0, 0.2); /* Fundo um pouco mais escuro que o card */
+}
+
+.mesBody .tabela-gastos th {
+    background: rgba(0, 0, 0, 0.3);
+}
+
+/* Muda a cor dos ícones de calendário e relógio (Chrome, Edge, Safari) */
+.inputPadrao::-webkit-calendar-picker-indicator {
+    cursor: pointer;
+    /* Essa combinação de filtros transforma o ícone preto original na cor --P04 */
+    filter: invert(60%) sepia(80%) saturate(500%) hue-rotate(340deg);
+    opacity: 0.8;
+    transition: 0.2s;
+}
+
+/* Efeito ao passar o mouse */
+.inputPadrao::-webkit-calendar-picker-indicator:hover {
+    filter: invert(80%) sepia(50%) saturate(1000%) hue-rotate(340deg);
+    opacity: 1;
+    transform: scale(1.1);
 }

@@ -1,6 +1,7 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, onAuthStateChanged, signOut, updatePassword, reauthenticateWithCredential, EmailAuthProvider } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import { getFirestore, doc, setDoc, getDoc } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+import { renderCalendario, calcularDiaPagamento } from "./calendario.js";
 
 const firebaseConfig = {
   apiKey: "AIzaSyBb12Oevy0LkVc876iCh-xYegQWfqCgC3I",
@@ -20,6 +21,7 @@ let usuarioLogado = null;
 let senhaDoUsuario = sessionStorage.getItem("temp_key") || ""; 
 let dados = {};
 let parcelasMemoria = [];
+let lembretes = [];
 let mesesDOM = [];
 let chartResumo = null;
 let mesesAbertos = new Set(); 
@@ -42,6 +44,55 @@ let contextParcelaCartao = { mes: 0, ano: 2024 };
 function aplicarTema(tema) { 
     const t = tema || "planetario";
     document.body.className = "theme-" + t; 
+}
+
+function atualizarTituloSite() {
+    const tituloEl = document.getElementById("tituloSite");
+    if (configuracoes.nomeUsuario && configuracoes.nomeUsuario.trim() !== "") {
+        const nomeUpper = configuracoes.nomeUsuario.toUpperCase();
+        // Muda o texto dentro da página (H1)
+        if (tituloEl) tituloEl.innerText = "CONTAS DE " + nomeUpper;
+        // Muda o nome na aba do navegador (Title)
+        document.title = "Contas de " + configuracoes.nomeUsuario;
+    } else {
+        // Volta para o padrão se não houver nome
+        if (tituloEl) tituloEl.innerText = "CONTAS MENSAIS";
+        document.title = "Contas Mensais - Premium";
+    }
+}
+
+function renderLembretesHome() {
+    const lista = document.getElementById("listaLembretesHome");
+    if (!lista) return;
+    lista.innerHTML = "";
+
+    const hojeSimples = new Date().toISOString().split('T')[0];
+
+    // Filtra lembretes de hoje em diante e ordena por data
+    const proximos = lembretes
+        .filter(l => l.data >= hojeSimples)
+        .sort((a, b) => a.data.localeCompare(b.data))
+        .slice(0, 3); // Mostra apenas os 3 primeiros
+
+    if (proximos.length === 0) {
+        lista.innerHTML = `<div class="lembrete-vazio">Nenhum lembrete próximo...</div>`;
+        return;
+    }
+
+    proximos.forEach(l => {
+        const dataBr = l.data.split('-').reverse().join('/');
+        const div = document.createElement("div");
+        div.className = "item-lembrete-home";
+        div.innerHTML = `
+            <div class="info">
+                <span class="titulo">${l.nome}</span>
+                <span class="data">📅 ${dataBr} ${l.hora ? ' às ' + l.hora : ''}</span>
+            </div>
+            <button class="btn-postit" style="background:none; color:var(--P04); font-size:18px;"> </button>
+        `;
+        div.onclick = () => abrirPostit(l);
+        lista.appendChild(div);
+    });
 }
 
 function getMesReferenciaAtivo() {
@@ -109,7 +160,7 @@ async function salvarFirebase() {
   try {
     const btn = document.getElementById("salvarNuvemBtn"); 
     btn.innerText = "⌛ SALVANDO...";
-    const pacote = await encryptData({ dados, parcelasMemoria, contasFixas, receitasFixas, salarioFixoBase, categorias, configuracoes, cartoes, gastosDetalhes }, senhaDoUsuario);
+    const pacote = await encryptData({ dados, parcelasMemoria, lembretes, contasFixas, receitasFixas, salarioFixoBase, categorias, configuracoes, cartoes, gastosDetalhes }, senhaDoUsuario);
     await setDoc(doc(db, "financas", usuarioLogado.uid), pacote);
     btn.innerText = "✅ SALVO NA NUVEM"; 
     salvarDadosLocal(false);
@@ -142,12 +193,13 @@ function atualizarTudo(anoParaVisualizar, pendente = true) {
       if (!ehOPrimeiroMesDeTodos && m.contaManual !== true) {
           m.conta = saldoAcumulado;
       }
-      const dManuais = (m.despesas || []).filter(x => x.checked).reduce((acc, b) => acc + b.valor, 0);
+const dManuais = (m.despesas || []).filter(x => x.checked).reduce((acc, b) => acc + b.valor, 0);
       const gastosMes = (gastosDetalhes[ano] || []).filter(g => g.mes === idx);
       const tCr = gastosMes.filter(g => cartoes.find(c => c.id == g.cartaoId)?.tipo === 'Crédito').reduce((acc, g) => acc + g.valor, 0);
+      const fixasNoCard = contasFixas.filter(f => f.ativo && f.cartaoId).reduce((acc, f) => acc + f.valor, 0);
       const eTotal = (m.empresa || []).filter(x => x.checked).reduce((acc, b) => acc + b.valor, 0);
       const tDisp = (m.salario || 0) + (m.conta || 0) + eTotal;
-      const saldoFinal = tDisp - (dManuais + tCr);
+      const saldoFinal = tDisp - (dManuais + tCr + fixasNoCard);
       m.saldoCalculadoFinal = saldoFinal; 
       saldoAcumulado = saldoFinal; ehOPrimeiroMesDeTodos = false;
 
@@ -174,7 +226,7 @@ function atualizarTudo(anoParaVisualizar, pendente = true) {
                   });
               }
           }
-          dom.querySelector(".totalDespesas").textContent = formatar(dManuais + tCr);
+          dom.querySelector(".totalDespesas").textContent = formatar(dManuais + tCr + fixasNoCard);
           dom.querySelector(".totalDinheiro").textContent = formatar(tDisp);
           const sEl = dom.querySelector(".saldo"); 
           sEl.textContent = formatar(saldoFinal);
@@ -248,12 +300,24 @@ function aplicarParcelas() {
 
 // ================= INTERFACE RESUMO =================
 function criarItem(lista, d, dataArray, ano) {
-  const div = document.createElement("div"); div.className = "item";
-  div.innerHTML = `<input type="checkbox" ${d.checked?'checked':''}> <input class="nome inputPadrao" value="${d.nome}"> <input class="valor inputPadrao" value="${formatar(d.valor)}"> <button class="removeItem">×</button>`;
-  const [check, nome, valor, btn] = div.children;
+  const tr = document.createElement("tr");
+  tr.innerHTML = `
+    <td style="width: 1%;"><input type="checkbox" ${d.checked?'checked':''}></td>
+    <td><input class="input-tabela-edit" value="${d.nome}" placeholder="Nome..."></td>
+    <td style="width: fit-content;"><input class="input-tabela-edit valor" value="${formatar(d.valor)}" style="text-align:right;"></td>
+    <td style="width: fit-content;"><button class="removeItem">×</button></td>
+  `;
+  
+  const [tdCheck, tdNome, tdValor, tdBtn] = tr.children;
+  const check = tdCheck.querySelector("input");
+  const nome = tdNome.querySelector("input");
+  const valor = tdValor.querySelector("input");
+  const btn = tdBtn.querySelector("button");
+
   check.onchange = () => { d.checked = check.checked; atualizarTudo(ano); };
   nome.onblur = () => { d.nome = nome.value; salvarDadosLocal(true); };
   aplicarComportamentoInput(valor, () => d.valor, (v) => { d.valor = v; atualizarTudo(ano); }, ano);
+  
   btn.onclick = () => {
       if(d.parcelaId) {
           if(confirm("Deseja apagar TODAS as parcelas desta compra?")) {
@@ -262,7 +326,7 @@ function criarItem(lista, d, dataArray, ano) {
           }
       } else { dataArray.splice(dataArray.indexOf(d), 1); carregarAno(); }
   };
-  lista.appendChild(div);
+  lista.appendChild(tr);
 }
 
 function criarMesDOM(ano, index, data) {
@@ -270,8 +334,59 @@ function criarMesDOM(ano, index, data) {
   const header = document.createElement("div"); header.className = "mesHeader";
   header.innerHTML = `<span>${nomesMesesFull[index]} ${ano}</span><div><span class="mesTotal">0,00</span><button class="duplicarMes" title="Duplicar">📑</button><button class="removeMes">×</button></div>`;
   header.onclick = () => { mes.classList.toggle("collapsed"); if(mes.classList.contains("collapsed")) mesesAbertos.delete(index); else mesesAbertos.add(index); };
+header.querySelector(".removeMes").onclick = (e) => { e.stopPropagation(); if(confirm("Apagar mês?")) { dados[ano].meses.splice(index, 1); carregarAno(); } };
+header.querySelector(".duplicarMes").onclick = (e) => { e.stopPropagation(); const clone = JSON.parse(JSON.stringify(data)); dados[ano].meses.push(clone); carregarAno(); };
   const body = document.createElement("div"); body.className = "mesBody";
-  body.innerHTML = `<div class="container"><div class="coluna despesas"><div class="topoColuna"><h4>DESPESAS</h4></div><div class="conteudoColuna"><div class="listaDesp"></div><div class="acoesDesp" style="display:flex; gap:5px; margin-top:10px;"><button class="addDesp btn" style="font-size:11px; padding:5px 10px;">+ Despesa</button><button class="addParcela btn" style="font-size:11px; padding:5px 10px;">+ Parcela</button></div><div class="listaCartoesDinamica"></div></div><p class="rodapeColuna">Total: <span class="totalDespesas">0,00</span></p></div><div class="coluna dinheiro"><div class="topoColuna"><h4>RENDAS</h4></div><div class="conteudoColuna"><div class="linhaInputs"><div class="campo"><label>Salário</label><input type="text" class="salario inputPadrao"></div><div class="campo"><label>Conta</label><input type="text" class="conta inputPadrao"></div><button class="btn-cascata" title="Vincular meses seguintes">🔗</button></div><h5>OUTROS</h5><div class="listaEmp"></div><button class="addEmp btn" style="height:35px; cursor:pointer; width:100%; margin-top:10px;">+</button></div><p class="rodapeColuna">Total: <span class="totalDinheiro">0,00</span></p></div></div><div class="totalFinal">TOTAL: <span class="saldo">0,00</span></div>`;
+  body.innerHTML = `
+    <div class="container">
+        <div class="coluna despesas">
+            <div class="topoColuna"><h4>DESPESAS</h4></div>
+            <div class="conteudoColuna">
+                <table class="tabela-gastos">
+                    <thead>
+                        <tr>
+                            <th></th>
+                            <th>Item</th>
+                            <th style="text-align:right;">Valor</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody class="listaDesp"></tbody>
+                </table>
+                <div class="acoesDesp">
+                    <button class="addDesp btn">+ Despesa</button>
+                    <button class="addParcela btn">+ Parcela</button>
+                </div>
+                <div class="listaCartoesDinamica"></div>
+            </div>
+            <p class="rodapeColuna">Total: <span class="totalDespesas">0,00</span></p>
+        </div>
+        <div class="coluna dinheiro">
+            <div class="topoColuna"><h4>RENDAS</h4></div>
+            <div class="conteudoColuna">
+                <div class="linhaInputs">
+                    <div class="campo"><label>Salário</label><input type="text" class="salario inputPadrao"></div>
+                    <div class="campo"><label>Conta</label><input type="text" class="conta inputPadrao"></div>
+                    <button class="btn-cascata" title="Vincular meses seguintes">🔗</button>
+                </div>
+                <h5>OUTROS</h5>
+                <table class="tabela-gastos">
+                    <thead>
+                        <tr>
+                            <th></th>
+                            <th>Origem</th>
+                            <th style="text-align:right;">Valor</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody class="listaEmp"></tbody>
+                </table>
+                <button class="addEmp btn" style="width:100%; margin-top:10px;">+</button>
+            </div>
+            <p class="rodapeColuna">Total: <span class="totalDinheiro">0,00</span></p>
+        </div>
+    </div>
+    <div class="totalFinal">TOTAL: <span class="saldo">0,00</span></div>`;
   const listD = body.querySelector(".listaDesp"); const listE = body.querySelector(".listaEmp");
   data.despesas.forEach(item => criarItem(listD, item, data.despesas, ano)); (data.empresa || []).forEach(item => criarItem(listE, item, data.empresa, ano));
   const inS = body.querySelector("input.salario"); const inC = body.querySelector("input.conta"); const btnC = body.querySelector(".btn-cascata");
@@ -308,29 +423,190 @@ function criarMesDOM(ano, index, data) {
 // ================= GESTÃO DE GASTOS DETALHADOS =================
 
 function renderPaginaGastos() {
-    const area = document.getElementById("areaGastosMensais"); const anoView = document.getElementById("anoGastos").value; const { mesAt, anoAt } = getMesReferenciaAtivo();
+    const area = document.getElementById("areaGastosMensais"); 
+    const anoView = document.getElementById("anoGastos").value; 
+    const { mesAt, anoAt } = getMesReferenciaAtivo();
     area.innerHTML = "";
+
     for (let m = 0; m < 12; m++) {
-        const mesBox = document.createElement("div"); const isMesAtual = (m === mesAt && Number(anoView) === anoAt); const isOpen = mesesGastosAbertos.has(m) || isMesAtual;
+        const mesBox = document.createElement("div"); 
+        const isMesAtual = (m === mesAt && Number(anoView) === anoAt); 
+        const isOpen = mesesGastosAbertos.has(m) || isMesAtual;
         mesBox.className = "mes " + (isOpen ? "" : "collapsed") + (isMesAtual ? " mesAtual" : "");
-        let gastosMes = (gastosDetalhes[anoView] || []).filter(g => g.mes === m); const filtroAtual = filtrosPorMes[m] || "todos";
-        if(filtroAtual !== "todos") gastosMes = gastosMes.filter(g => g.cartaoId == filtroAtual);
-        const tCr = gastosMes.filter(g => cartoes.find(c => c.id == g.cartaoId)?.tipo === 'Crédito').reduce((a,b) => a + b.valor, 0);
-        const tDb = gastosMes.filter(g => cartoes.find(c => c.id == g.cartaoId)?.tipo === 'Débito').reduce((a,b) => a + b.valor, 0);
-        mesBox.innerHTML = `<div class="mesHeader"><span>${nomesMesesFull[m]} ${anoView}</span><span>${formatar(tCr + tDb)}</span></div><div class="mesBody"><div class="filtro-interno" style="margin-bottom: 15px; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 10px; display:flex; align-items:center; gap:10px;"><span style="font-size:12px; opacity:0.8">Exibir cartão:</span><select class="inputPadrao sel-filtro-mes" style="width:auto; height:30px; font-size:12px;"><option value="todos">Todos</option>${cartoes.map(c => `<option value="${c.id}" ${filtroAtual == c.id ? 'selected' : ''}>${c.nome}</option>`).join('')}</select></div><div id="chart-pizza-${m}" style="display:flex; justify-content:center; margin: 15px 0;"></div><table class="tabela-gastos"><thead><tr><th>Gasto</th><th style="cursor:pointer" onclick="document.getElementById('modalCategorias').style.display='flex'; renderCategoriasModal();">Categoria ✏️</th><th>Cartão</th><th>Valor</th><th></th></tr></thead><tbody id="tbody-gastos-${m}"></tbody><tfoot><tr><td><input type="text" placeholder="Gasto..." id="add-nome-${m}" class="inputPadrao"></td><td><select id="add-cat-${m}" class="inputPadrao">${categorias.map(c => `<option value="${c.name}">${c.name}</option>`).join('')}</select></td><td><select id="add-card-${m}" class="inputPadrao">${cartoes.map(c => `<option value="${c.id}">${c.nome}</option>`).join('')}</select></td><td><input type="text" placeholder="0,00" id="add-val-${m}" class="inputPadrao input-valor-add"></td><td><div style="display:flex; gap:5px"><button class="btn" id="btn-add-${m}">+</button><button class="btn" style="background:#8e44ad" id="btn-add-parcela-${m}">🗓️</button></div></td></tr></tfoot></table><div class="resumo-gastos-inferior"><div class="barra-resumo credito">Crédito <span>${formatar(tCr)}</span></div><div class="barra-resumo debito">Débito <span>${formatar(tDb)}</span></div><div class="barra-resumo total">TOTAL <span>${formatar(tCr + tDb)}</span></div></div></div>`;
-        mesBox.querySelector(".mesHeader").onclick = () => { mesBox.classList.toggle("collapsed"); if(mesBox.classList.contains("collapsed")) mesesGastosAbertos.delete(m); else { mesesGastosAbertos.add(m); renderPizza(m, gastosMes); } };
-        const selF = mesBox.querySelector(".sel-filtro-mes"); selF.onclick = (e) => e.stopPropagation(); selF.onchange = (e) => { filtrosPorMes[m] = e.target.value; renderPaginaGastos(); };
-        area.appendChild(mesBox); if(isOpen) setTimeout(() => renderPizza(m, gastosMes), 50);
+
+        // --- LÓGICA DE GASTOS ---
+        const filtroAtual = filtrosPorMes[m] || "todos";
+        
+        // 1. Gastos Manuais (Detalhes)
+        let gastosManuais = (gastosDetalhes[anoView] || []).filter(g => g.mes === m);
+        
+        // 2. Gastos Fixos vindos das Configurações (apenas os que têm cartão)
+        let gastosFixos = contasFixas.filter(f => f.ativo && f.cartaoId);
+
+        // Aplicar Filtro de Cartão em ambos
+        if(filtroAtual !== "todos") {
+            gastosManuais = gastosManuais.filter(g => g.cartaoId == filtroAtual);
+            gastosFixos = gastosFixos.filter(f => f.cartaoId == filtroAtual);
+        }
+
+        // Calcular Totais (Fixos + Manuais)
+        const todosGastos = [...gastosFixos, ...gastosManuais];
+        const tCr = todosGastos.filter(g => cartoes.find(c => c.id == g.cartaoId)?.tipo === 'Crédito').reduce((a,b) => a + b.valor, 0);
+        const tDb = todosGastos.filter(g => cartoes.find(c => c.id == g.cartaoId)?.tipo === 'Débito').reduce((a,b) => a + b.valor, 0);
+
+        mesBox.innerHTML = `
+            <div class="mesHeader">
+                <span>${nomesMesesFull[m]} ${anoView}</span>
+                <span>${formatar(tCr + tDb)}</span>
+            </div>
+            <div class="mesBody">
+                <div class="filtro-interno">
+                    <span style="font-size:12px; opacity:0.8">Exibir cartão:</span>
+                    <select class="inputPadrao sel-filtro-mes" style="width:auto; height:30px; font-size:12px;">
+                        <option value="todos">Todos</option>
+                        ${cartoes.map(c => `<option value="${c.id}" ${filtroAtual == c.id ? 'selected' : ''}>${c.nome}</option>`).join('')}
+                    </select>
+                </div>
+                <div id="chart-pizza-${m}" style="display:flex; justify-content:center; margin: 15px 0;"></div>
+                <table class="tabela-gastos">
+                    <thead>
+                        <tr>
+                            <th>Gasto</th>
+                            <th style="cursor:pointer" onclick="document.getElementById('modalCategorias').style.display='flex'; renderCategoriasModal();">Categoria ✏️</th>
+                            <th>Cartão</th>
+                            <th>Valor</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody id="tbody-gastos-${m}"></tbody>
+                    <tfoot>
+                        <tr>
+                            <td><input type="text" placeholder="Gasto..." id="add-nome-${m}" class="inputPadrao"></td>
+                            <td><select id="add-cat-${m}" class="inputPadrao">${categorias.map(c => `<option value="${c.name}">${c.name}</option>`).join('')}</select></td>
+                            <td><select id="add-card-${m}" class="inputPadrao">${cartoes.map(c => `<option value="${c.id}">${c.nome}</option>`).join('')}</select></td>
+                            <td><input type="text" placeholder="0,00" id="add-val-${m}" class="inputPadrao input-valor-add"></td>
+                            <td>
+                                <div style="display:flex; gap:5px">
+                                    <button class="btn" id="btn-add-${m}">+</button>
+                                    <button class="btn" style="background:#8e44ad" id="btn-add-parcela-${m}">🗓️</button>
+                                </div>
+                            </td>
+                        </tr>
+                    </tfoot>
+                </table>
+                <div class="resumo-gastos-inferior">
+                    <div class="barra-resumo credito">Crédito <span>${formatar(tCr)}</span></div>
+                    <div class="barra-resumo debito">Débito <span>${formatar(tDb)}</span></div>
+                    <div class="barra-resumo total">TOTAL <span>${formatar(tCr + tDb)}</span></div>
+                </div>
+            </div>`;
+
+        mesBox.querySelector(".mesHeader").onclick = () => { 
+            mesBox.classList.toggle("collapsed"); 
+            if(mesBox.classList.contains("collapsed")) mesesGastosAbertos.delete(m); 
+            else { mesesGastosAbertos.add(m); renderPizza(m, [...gastosFixos, ...gastosManuais]); } 
+        };
+
+        const selF = mesBox.querySelector(".sel-filtro-mes"); 
+        selF.onclick = (e) => e.stopPropagation(); 
+        selF.onchange = (e) => { filtrosPorMes[m] = e.target.value; renderPaginaGastos(); };
+
+        area.appendChild(mesBox); 
+        if(isOpen) setTimeout(() => renderPizza(m, [...gastosFixos, ...gastosManuais]), 50);
+
         const tbody = document.getElementById(`tbody-gastos-${m}`);
-        gastosMes.forEach((g, idx) => {
-            const tr = document.createElement("tr"); const catI = categorias.find(c => c.name === g.categoria) || {color: "#888"};
-            tr.innerHTML = `<td><input type="text" class="input-tabela-edit" value="${g.nome}" data-key="nome"></td><td><select class="input-tabela-edit" data-key="categoria" style="border-left: 5px solid ${catI.color}">${categorias.map(c => `<option value="${c.name}" ${g.categoria === c.name ? 'selected' : ''}>${c.name}</option>`).join('')}</select></td><td><select class="input-tabela-edit" data-key="cartaoId">${cartoes.map(c => `<option value="${c.id}" ${g.cartaoId == c.id ? 'selected' : ''}>${c.nome}</option>`).join('')}</select></td><td><input type="text" class="input-tabela-edit" value="${formatar(g.valor)}" data-key="valor"></td><td><button class="removeItem" id="rem-${m}-${idx}">×</button></td>`;
-            tr.querySelectorAll('.input-tabela-edit').forEach(input => { input.onblur = (e) => { const key = input.getAttribute('data-key'); let val = e.target.value; if(key === 'valor') val = parseValor(val); g[key] = val; salvarDadosLocal(); renderPaginaGastos(); }; if(input.tagName === 'INPUT') input.onkeydown = (e) => { if(e.key === 'Enter') input.blur(); }; });
-            tr.querySelector(".removeItem").onclick = () => { if(g.parcelaId) { if(confirm("Apagar todas as parcelas?")) { Object.keys(gastosDetalhes).forEach(ano => { gastosDetalhes[ano] = gastosDetalhes[ano].filter(item => item.parcelaId !== g.parcelaId); }); salvarDadosLocal(); renderPaginaGastos(); } } else { gastosDetalhes[anoView] = gastosDetalhes[anoView].filter(item => item !== g); salvarDadosLocal(); renderPaginaGastos(); } };
+
+        // --- RENDERIZAR GASTOS FIXOS (SINCRONIZADOS) ---
+        if (gastosFixos.length > 0) {
+            const trHeader = document.createElement("tr");
+            trHeader.innerHTML = `<td colspan="5" style="background: rgba(255,255,255,0.05); font-size: 10px; font-weight: bold; color: var(--P04); padding: 5px 12px;">DESPESAS FIXAS SINCRONIZADAS</td>`;
+            tbody.appendChild(trHeader);
+
+            gastosFixos.forEach(g => {
+                const tr = document.createElement("tr");
+                tr.style.opacity = "0.8"; // Diferenciar visualmente
+                const catI = categorias.find(c => c.name === g.categoria) || {color: "#888"};
+                const cardN = cartoes.find(c => c.id == g.cartaoId)?.nome || "Cartão";
+                
+                tr.innerHTML = `
+                    <td style="font-style: italic;">${g.nome}</td>
+                    <td><span class="badge" style="border: 1px solid ${catI.color}; color: ${catI.color}">${g.categoria}</span></td>
+                    <td>💳 ${cardN}</td>
+                    <td>${formatar(g.valor)}</td>
+                    <td title="Gerenciado em 'Resumo'">⚙️</td>
+                `;
+                tbody.appendChild(tr);
+            });
+
+            const trSpacer = document.createElement("tr");
+            trSpacer.innerHTML = `<td colspan="5" style="background: rgba(255,255,255,0.05); font-size: 10px; font-weight: bold; color: var(--P04); padding: 5px 12px;">GASTOS DO MÊS</td>`;
+            tbody.appendChild(trSpacer);
+        }
+
+        // --- RENDERIZAR GASTOS MANUAIS ---
+        gastosManuais.forEach((g, idx) => {
+            const tr = document.createElement("tr"); 
+            const catI = categorias.find(c => c.name === g.categoria) || {color: "#888"};
+            tr.innerHTML = `
+                <td><input type="text" class="input-tabela-edit" value="${g.nome}" data-key="nome"></td>
+                <td><select class="input-tabela-edit" data-key="categoria" style="border-left: 5px solid ${catI.color}">${categorias.map(c => `<option value="${c.name}" ${g.categoria === c.name ? 'selected' : ''}>${c.name}</option>`).join('')}</select></td>
+                <td><select class="input-tabela-edit" data-key="cartaoId">${cartoes.map(c => `<option value="${c.id}" ${g.cartaoId == c.id ? 'selected' : ''}>${c.nome}</option>`).join('')}</select></td>
+                <td><input type="text" class="input-tabela-edit" value="${formatar(g.valor)}" data-key="valor"></td>
+                <td><button class="removeItem" id="rem-${m}-${idx}">×</button></td>`;
+            
+            tr.querySelectorAll('.input-tabela-edit').forEach(input => { 
+                input.onblur = (e) => { 
+                    const key = input.getAttribute('data-key'); 
+                    let val = e.target.value; 
+                    if(key === 'valor') val = parseValor(val); 
+                    g[key] = val; 
+                    salvarDadosLocal(); 
+                    renderPaginaGastos(); 
+                }; 
+                if(input.tagName === 'INPUT') input.onkeydown = (e) => { if(e.key === 'Enter') input.blur(); }; 
+            });
+
+            tr.querySelector(".removeItem").onclick = () => { 
+                if(g.parcelaId) { 
+                    if(confirm("Apagar todas as parcelas?")) { 
+                        Object.keys(gastosDetalhes).forEach(ano => { gastosDetalhes[ano] = gastosDetalhes[ano].filter(item => item.parcelaId !== g.parcelaId); }); 
+                        salvarDadosLocal(); 
+                        renderPaginaGastos(); 
+                    } 
+                } else { 
+                    gastosDetalhes[anoView] = gastosDetalhes[anoView].filter(item => item !== g); 
+                    salvarDadosLocal(); 
+                    renderPaginaGastos(); 
+                } 
+            };
             tbody.appendChild(tr);
         });
-        document.getElementById(`btn-add-${m}`).onclick = () => { const n = document.getElementById(`add-nome-${m}`).value, c = document.getElementById(`add-cat-${m}`).value, crd = document.getElementById(`add-card-${m}`).value, v = parseValor(document.getElementById(`add-val-${m}`).value); if(!n || v <= 0) return; if(!gastosDetalhes[anoView]) gastosDetalhes[anoView] = []; gastosDetalhes[anoView].push({ mes: m, nome: n, valor: v, categoria: c, cartaoId: crd }); salvarDadosLocal(); renderPaginaGastos(); };
-        document.getElementById(`btn-add-parcela-${m}`).onclick = () => { contextParcelaCartao = { mes: m, ano: Number(anoView) }; document.getElementById("pcNome").value = document.getElementById(`add-nome-${m}`).value; document.getElementById("pcValorTotal").value = document.getElementById(`add-val-${m}`).value; const sCard = document.getElementById("pcCartao"); sCard.innerHTML = cartoes.map(c => `<option value="${c.id}">${c.nome}</option>`).join(''); sCard.value = document.getElementById(`add-card-${m}`).value; const sCat = document.getElementById("pcCategoria"); sCat.innerHTML = categorias.map(c => `<option value="${c.name}">${c.name}</option>`).join(''); sCat.value = document.getElementById(`add-cat-${m}`).value; document.getElementById("modalParcelaCartao").style.display = "flex"; };
+
+        // Configuração dos botões de Adicionar...
+        document.getElementById(`btn-add-${m}`).onclick = () => { 
+            const n = document.getElementById(`add-nome-${m}`).value, 
+                  c = document.getElementById(`add-cat-${m}`).value, 
+                  crd = document.getElementById(`add-card-${m}`).value, 
+                  v = parseValor(document.getElementById(`add-val-${m}`).value); 
+            if(!n || v <= 0) return; 
+            if(!gastosDetalhes[anoView]) gastosDetalhes[anoView] = []; 
+            gastosDetalhes[anoView].push({ mes: m, nome: n, valor: v, categoria: c, cartaoId: crd }); 
+            salvarDadosLocal(); 
+            renderPaginaGastos(); 
+        };
+
+        document.getElementById(`btn-add-parcela-${m}`).onclick = () => { 
+            contextParcelaCartao = { mes: m, ano: Number(anoView) }; 
+            document.getElementById("pcNome").value = document.getElementById(`add-nome-${m}`).value; 
+            document.getElementById("pcValorTotal").value = document.getElementById(`add-val-${m}`).value; 
+            const sCard = document.getElementById("pcCartao"); 
+            sCard.innerHTML = cartoes.map(c => `<option value="${c.id}">${c.nome}</option>`).join(''); 
+            sCard.value = document.getElementById(`add-card-${m}`).value; 
+            const sCat = document.getElementById("pcCategoria"); 
+            sCat.innerHTML = categorias.map(c => `<option value="${c.name}">${c.name}</option>`).join(''); 
+            sCat.value = document.getElementById(`add-cat-${m}`).value; 
+            document.getElementById("modalParcelaCartao").style.display = "flex"; 
+        };
     }
 }
 
@@ -351,28 +627,115 @@ function renderPizza(mesIdx, gastos) {
 }
 
 function renderContasFixas() {
-  const lista = document.getElementById("listaContasFixas"); if (!lista) return; lista.innerHTML = "";
+  const container = document.getElementById("listaContasFixas"); 
+  if (!container) return; 
+  
+  // Criamos a estrutura da tabela
+  container.innerHTML = `
+    <table class="tabela-gastos">
+      <thead>
+        <tr>
+          <th style="width: 1%;"></th>
+          <th style="width: 1%;">ok</th>
+          <th>Nome da Despesa</th>
+          <th style="width: 80px;">Dia</th>
+          <th style="width: 150px;">Valor</th>
+          <th style="width: 150px;">Categoria</th>
+          <th style="width: 150px;">Cartão</th>
+          <th style="width: 1%;"></th>
+        </tr>
+      </thead>
+      <tbody id="tbodyFixas"></tbody>
+    </table>
+  `;
+
+  const tbody = document.getElementById("tbodyFixas");
+
   contasFixas.forEach((cf) => {
-    const div = document.createElement("div"); div.className = "item-fixo"; div.setAttribute("data-id", cf.id);
-    div.innerHTML = `<div class="drag-handle">☰</div><input type="checkbox" ${cf.ativo?'checked':''} class="check-fixo"><input type="text" class="inputPadrao" value="${cf.nome}" placeholder="Nome" style="flex:2"><input type="text" class="inputPadrao valor-fixo" value="${formatar(cf.valor)}" style="width:110px"><select class="inputPadrao cat-fixo">${categorias.map(c=>`<option value="${c.name}" ${cf.categoria===c.name?'selected':''}>${c.name}</option>`).join('')}</select><button class="removeItem">×</button>`;
-    const [dr, ch, inN, inV, seC, btR] = div.children;
-    ch.onchange = () => { cf.ativo = ch.checked; salvarDadosLocal(); }; inN.onblur = () => { cf.nome = inN.value; salvarDadosLocal(); };
-    aplicarComportamentoInput(inV, () => cf.valor, (v) => { cf.valor = v; }); seC.onchange = () => { cf.categoria = seC.value; salvarDadosLocal(); };
-    btR.onclick = () => { contasFixas = contasFixas.filter(c => c.id !== cf.id); renderContasFixas(); salvarDadosLocal(); }; lista.appendChild(div);
+    const tr = document.createElement("tr"); 
+    tr.setAttribute("data-id", cf.id);
+    
+    tr.innerHTML = `
+      <td class="drag-handle" style="cursor:grab; text-align:center; opacity:0.5;">☰</td>
+      <td><input type="checkbox" ${cf.ativo?'checked':''} class="check-fixo"></td>
+      <td><input type="text" class="input-tabela-edit" value="${cf.nome}" placeholder="Nome"></td>
+      <td><input type="number" class="input-tabela-edit" value="${cf.dia||1}" title="Dia"></td>
+      <td><input type="text" class="input-tabela-edit valor-fixo" value="${formatar(cf.valor)}"></td>
+      <td>
+        <select class="input-tabela-edit cat-fixo">
+            ${categorias.map(c=>`<option value="${c.name}" ${cf.categoria===c.name?'selected':''}>${c.name}</option>`).join('')}
+        </select>
+      </td>
+      <td>
+        <select class="input-tabela-edit card-fixo">
+            <option value="">💳 S/ Card</option>
+            ${cartoes.filter(c=>c.tipo==='Crédito').map(c=>`<option value="${c.id}" ${String(cf.cartaoId) === String(c.id) ? 'selected' : ''}>${c.nome}</option>`).join('')}
+        </select>
+      </td>
+      <td><button class="removeItem">×</button></td>`;
+
+    const [tdDrag, tdCheck, tdNome, tdDia, tdVal, tdCat, tdCard, tdBtn] = tr.children;
+
+    tdCheck.querySelector("input").onchange = (e) => { cf.ativo = e.target.checked; salvarDadosLocal(); }; 
+    tdNome.querySelector("input").onblur = (e) => { cf.nome = e.target.value; salvarDadosLocal(); };
+    tdDia.querySelector("input").onblur = (e) => { cf.dia = parseInt(e.target.value) || 1; salvarDadosLocal(); };
+    
+    aplicarComportamentoInput(tdVal.querySelector("input"), () => cf.valor, (v) => { cf.valor = v; }); 
+    
+    tdCat.querySelector("select").onchange = (e) => { cf.categoria = e.target.value; salvarDadosLocal(); };
+    tdCard.querySelector("select").onchange = (e) => { cf.cartaoId = e.target.value; salvarDadosLocal(); };
+
+    tdBtn.querySelector("button").onclick = () => { 
+        contasFixas = contasFixas.filter(c => c.id !== cf.id); 
+        renderContasFixas(); 
+        salvarDadosLocal(); 
+    };
+    
+    tbody.appendChild(tr);
   });
-  if(typeof Sortable !== 'undefined') Sortable.create(lista, { handle: '.drag-handle', animation: 150, onEnd: () => { const n = []; lista.querySelectorAll('.item-fixo').forEach(el => { const f = contasFixas.find(x => x.id == el.getAttribute('data-id')); if(f) n.push(f); }); contasFixas = n; salvarDadosLocal(); } });
+
+  // Inicializa o arrastar e soltar no corpo da tabela
+  if(typeof Sortable !== 'undefined') {
+    Sortable.create(tbody, { 
+        handle: '.drag-handle', 
+        animation: 150, 
+          onEnd: () => { 
+                      const novoArrayOrdenado = []; 
+                      tbody.querySelectorAll('tr').forEach(el => { 
+                          const idNoHtml = el.getAttribute('data-id');
+                          // Buscamos o item comparando como String para não haver erro de tipo
+                          const itemEncontrado = contasFixas.find(x => String(x.id) === idNoHtml); 
+                          if(itemEncontrado) novoArrayOrdenado.push(itemEncontrado); 
+                      }); 
+                      contasFixas = novoArrayOrdenado; 
+                      salvarDadosLocal(); 
+
+                      // IMPORTANTÍSSIMO: Recarregar o ano para refletir a nova ordem nos meses
+                      const anoAtual = document.getElementById("ano").value;
+                      carregarAno(); 
+                  }
+    });
+  }
 }
 
 function renderReceitasFixas() {
   const lista = document.getElementById("listaReceitasFixas"); if (!lista) return;
-  const iS = document.getElementById("salarioFixoBase"); iS.value = formatar(salarioFixoBase);
-  aplicarComportamentoInput(iS, () => salarioFixoBase, (v) => { salarioFixoBase = v; }); lista.innerHTML = "";
+  const iS = document.getElementById("salarioFixoBase"); 
+  iS.value = formatar(salarioFixoBase);
+  aplicarComportamentoInput(iS, () => salarioFixoBase, (v) => { salarioFixoBase = v; }); 
+  
+  lista.innerHTML = "";
   receitasFixas.forEach((rf) => {
     const div = document.createElement("div"); div.className = "item-fixo";
-    div.innerHTML = `<input type="checkbox" ${rf.ativo?'checked':''} class="check-rf"><input type="text" class="inputPadrao" value="${rf.nome}" style="flex:2"><input type="text" class="inputPadrao valor-rf" value="${formatar(rf.valor)}" style="width:110px"><button class="removeItem">×</button>`;
+    // HTML simplificado: Checkbox, Nome, Valor e Botão Remover
+    div.innerHTML = `<input type="checkbox" ${rf.ativo?'checked':''} class="check-rf"><input type="text" class="inputPadrao" value="${rf.nome}" placeholder="Nome da Renda" style="flex:2"><input type="text" class="inputPadrao valor-rf" value="${formatar(rf.valor)}" style="width:110px"><button class="removeItem">×</button>`;
+    
     const [ch, inN, inV, btR] = div.children;
-    ch.onchange = () => { rf.ativo = ch.checked; salvarDadosLocal(); }; inN.onblur = () => { rf.nome = inN.value; salvarDadosLocal(); };
-    aplicarComportamentoInput(inV, () => rf.valor, (v) => { rf.valor = v; }); btR.onclick = () => { receitasFixas = receitasFixas.filter(r => r.id !== rf.id); renderReceitasFixas(); salvarDadosLocal(); }; lista.appendChild(div);
+    ch.onchange = () => { rf.ativo = ch.checked; salvarDadosLocal(); }; 
+    inN.onblur = () => { rf.nome = inN.value; salvarDadosLocal(); };
+    aplicarComportamentoInput(inV, () => rf.valor, (v) => { rf.valor = v; }); 
+    btR.onclick = () => { receitasFixas = receitasFixas.filter(r => r.id !== rf.id); renderReceitasFixas(); salvarDadosLocal(); }; 
+    lista.appendChild(div);
   });
 }
 
@@ -411,12 +774,14 @@ onAuthStateChanged(auth, async (user) => {
     if (snap.exists()) {
         const res = await decryptData(snap.data(), senhaDoUsuario);
         dados = res.dados || {}; parcelasMemoria = res.parcelasMemoria || []; contasFixas = res.contasFixas || []; receitasFixas = res.receitasFixas || [];
+        lembretes = res.lembretes || [];
         salarioFixoBase = res.salarioFixoBase || 0; categorias = migrarCategorias(res.categorias); configuracoes = res.configuracoes || configuracoes; cartoes = res.cartoes || []; gastosDetalhes = res.gastosDetalhes || {};
         aplicarParcelas();
     }
     aplicarTema(configuracoes.tema);
+    atualizarTituloSite();
     document.getElementById("authContainer").style.display = "none"; document.getElementById("appContainer").style.display = "block";
-    const { mesAt } = getMesReferenciaAtivo(); mesesAbertos.add(mesAt); carregarAno(); renderContasFixas(); renderReceitasFixas();
+    const { mesAt } = getMesReferenciaAtivo(); mesesAbertos.add(mesAt); carregarAno(); renderContasFixas(); renderReceitasFixas(); renderLembretesHome();
     const seletorTemaFooter = document.getElementById("cfgTemaFooter");
     if(seletorTemaFooter) seletorTemaFooter.value = configuracoes.tema || "planetario";
   } else { document.getElementById("authContainer").style.display = "flex"; document.getElementById("appContainer").style.display = "none"; }
@@ -431,15 +796,81 @@ if(seletorTemaFooter) {
 }
 
 document.getElementById("exportarTudoBtn").onclick = () => { const b = { dados, parcelasMemoria, contasFixas, receitasFixas, salarioFixoBase, categorias, configuracoes, cartoes, gastosDetalhes }; const blob = new Blob([JSON.stringify(b, null, 2)], { type: "application/json" }); const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = `backup.json`; a.click(); };
-document.getElementById("inputImport").onchange = (e) => { const r = new FileReader(); r.onload = (ev) => { const res = JSON.parse(ev.target.result); dados = res.dados || {}; parcelasMemoria = res.parcelasMemoria || []; contasFixas = res.contasFixas || []; receitasFixas = res.receitasFixas || []; salarioFixoBase = res.salarioFixoBase || 0; categorias = migrarCategorias(res.categorias); configuracoes = res.configuracoes || configuracoes; cartoes = res.cartoes || []; gastosDetalhes = res.gastosDetalhes || {}; carregarAno(); renderContasFixas(); renderReceitasFixas(); }; r.readAsText(e.target.files[0]); };
-document.getElementById("btnSalvarSenha").onclick = async () => { const a = document.getElementById("pwdAntiga").value, n = document.getElementById("pwdNova").value; if(!n) return; try { const cred = EmailAuthProvider.credential(usuarioLogado.email, a); await reauthenticateWithCredential(usuarioLogado, credential); await updatePassword(usuarioLogado, n); senhaDoUsuario = n; sessionStorage.setItem("temp_key", n); alert("Sucesso!"); } catch (e) { alert("Erro!"); } };
+
+document.getElementById("inputImport").onchange = (e) => { 
+    const r = new FileReader(); 
+    r.onload = (ev) => { 
+        const res = JSON.parse(ev.target.result); 
+        dados = res.dados || {}; 
+        parcelasMemoria = res.parcelasMemoria || []; 
+        contasFixas = res.contasFixas || []; 
+        receitasFixas = res.receitasFixas || []; 
+        salarioFixoBase = res.salarioFixoBase || 0; 
+        categorias = migrarCategorias(res.categorias); 
+        configuracoes = res.configuracoes || configuracoes; 
+        cartoes = res.cartoes || []; 
+        gastosDetalhes = res.gastosDetalhes || {}; 
+        
+        carregarAno(); 
+        renderContasFixas(); 
+        renderReceitasFixas(); 
+        renderPaginaGastos();
+        aplicarTema(configuracoes.tema);
+        alert("Backup carregado com sucesso!");
+    }; 
+    r.readAsText(e.target.files[0]); 
+};
+
+// Função central de navegação
+function roteador() {
+    const hash = window.location.hash || "#resumo"; // Padrão é resumo
+
+    // 1. Esconder todas as visualizações
+    document.getElementById("viewResumo").style.display = "none";
+    document.getElementById("viewGastos").style.display = "none";
+    document.getElementById("viewCalendario").style.display = "none";
+
+    // 2. Remover classe active de todos os links
+    document.getElementById("navResumo").classList.remove("active");
+    document.getElementById("navGastos").classList.remove("active");
+    document.getElementById("navCalendario").classList.remove("active");
+
+    // 3. Mostrar a tela correta baseada na URL
+    if (hash === "#resumo") {
+        document.getElementById("viewResumo").style.display = "block";
+        document.getElementById("navResumo").classList.add("active");
+        carregarAno();
+    } 
+    else if (hash === "#gastos") {
+        document.getElementById("viewGastos").style.display = "block";
+        document.getElementById("navGastos").classList.add("active");
+        renderPaginaGastos();
+    } 
+    else if (hash === "#calendario") {
+        document.getElementById("viewCalendario").style.display = "block";
+        document.getElementById("navCalendario").classList.add("active");
+        renderCalendario({cartoes, contasFixas, receitasFixas, lembretes, configuracoes}, { abrirPostit });
+    }
+}
+
+// Escuta quando o usuário muda o hash (clica no menu ou usa o botão voltar)
+window.addEventListener("hashchange", roteador);
+
+// Atualiza os cliques do menu para não recarregar a página
+[document.getElementById("navResumo"), document.getElementById("navGastos"), document.getElementById("navCalendario")].forEach(link => {
+    link.onclick = (e) => {
+        // O navegador já mudará o hash pelo href, o evento hashchange cuidará do resto
+    };
+});
+
+document.getElementById("btnSalvarSenha").onclick = async () => { const a = document.getElementById("pwdAntiga").value, n = document.getElementById("pwdNova").value; if(!n) return; try { const cred = EmailAuthProvider.credential(usuarioLogado.email, a); await reauthenticateWithCredential(usuarioLogado, cred); await updatePassword(usuarioLogado, n); senhaDoUsuario = n; sessionStorage.setItem("temp_key", n); alert("Sucesso!"); } catch (e) { alert("Erro!"); } };
 document.getElementById("loginBtn").onclick = async () => { const e = document.getElementById("email").value, s = document.getElementById("senha").value; try { await signInWithEmailAndPassword(auth, e, s); senhaDoUsuario = s; sessionStorage.setItem("temp_key", s); } catch (err) { alert("Erro login"); } };
 document.getElementById("cadastroBtn").onclick = async () => { const e = document.getElementById("email").value, s = document.getElementById("senha").value; try { await createUserWithEmailAndPassword(auth, e, s); senhaDoUsuario = s; sessionStorage.setItem("temp_key", s); await salvarFirebase(); } catch (err) { alert("Erro cadastro"); } };
 document.getElementById("logoutBtn").onclick = () => { signOut(auth); sessionStorage.clear(); location.reload(); };
-document.getElementById("navResumo").onclick = (e) => { e.preventDefault(); document.getElementById("viewResumo").style.display = "block"; document.getElementById("viewGastos").style.display = "none"; document.getElementById("navResumo").className = "active"; document.getElementById("navGastos").className = ""; carregarAno(); };
-document.getElementById("navGastos").onclick = (e) => { e.preventDefault(); document.getElementById("viewResumo").style.display = "none"; document.getElementById("viewGastos").style.display = "block"; document.getElementById("navResumo").className = ""; document.getElementById("navGastos").className = "active"; renderPaginaGastos(); };
 document.getElementById("btnSettings").onclick = () => { const modalCfg = document.getElementById("modalConfiguracoes"); if(!modalCfg) return; document.getElementById("cfgNomeUsuario").value = configuracoes.nomeUsuario || ""; document.getElementById("cfgDiaVirada").value = configuracoes.diaVirada || 1; const ref = configuracoes.referenciaMes || "atual"; document.getElementById("refAtual").checked = (ref === "atual"); document.getElementById("refProximo").checked = (ref === "proximo"); modalCfg.style.display = "flex"; };
-document.getElementById("btnSalvarConfig").onclick = async () => { configuracoes.nomeUsuario = document.getElementById("cfgNomeUsuario").value; configuracoes.diaVirada = document.getElementById("cfgDiaVirada").value; configuracoes.referenciaMes = document.querySelector('input[name="refMes"]:checked')?.value || "atual"; await salvarFirebase(); document.getElementById("modalConfiguracoes").style.display = "none"; carregarAno(); renderPaginaGastos(); };
+document.getElementById("btnSalvarConfig").onclick = async () => { configuracoes.nomeUsuario = document.getElementById("cfgNomeUsuario").value; configuracoes.diaVirada = document.getElementById("cfgDiaVirada").value;
+configuracoes.diaSalario = document.getElementById("cfgDiaSalario").value; 
+configuracoes.referenciaMes = document.querySelector('input[name="refMes"]:checked')?.value || "atual"; atualizarTituloSite(); await salvarFirebase(); document.getElementById("modalConfiguracoes").style.display = "none"; carregarAno(); renderPaginaGastos(); };
 document.getElementById("btnFecharConfig").onclick = () => document.getElementById("modalConfiguracoes").style.display = "none";
 document.getElementById("btnGerenciarCategorias").onclick = () => { document.getElementById("modalCategorias").style.display = "flex"; renderCategoriasModal(); };
 document.getElementById("btnGerenciarCartoes").onclick = () => { document.getElementById("modalCartoes").style.display = "flex"; renderCartoesModal(); };
@@ -455,6 +886,7 @@ document.getElementById("headerReceitasFixas").onclick = () => document.getEleme
 document.getElementById("showSignup").onclick = (e) => { e.preventDefault(); document.getElementById("loginActions").style.display = "none"; document.getElementById("signupActions").style.display = "block"; };
 document.getElementById("showLogin").onclick = (e) => { e.preventDefault(); document.getElementById("signupActions").style.display = "none"; document.getElementById("loginActions").style.display = "block"; };
 document.getElementById("btnFecharParcelaCartao").onclick = () => document.getElementById("modalParcelaCartao").style.display = "none";
+document.getElementById("btnIrCalendario").onclick = () => document.getElementById("navCalendario").click();
 
 function carregarAno() {
   const sel = document.getElementById("ano"); const ano = sel ? sel.value : hoje.getFullYear(); if (!dados[ano]) dados[ano] = { meses: [] };
@@ -481,3 +913,29 @@ function carregarAno() {
 
 const s1 = document.getElementById("ano"); const s2 = document.getElementById("anoGastos");
 [s1, s2].forEach(s => { if(!s) return; for (let a = 2024; a <= 2035; a++) { const o = document.createElement("option"); o.value = a; o.text = a; if(a === hoje.getFullYear()) o.selected = true; s.appendChild(o); } s.onchange = () => { carregarAno(); renderPaginaGastos(); }; });
+document.getElementById("btnSalvarLembrete").onclick = async () => {
+    const l = { id: Date.now(), nome: document.getElementById("lemTitulo").value, data: document.getElementById("lemData").value, hora: document.getElementById("lemHora").value };
+    lembretes.push(l);
+    await salvarFirebase();
+    renderLembretesHome();
+    roteador();
+    document.getElementById("modalLembrete").style.display = "none";
+    if(document.getElementById("viewCalendario").style.display === "block") renderCalendario({cartoes, contasFixas, receitasFixas, lembretes, configuracoes}, { abrirPostit });
+};
+
+
+function abrirPostit(l) {
+    const overlay = document.createElement("div"); 
+    overlay.className = "modal-overlay"; 
+    overlay.id = "popupPostit";
+    overlay.innerHTML = `<div class="modal-content postit-amarelo" style="background:#f1c40f; color:#000; padding:20px; border-radius:5px; min-width:250px;"><h3 style="margin-top:0; border-bottom:1px solid rgba(0,0,0,0.1); padding-bottom:5px;">${l.nome}</h3><p style="margin: 10px 0 5px 0;"><strong>📅 Data:</strong> ${l.data}</p><p style="margin: 0 0 20px 0;"><strong>⏰ Hora:</strong> ${l.hora || 'Não definida'}</p><div style="display:flex; gap:10px;"><button class="btn sair" id="btnDelPostit" style="flex:1">Excluir</button><button class="btn" onclick="this.closest('.modal-overlay').remove()" style="flex:1; background:#333; color:#fff;">Fechar</button></div></div>`;
+    document.body.appendChild(overlay);
+    document.getElementById("btnDelPostit").onclick = async () => { 
+        if(confirm("Excluir este lembrete?")) {
+            lembretes = lembretes.filter(x => x.id !== l.id); 
+            await salvarFirebase(); 
+            renderCalendario({cartoes, contasFixas, receitasFixas, lembretes, configuracoes}, { abrirPostit }); 
+            overlay.remove(); 
+        }
+    };
+}
