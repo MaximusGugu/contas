@@ -210,18 +210,41 @@ const dManuais = (m.despesas || []).filter(x => x.checked).reduce((acc, b) => ac
           const listaCartoesDiv = dom.querySelector(".listaCartoesDinamica");
           if (listaCartoesDiv) {
               listaCartoesDiv.innerHTML = "";
-              const crdGastos = gastosMes.filter(g => cartoes.find(c => c.id == g.cartaoId)?.tipo === 'Crédito');
-              if (crdGastos.length > 0) {
-                  const totaisPorCartao = {};
-                  crdGastos.forEach(g => { totaisPorCartao[g.cartaoId] = (totaisPorCartao[g.cartaoId] || 0) + g.valor; });
+              
+              // 1. Pega gastos variáveis do mês que são crédito
+              const crdGastosVariaveis = gastosMes.filter(g => cartoes.find(c => c.id == g.cartaoId)?.tipo === 'Crédito');
+              
+              // 2. Pega despesas fixas que estão em algum cartão
+              const crdGastosFixos = contasFixas.filter(f => f.ativo && f.cartaoId);
+
+              const totaisPorCartao = {};
+
+              // Somar variáveis
+              crdGastosVariaveis.forEach(g => { 
+                  totaisPorCartao[g.cartaoId] = (totaisPorCartao[g.cartaoId] || 0) + g.valor; 
+              });
+
+              // Somar fixas
+              crdGastosFixos.forEach(f => {
+                  totaisPorCartao[f.cartaoId] = (totaisPorCartao[f.cartaoId] || 0) + f.valor;
+              });
+
+              if (Object.keys(totaisPorCartao).length > 0) {
                   listaCartoesDiv.innerHTML = "<small style='display:block;margin-bottom:5px;opacity:0.6'>RESUMO DE CARTÕES (CRÉDITO):</small>";
                   Object.keys(totaisPorCartao).forEach(cid => {
                       const cObj = cartoes.find(c => c.id == cid);
+                      if (!cObj) return; // Pula se o cartão foi excluído
+                      
                       const itemC = document.createElement("div"); 
                       itemC.className = "item-cartao-resumo";
                       itemC.style.cursor = "pointer";
-                      itemC.innerHTML = `<span>💳 ${cObj ? cObj.nome : 'Cartão'}</span> <span>${formatar(totaisPorCartao[cid])}</span>`;
-                      itemC.onclick = () => { document.getElementById("anoGastos").value = ano; filtrosPorMes[idx] = cid; mesesGastosAbertos.add(idx); document.getElementById("navGastos").click(); setTimeout(() => { const target = document.querySelectorAll("#areaGastosMensais .mes")[idx]; if(target) target.scrollIntoView({ behavior: 'smooth', block: 'center' }); }, 300); };
+                      itemC.innerHTML = `<span>💳 ${cObj.nome}</span> <span>${formatar(totaisPorCartao[cid])}</span>`;
+                      itemC.onclick = () => { 
+                          document.getElementById("anoGastos").value = ano; 
+                          filtrosPorMes[idx] = cid; 
+                          mesesGastosAbertos.add(idx); 
+                          window.location.hash = "#gastos";
+                      };
                       listaCartoesDiv.appendChild(itemC);
                   });
               }
@@ -781,7 +804,7 @@ onAuthStateChanged(auth, async (user) => {
     aplicarTema(configuracoes.tema);
     atualizarTituloSite();
     document.getElementById("authContainer").style.display = "none"; document.getElementById("appContainer").style.display = "block";
-    const { mesAt } = getMesReferenciaAtivo(); mesesAbertos.add(mesAt); carregarAno(); renderContasFixas(); renderReceitasFixas(); renderLembretesHome();
+    const { mesAt } = getMesReferenciaAtivo(); mesesAbertos.add(mesAt); carregarAno(); renderContasFixas(); renderReceitasFixas(); renderLembretesHome(); roteador();
     const seletorTemaFooter = document.getElementById("cfgTemaFooter");
     if(seletorTemaFooter) seletorTemaFooter.value = configuracoes.tema || "planetario";
   } else { document.getElementById("authContainer").style.display = "flex"; document.getElementById("appContainer").style.display = "none"; }
@@ -795,7 +818,7 @@ if(seletorTemaFooter) {
     };
 }
 
-document.getElementById("exportarTudoBtn").onclick = () => { const b = { dados, parcelasMemoria, contasFixas, receitasFixas, salarioFixoBase, categorias, configuracoes, cartoes, gastosDetalhes }; const blob = new Blob([JSON.stringify(b, null, 2)], { type: "application/json" }); const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = `backup.json`; a.click(); };
+document.getElementById("exportarTudoBtn").onclick = () => { const b = { dados, parcelasMemoria, lembretes, contasFixas, receitasFixas, salarioFixoBase, categorias, configuracoes, cartoes, gastosDetalhes }; const blob = new Blob([JSON.stringify(b, null, 2)], { type: "application/json" }); const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = `backup.json`; a.click(); };
 
 document.getElementById("inputImport").onchange = (e) => { 
     const r = new FileReader(); 
@@ -803,6 +826,7 @@ document.getElementById("inputImport").onchange = (e) => {
         const res = JSON.parse(ev.target.result); 
         dados = res.dados || {}; 
         parcelasMemoria = res.parcelasMemoria || []; 
+        lembretes = res.lembretes || []; // Adicionado aqui
         contasFixas = res.contasFixas || []; 
         receitasFixas = res.receitasFixas || []; 
         salarioFixoBase = res.salarioFixoBase || 0; 
@@ -814,6 +838,7 @@ document.getElementById("inputImport").onchange = (e) => {
         carregarAno(); 
         renderContasFixas(); 
         renderReceitasFixas(); 
+        renderLembretesHome(); // Adicionado aqui
         renderPaginaGastos();
         aplicarTema(configuracoes.tema);
         alert("Backup carregado com sucesso!");
@@ -823,35 +848,41 @@ document.getElementById("inputImport").onchange = (e) => {
 
 // Função central de navegação
 function roteador() {
-    const hash = window.location.hash || "#resumo"; // Padrão é resumo
+    const hash = window.location.hash || "#resumo"; 
 
-    // 1. Esconder todas as visualizações
-    document.getElementById("viewResumo").style.display = "none";
-    document.getElementById("viewGastos").style.display = "none";
-    document.getElementById("viewCalendario").style.display = "none";
+    const views = {
+        "#resumo": "viewResumo",
+        "#gastos": "viewGastos",
+        "#calendario": "viewCalendario"
+    };
 
-    // 2. Remover classe active de todos os links
-    document.getElementById("navResumo").classList.remove("active");
-    document.getElementById("navGastos").classList.remove("active");
-    document.getElementById("navCalendario").classList.remove("active");
+    // Esconder todas e remover active
+    Object.values(views).forEach(id => document.getElementById(id).style.display = "none");
+    ["navResumo", "navGastos", "navCalendario"].forEach(id => document.getElementById(id).classList.remove("active"));
 
-    // 3. Mostrar a tela correta baseada na URL
+    // Mostrar atual
+    const currentView = views[hash] || "viewResumo";
+    document.getElementById(currentView).style.display = "block";
+    
+    // Marcar link como ativo
     if (hash === "#resumo") {
-        document.getElementById("viewResumo").style.display = "block";
         document.getElementById("navResumo").classList.add("active");
         carregarAno();
-    } 
-    else if (hash === "#gastos") {
-        document.getElementById("viewGastos").style.display = "block";
+    } else if (hash === "#gastos") {
         document.getElementById("navGastos").classList.add("active");
         renderPaginaGastos();
-    } 
-    else if (hash === "#calendario") {
-        document.getElementById("viewCalendario").style.display = "block";
+    } else if (hash === "#calendario") {
         document.getElementById("navCalendario").classList.add("active");
         renderCalendario({cartoes, contasFixas, receitasFixas, lembretes, configuracoes}, { abrirPostit });
     }
 }
+
+window.addEventListener("hashchange", roteador);
+
+// Remover os .onclick vazios e garantir que o roteador rode ao carregar
+window.addEventListener("load", () => {
+    if (usuarioLogado) roteador();
+});
 
 // Escuta quando o usuário muda o hash (clica no menu ou usa o botão voltar)
 window.addEventListener("hashchange", roteador);
@@ -886,7 +917,7 @@ document.getElementById("headerReceitasFixas").onclick = () => document.getEleme
 document.getElementById("showSignup").onclick = (e) => { e.preventDefault(); document.getElementById("loginActions").style.display = "none"; document.getElementById("signupActions").style.display = "block"; };
 document.getElementById("showLogin").onclick = (e) => { e.preventDefault(); document.getElementById("signupActions").style.display = "none"; document.getElementById("loginActions").style.display = "block"; };
 document.getElementById("btnFecharParcelaCartao").onclick = () => document.getElementById("modalParcelaCartao").style.display = "none";
-document.getElementById("btnIrCalendario").onclick = () => document.getElementById("navCalendario").click();
+document.getElementById("btnIrCalendario").onclick = () => window.location.hash = "#calendario";
 
 function carregarAno() {
   const sel = document.getElementById("ano"); const ano = sel ? sel.value : hoje.getFullYear(); if (!dados[ano]) dados[ano] = { meses: [] };
