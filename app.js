@@ -36,11 +36,35 @@ let cartoes = [];
 let gastosDetalhes = {}; 
 let filtrosPorMes = {};
 
+let historicoChatIA = []; // Armazena a memória da conversa
+
 const hoje = new Date();
 const nomesMesesFull = ["Janeiro","Fevereiro","Março","Abril","Maio","Junho","Julho","Agosto","Setembro","Outubro","Novembro","Dezembro"];
 let contextParcelaCartao = { mes: 0, ano: 2024 };
 
 // ================= FUNÇÕES DE APOIO =================
+window.atualizarDataLembrete = async (id, novaData, novoDiaSemana) => {
+    // 1. Acha o lembrete na lista (importante converter ID para String na comparação)
+    const index = lembretes.findIndex(l => String(l.id) === String(id));
+    if (index === -1) return;
+
+    // 2. Atualiza a data e a recorrência
+    if (lembretes[index].recorrente) {
+        lembretes[index].diasSemana = [novoDiaSemana];
+    }
+    lembretes[index].data = novaData;
+
+    // 3. Salva no Firebase
+    await salvarFirebase();
+    renderLembretesHome();
+    
+    // 4. Força o calendário a redesenhar para o lembrete "pular" de dia
+    renderCalendario(
+        { cartoes, contasFixas, receitasFixas, lembretes, configuracoes, gastosDetalhes }, 
+        { abrirPostit }
+    );
+};
+
 function aplicarTema(tema) { 
     const t = tema || "planetario";
     document.body.className = "theme-" + t; 
@@ -178,6 +202,31 @@ function getMesReferenciaAtivo() {
 function migrarCategorias(lista) {
     if(!lista || !Array.isArray(lista)) return categorias;
     return lista.map(c => (typeof c === 'string' ? { name: c, color: "#D78341" } : c));
+}
+
+// SAUDAÇÃO DINÂMICA //
+
+function atualizarSaudacao() {
+    const el = document.getElementById("saudacaoDinamica");
+    if (!el) return;
+
+    const agora = new Date();
+    const hora = agora.getHours();
+    let saudacao = "";
+
+    // 1. Define a saudação baseada na hora
+    if (hora >= 6 && hora < 12) saudacao = "Bom dia";
+    else if (hora >= 12 && hora < 18) saudacao = "Boa tarde";
+    else saudacao = "Boa noite";
+
+    // 2. Formata a data (ex: segunda-feira, 20 de maio de 2024)
+    const opcoes = { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' };
+    let dataExtenso = agora.toLocaleDateString('pt-BR', opcoes);
+    
+    // Capitaliza a primeira letra do dia da semana
+    dataExtenso = dataExtenso.charAt(0).toUpperCase() + dataExtenso.slice(1);
+
+    el.innerHTML = `${saudacao}! Hoje é ${dataExtenso}. <span style="opacity: 0.7; font-weight: normal;">Aqui está o seu resumo:</span>`;
 }
 
 // ================= CRIPTOGRAFIA =================
@@ -341,18 +390,80 @@ const dManuais = (m.despesas || []).filter(x => x.checked).reduce((acc, b) => ac
 function atualizarGrafico(ano) {
     const ctx = document.getElementById("grafico"); 
     if (!ctx || !dados[ano] || !dados[ano].meses || dados[ano].meses.length === 0) return;
+
+    const agora = new Date();
+    const mesReal = agora.getMonth();
+    const anoReal = agora.getFullYear();
+
     const tempElement = document.createElement("div");
     tempElement.className = "texto-claro"; tempElement.style.display = "none";
     document.body.appendChild(tempElement);
     const tColor = getComputedStyle(tempElement).color || '#000000';
     document.body.removeChild(tempElement);
-    const pColor = getComputedStyle(document.body).getPropertyValue('--P04').trim() || '#D78341';
+
+    let pColor = getComputedStyle(document.body).getPropertyValue('--P04').trim() || '#D78341';
     const bgColor = getComputedStyle(document.body).getPropertyValue('--P06').trim() || '#ffffff';
+
     const saldos = dados[ano].meses.map(m => parseFloat((m.saldoCalculadoFinal || 0).toFixed(2)));
     const labels = dados[ano].meses.map((_, i) => nomesMesesFull[i]);
-    const options = { series: [{ name: 'Saldo Final', data: saldos }], chart: { type: 'bar', height: 250, toolbar: { show: false }, background: bgColor, foreColor: tColor }, colors: [pColor], xaxis: { categories: labels }, yaxis: { labels: { formatter: (val) => "R$ " + val.toLocaleString('pt-BR') } }, grid: { borderColor: 'rgba(255,255,255,0.1)' }, tooltip: { theme: 'dark' }, dataLabels: { enabled: true, formatter: (val) => "R$ " + val.toLocaleString('pt-BR'), style: { fontSize: '10px' }, offsetY: -20 }, plotOptions: { bar: { dataLabels: { position: 'top' }, borderRadius: 4 } } };
+
+    // 1. GERA ARRAY DE CORES DINÂMICAS (Sólida para hoje/passado, 50% para futuro)
+    const coresDinamicas = labels.map((_, i) => {
+        const ehFuturo = (Number(ano) > anoReal) || (Number(ano) === anoReal && i > mesReal);
+        if (ehFuturo) {
+            // Se a cor for RGB (ex: rgb(215, 131, 65)), transforma em RGBA com 0.5
+            if (pColor.startsWith('rgb')) {
+                return pColor.replace('rgb', 'rgba').replace(')', ', 0.5)');
+            }
+            // Se for Hex (ex: #D78341), adiciona "80" (que é 50% em hex)
+            return pColor + "80"; 
+        }
+        return pColor; // Cor sólida
+    });
+
+    const options = { 
+        series: [{ name: 'Saldo', data: saldos }], 
+        chart: { 
+            type: 'bar', 
+            height: 250, 
+            toolbar: { show: false }, 
+            background: bgColor, 
+            foreColor: tColor 
+        }, 
+        colors: coresDinamicas, // Aplica o array de cores transparente/sólida
+        xaxis: { categories: labels }, 
+        yaxis: { labels: { formatter: (val) => "R$ " + val.toLocaleString('pt-BR') } }, 
+        grid: { borderColor: 'rgba(255,255,255,0.1)' }, 
+        legend: { show: false }, // Esconde a legenda que o modo distributed cria
+        tooltip: { 
+            theme: 'dark',
+            y: {
+                title: {
+                    formatter: (seriesName, { seriesIndex, dataPointIndex, w }) => {
+                        const ehFuturo = (Number(ano) > anoReal) || (Number(ano) === anoReal && dataPointIndex > mesReal);
+                        return ehFuturo ? "Previsão:" : "Saldo Final:";
+                    }
+                }
+            }
+        }, 
+        dataLabels: { 
+            enabled: true, 
+            formatter: (val) => "R$ " + val.toLocaleString('pt-BR'), 
+            style: { fontSize: '10px' }, 
+            offsetY: -20 
+        }, 
+        plotOptions: { 
+            bar: { 
+                dataLabels: { position: 'top' }, 
+                borderRadius: 4,
+                distributed: true // NECESSÁRIO para aplicar o array de cores barra por barra
+            } 
+        } 
+    };
+
     if (chartResumo) chartResumo.destroy();
-    chartResumo = new ApexCharts(ctx, options); chartResumo.render();
+    chartResumo = new ApexCharts(ctx, options); 
+    chartResumo.render();
 }
 
 // ================= FUNÇÃO PARCELAS (HOME) =================
@@ -447,10 +558,62 @@ header.querySelector(".duplicarMes").onclick = (e) => { e.stopPropagation(); con
                     </thead>
                     <tbody class="listaDesp"></tbody>
                 </table>
-                <div class="acoesDesp">
-                    <button class="addDesp btn">+ Despesa</button>
-                    <button class="addParcela btn">+ Parcela</button>
+<!-- ÁREA DE ADIÇÃO DE DESPESA -->
+                <div class="area-acoes-despesa" style="margin-top:15px; padding-top:15px; border-top:1px dashed rgba(255,255,255,0.1);">
+                    
+                    <!-- BOTÃO INICIAL -->
+                    <button class="btn btn-show-quick-add" style="width:100%;">+ ADICIONAR DESPESA</button>
+
+                    <!-- FORMULÁRIO (ESCONDIDO) -->
+                    <div class="form-rapido-despesa" style="display:none;">
+                        <!-- GRID 2x2 para os inputs -->
+                        <div style="display:grid; grid-template-columns: 1fr 1fr; gap:5px; margin-bottom:5px;">
+                            <input type="text" class="inputPadrao quick-nome" placeholder="O que comprou?">
+                            <input type="text" class="inputPadrao quick-valor" placeholder="R$ 0,00">
+                            
+                            <select class="inputPadrao quick-cat">
+                                ${categorias.map(c => `<option value="${c.name}">${c.name}</option>`).join('')}
+                            </select>
+                            
+                            <select class="inputPadrao quick-card">
+                                <option value="dinheiro">💵 Dinheiro</option>
+                                ${cartoes.map(c => `<option value="${c.id}">💳 ${c.nome}</option>`).join('')}
+                            </select>
+                        </div>
+
+                        <!-- BOTÃO DE ADICIONAR CENTRALIZADO -->
+                        <div style="display:flex; justify-content:center; flex-direction:column; align-items:center; gap:5px;">
+                            <button class="btn btn-quick-add" style="width:100%; height:35px; font-size:20px; margin-top: 5px;">Adicionar</button>
+                            <button class="btn-cancelar-quick">Cancelar</button>
+                        </div>
+                    </div>
                 </div>
+
+                <div class="area-acoes-parcelamento" style="margin-top:10px;">
+                    <!-- BOTÃO INICIAL -->
+                    <button class="btn btn-show-quick-parcela" style="width:100%;">+ PARCELAR COMPRA</button>
+
+                    <!-- FORMULÁRIO DE PARCELAMENTO (ESCONDIDO) -->
+                    <div class="form-rapido-parcela" style="display:none; padding: 10px; border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; margin-top: 5px;">
+                        <div style="display:grid; grid-template-columns: 1fr 1fr; gap:5px; margin-bottom:5px;">
+                            <input type="text" class="inputPadrao qp-nome" placeholder="O que parcelou?">
+                            <input type="text" class="inputPadrao qp-valor" placeholder="Valor Total R$">
+                            <input type="number" class="inputPadrao qp-qtd" placeholder="Vezes (Ex: 10)">
+                            <select class="inputPadrao qp-cat">
+                                ${categorias.map(c => `<option value="${c.name}">${c.name}</option>`).join('')}
+                            </select>
+                            <select class="inputPadrao qp-card" style="grid-column: span 2;">
+                                <option value="dinheiro">💵 Dinheiro (Parcela fixa mensal)</option>
+                                ${cartoes.map(c => `<option value="${c.id}">💳 ${c.nome}</option>`).join('')}
+                            </select>
+                        </div>
+                        <div style="display:flex; justify-content:center; flex-direction:column; align-items:center; gap:5px;">
+                            <button class="btn btn-quick-p-add" style="width:100%; height:35px; background: #8e44ad !important; color: white;">Confirmar Parcelas</button>
+                            <button class="btn-cancelar-p-quick" style="background:none; border:none; color:var(--P04); font-size:10px; cursor:pointer;">Cancelar</button>
+                        </div>
+                    </div>
+                </div>
+
                 <div class="listaCartoesDinamica"></div>
             </div>
             <p class="rodapeColuna">Total: <span class="totalDespesas">0,00</span></p>
@@ -475,7 +638,7 @@ header.querySelector(".duplicarMes").onclick = (e) => { e.stopPropagation(); con
                     </thead>
                     <tbody class="listaEmp"></tbody>
                 </table>
-                <button class="addEmp btn" style="width:100%; margin-top:10px;">+</button>
+                <button class="addEmp btn" style="width:100%; margin-top:10px;">+ ADICIONAR RENDA</button>
             </div>
             <p class="rodapeColuna">Total: <span class="totalDinheiro">0,00</span></p>
         </div>
@@ -489,25 +652,156 @@ header.querySelector(".duplicarMes").onclick = (e) => { e.stopPropagation(); con
   inC.addEventListener("blur", () => { const txt = inC.value.trim(); if (txt === "") data.contaManual = false; else { data.conta = parseValor(txt); data.contaManual = true; } atualizarTudo(ano); });
   inC.addEventListener("keydown", (e) => { if(e.key === "Enter") inC.blur(); });
   btnC.onclick = () => { const anos = Object.keys(dados).map(Number).sort((a,b)=>a-b); let found = false; anos.forEach(a => dados[a].meses.forEach((m, i) => { if(a == ano && i == index) found = true; else if(found) m.contaManual = false; })); atualizarTudo(ano); };
-  body.querySelector(".addDesp").onclick = () => { data.despesas.push({nome:"", valor:0, checked:true}); carregarAno(); };
-  
-  // BOTÃO PARCELA DA HOME CORRIGIDO
-  body.querySelector(".addParcela").onclick = () => { 
-      const n = prompt("Nome da despesa:"); 
-      const vt = parseValor(prompt("Valor TOTAL da compra:")); 
-      const np = parseInt(prompt("Quantidade de parcelas:")); 
-      if(n && vt > 0 && np > 0) { 
-          parcelasMemoria.push({ 
-              id: Date.now(), 
-              nome: n, 
-              valorParcela: Number((vt / np).toFixed(2)), 
-              parcelas: np, 
-              inicio: index, 
-              ano: Number(ano) 
-          }); 
-          aplicarParcelas(); 
-          carregarAno(); 
-      } 
+  // LÓGICA DO LANÇAMENTO RÁPIDO
+
+  // LÓGICA DO FORMULÁRIO RÁPIDO
+  const btnShow = body.querySelector(".btn-show-quick-add");
+  const formQuick = body.querySelector(".form-rapido-despesa");
+  const btnCancel = body.querySelector(".btn-cancelar-quick");
+  const btnAddFinal = body.querySelector(".btn-quick-add");
+
+  // Mostrar formulário
+  btnShow.onclick = () => {
+      btnShow.style.display = "none";
+      formQuick.style.display = "block";
+      body.querySelector(".quick-nome").focus();
+  };
+
+  // Cancelar
+  btnCancel.onclick = () => {
+      btnShow.style.display = "block";
+      formQuick.style.display = "none";
+  };
+
+// ADICIONAR DE FATO (Com Feedback)
+  btnAddFinal.onclick = async () => {
+      const nome = body.querySelector(".quick-nome").value;
+      const valorRaw = body.querySelector(".quick-valor").value;
+      const valor = parseValor(valorRaw);
+      const categoria = body.querySelector(".quick-cat").value;
+      const cartaoId = body.querySelector(".quick-card").value;
+
+      if (!nome || valor <= 0) {
+          alert("Por favor, preencha o nome e um valor válido.");
+          return;
+      }
+
+      // 1. Define a mensagem baseada no método de pagamento
+      const msgFeedback = (cartaoId === "dinheiro") ? "✅ Adicionado!" : "💳 Registrado no cartão!";
+
+      // 2. Lógica de salvamento (Dinheiro vs Cartão)
+      if (cartaoId === "dinheiro") {
+          data.despesas.push({ nome: nome, valor: valor, checked: true, categoria: categoria });
+      } else {
+          if (!gastosDetalhes[ano]) gastosDetalhes[ano] = [];
+          gastosDetalhes[ano].push({
+              mes: index,
+              nome: nome,
+              valor: valor,
+              categoria: categoria,
+              cartaoId: cartaoId
+          });
+      }
+
+      // 3. Salva os dados
+      salvarDadosLocal();
+      await salvarFirebase(); 
+
+      // 4. FEEDBACK VISUAL
+      formQuick.style.display = "none"; // Esconde o formulário
+      btnShow.style.display = "block";  // Mostra o botão principal
+      
+      const textoOriginal = btnShow.innerText;
+      btnShow.innerText = msgFeedback; // Muda o texto para o feedback
+      btnShow.style.backgroundColor = "#27ae60"; // Muda para verde temporariamente
+      btnShow.style.color = "white";
+
+      // 5. Reseta o botão e a interface após 2 segundos
+      setTimeout(() => {
+          btnShow.innerText = textoOriginal;
+          btnShow.style.backgroundColor = ""; // Volta para a cor do tema
+          btnShow.style.color = "";
+          carregarAno(); // Recarrega a UI para mostrar o novo item na lista
+      }, 2000);
+  };
+
+  // --- LÓGICA DO PARCELAMENTO RÁPIDO ---
+  const btnShowP = body.querySelector(".btn-show-quick-parcela");
+  const formQuickP = body.querySelector(".form-rapido-parcela");
+  const btnCancelP = body.querySelector(".btn-cancelar-p-quick");
+  const btnAddFinalP = body.querySelector(".btn-quick-p-add");
+
+  btnShowP.onclick = () => {
+      btnShowP.style.display = "none";
+      formQuickP.style.display = "block";
+      body.querySelector(".qp-nome").focus();
+  };
+
+  btnCancelP.onclick = () => {
+      btnShowP.style.display = "block";
+      formQuickP.style.display = "none";
+  };
+
+  btnAddFinalP.onclick = async () => {
+      const nome = body.querySelector(".qp-nome").value;
+      const valorTotal = parseValor(body.querySelector(".qp-valor").value);
+      const qtd = parseInt(body.querySelector(".qp-qtd").value);
+      const categoria = body.querySelector(".qp-cat").value;
+      const cartaoId = body.querySelector(".qp-card").value;
+
+      if (!nome || valorTotal <= 0 || !qtd) {
+          alert("Preencha todos os campos corretamente.");
+          return;
+      }
+
+      const valorParcela = Number((valorTotal / qtd).toFixed(2));
+      const pId = Date.now(); // ID único para o grupo de parcelas
+
+      if (cartaoId === "dinheiro") {
+          // Se for dinheiro, salvamos na memória de parcelas (Home)
+          parcelasMemoria.push({
+              id: pId,
+              nome: nome,
+              valorParcela: valorParcela,
+              parcelas: qtd,
+              inicio: index,
+              ano: Number(ano),
+              categoria: categoria
+          });
+      } else {
+          // Se for cartão, distribuímos nos gastos detalhados
+          let mesC = index;
+          let anoC = Number(ano);
+          for (let i = 1; i <= qtd; i++) {
+              if (!gastosDetalhes[anoC]) gastosDetalhes[anoC] = [];
+              gastosDetalhes[anoC].push({
+                  mes: mesC,
+                  nome: `${nome} (${i}/${qtd})`,
+                  valor: valorParcela,
+                  categoria: categoria,
+                  cartaoId: cartaoId,
+                  parcelaId: pId
+              });
+              mesC++;
+              if (mesC > 11) { mesC = 0; anoC++; }
+          }
+      }
+
+      // Salva e Feedback
+      salvarDadosLocal();
+      await salvarFirebase();
+
+      formQuickP.style.display = "none";
+      btnShowP.style.display = "block";
+      const textoOriginal = btnShowP.innerText;
+      btnShowP.innerText = "✅ Parcelas Criadas!";
+      btnShowP.style.backgroundColor = "#27ae60";
+
+      setTimeout(() => {
+          btnShowP.innerText = textoOriginal;
+          btnShowP.style.backgroundColor = "";
+          carregarAno();
+      }, 2000);
   };
   
   body.querySelector(".addEmp").onclick = () => { if(!data.empresa) data.empresa=[]; data.empresa.push({nome:"", valor:0, checked:true}); carregarAno(); };
@@ -724,6 +1018,48 @@ function renderPizza(mesIdx, gastos) {
     div.innerHTML = ""; new ApexCharts(div, options).render();
 }
 
+// --- VARIÁVEL GLOBAL DE CONTROLE DE EDIÇÃO ---
+let idEditando = null; 
+
+// Função para limpar o estado de edição quando clicar no calendário
+window.resetEdicao = () => {
+    idEditando = null;
+    document.getElementById("btnSalvarLembrete").innerText = "Salvar";
+    // Limpa os campos para um novo lembrete
+    document.getElementById("lemTitulo").value = "";
+    document.getElementById("lemValor").value = "";
+    document.getElementById("lemHora").value = "";
+};
+
+// --- FUNÇÃO PARA CARREGAR DADOS NO MODAL ---
+window.editarLembrete = (l) => {
+    idEditando = l.id; // Salva o ID que estamos editando
+    
+    const modal = document.getElementById("modalLembrete");
+    if (!modal) return;
+
+    modal.style.display = "flex";
+    
+    // Preenche os campos
+    document.getElementById("lemTitulo").value = l.nome;
+    document.getElementById("lemData").value = l.data;
+    document.getElementById("lemHora").value = l.hora || "";
+    document.getElementById("lemValor").value = l.valor || "";
+    document.getElementById("lemRecorrente").checked = l.recorrente;
+    
+    const divDias = document.getElementById("escolhaDiasSemana");
+    divDias.style.display = l.recorrente ? "grid" : "none";
+    
+    // Marca os dias da semana
+    divDias.querySelectorAll("input").forEach(input => {
+        input.checked = l.diasSemana ? l.diasSemana.includes(parseInt(input.value)) : false;
+    });
+
+    // Muda o texto do botão para avisar que é edição
+    const btnSalvar = document.getElementById("btnSalvarLembrete");
+    if (btnSalvar) btnSalvar.innerText = "Atualizar Lembrete";
+};
+
 function renderContasFixas() {
   const container = document.getElementById("listaContasFixas"); 
   if (!container) return; 
@@ -766,7 +1102,7 @@ function renderContasFixas() {
       </td>
       <td>
         <select class="input-tabela-edit card-fixo">
-            <option value="">💳 S/ Card</option>
+            <option value="" >Nenhum</option>
             ${cartoes.filter(c=>c.tipo==='Crédito').map(c=>`<option value="${c.id}" ${String(cf.cartaoId) === String(c.id) ? 'selected' : ''}>${c.nome}</option>`).join('')}
         </select>
       </td>
@@ -936,6 +1272,7 @@ if (user) {
             configuracoes = res.configuracoes || configuracoes; 
             cartoes = res.cartoes || []; 
             gastosDetalhes = res.gastosDetalhes || {};
+            atualizarSeletorAnos();
             aplicarParcelas();
         } catch (err) {
             console.error("Erro na descriptografia:", err);
@@ -944,6 +1281,7 @@ if (user) {
             return;
         }
     }
+    atualizarSaudacao();
     aplicarTema(configuracoes.tema);
     atualizarTituloSite();
     document.getElementById("authContainer").style.display = "none"; document.getElementById("appContainer").style.display = "block";
@@ -977,20 +1315,22 @@ document.getElementById("inputImport").onchange = (e) => {
         configuracoes = res.configuracoes || configuracoes; 
         cartoes = res.cartoes || []; 
         gastosDetalhes = res.gastosDetalhes || {}; 
-        
+        atualizarSeletorAnos();
         carregarAno(); 
         renderContasFixas(); 
         renderReceitasFixas(); 
         renderLembretesHome(); // Adicionado aqui
         renderPaginaGastos();
         aplicarTema(configuracoes.tema);
+        atualizarVisibilidadeBotaoIA();
         alert("Backup carregado com sucesso!");
     }; 
     r.readAsText(e.target.files[0]); 
 };
 
 // Função central de navegação
-function roteador() {
+// FUNÇÃO CENTRAL DE NAVEGAÇÃO
+async function roteador() {
     const hash = window.location.hash || "#resumo"; 
 
     const views = {
@@ -999,24 +1339,41 @@ function roteador() {
         "#calendario": "viewCalendario"
     };
 
-    // Esconder todas e remover active
-    Object.values(views).forEach(id => document.getElementById(id).style.display = "none");
-    ["navResumo", "navGastos", "navCalendario"].forEach(id => document.getElementById(id).classList.remove("active"));
+    // 1. Esconder todas as seções e remover o estado ativo do menu
+    Object.values(views).forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.style.display = "none";
+    });
 
-    // Mostrar atual
-    const currentView = views[hash] || "viewResumo";
-    document.getElementById(currentView).style.display = "block";
+    ["navResumo", "navGastos", "navCalendario"].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.classList.remove("active");
+    });
+
+    // 2. Mostrar a seção atual
+    const currentViewId = views[hash] || "viewResumo";
+    const currentViewEl = document.getElementById(currentViewId);
+    if (currentViewEl) currentViewEl.style.display = "block";
     
-    // Marcar link como ativo
-    if (hash === "#resumo") {
+    // 3. Lógica específica de inicialização de cada aba
+    if (hash === "#resumo" || hash === "") {
         document.getElementById("navResumo").classList.add("active");
-        carregarAno();
-    } else if (hash === "#gastos") {
+        atualizarSaudacao(); // Atualiza Bom dia/Boa tarde...
+        carregarAno();       // Renderiza os cards dos meses na Home
+    } 
+    else if (hash === "#gastos") {
         document.getElementById("navGastos").classList.add("active");
-        renderPaginaGastos();
-    } else if (hash === "#calendario") {
+        renderPaginaGastos(); // Renderiza as tabelas de gastos detalhados
+    } 
+    else if (hash === "#calendario") {
         document.getElementById("navCalendario").classList.add("active");
-    renderCalendario({cartoes, contasFixas, receitasFixas, lembretes, configuracoes, gastosDetalhes}, { abrirPostit });    }
+        
+        // Chamada assíncrona do calendário (espera a API de feriados)
+        await renderCalendario(
+            { cartoes, contasFixas, receitasFixas, lembretes, configuracoes, gastosDetalhes }, 
+            { abrirPostit }
+        );
+    }
 }
 
 window.addEventListener("hashchange", roteador);
@@ -1072,10 +1429,26 @@ document.getElementById("btnSalvarSenha").onclick = async () => {
 document.getElementById("loginBtn").onclick = async () => { const e = document.getElementById("email").value, s = document.getElementById("senha").value; try { await signInWithEmailAndPassword(auth, e, s); senhaDoUsuario = s; sessionStorage.setItem("temp_key", s); } catch (err) { alert("Erro login"); } };
 document.getElementById("cadastroBtn").onclick = async () => { const e = document.getElementById("email").value, s = document.getElementById("senha").value; try { await createUserWithEmailAndPassword(auth, e, s); senhaDoUsuario = s; sessionStorage.setItem("temp_key", s); await salvarFirebase(); } catch (err) { alert("Erro cadastro"); } };
 document.getElementById("logoutBtn").onclick = () => { signOut(auth); sessionStorage.clear(); location.reload(); };
-document.getElementById("btnSettings").onclick = () => { const modalCfg = document.getElementById("modalConfiguracoes"); if(!modalCfg) return; document.getElementById("cfgNomeUsuario").value = configuracoes.nomeUsuario || ""; document.getElementById("cfgDiaVirada").value = configuracoes.diaVirada || 1; const ref = configuracoes.referenciaMes || "atual"; document.getElementById("refAtual").checked = (ref === "atual"); document.getElementById("refProximo").checked = (ref === "proximo"); modalCfg.style.display = "flex"; };
+document.getElementById("btnSettings").onclick = () => { const modalCfg = document.getElementById("modalConfiguracoes"); if(!modalCfg) return; document.getElementById("cfgApiKey").value = configuracoes.geminiKey || ""; document.getElementById("cfgNomeUsuario").value = configuracoes.nomeUsuario || ""; document.getElementById("cfgDiaVirada").value = configuracoes.diaVirada || 1; const ref = configuracoes.referenciaMes || "atual"; document.getElementById("refAtual").checked = (ref === "atual"); document.getElementById("refProximo").checked = (ref === "proximo"); modalCfg.style.display = "flex"; };
 document.getElementById("btnSalvarConfig").onclick = async () => { configuracoes.nomeUsuario = document.getElementById("cfgNomeUsuario").value; configuracoes.diaVirada = document.getElementById("cfgDiaVirada").value;
 configuracoes.diaSalario = document.getElementById("cfgDiaSalario").value; 
-configuracoes.referenciaMes = document.querySelector('input[name="refMes"]:checked')?.value || "atual"; atualizarTituloSite(); await salvarFirebase(); document.getElementById("modalConfiguracoes").style.display = "none"; carregarAno(); renderPaginaGastos(); };
+configuracoes.geminiKey = document.getElementById("cfgApiKey").value;
+configuracoes.referenciaMes = document.querySelector('input[name="refMes"]:checked')?.value || "atual"; atualizarTituloSite(); await salvarFirebase(); document.getElementById("modalConfiguracoes").style.display = "none"; carregarAno(); renderPaginaGastos();
+
+    configuracoes.geminiKey = document.getElementById("cfgApiKey").value;
+    
+    // Se ele preencheu a chave, resetamos o status de desativado
+    if (configuracoes.geminiKey.trim() !== "") {
+        configuracoes.assistenteDesativado = false;
+    }
+
+    atualizarVisibilidadeBotaoIA(); // Atualiza o botão na hora
+    atualizarTituloSite(); 
+    await salvarFirebase(); 
+    document.getElementById("modalConfiguracoes").style.display = "none"; 
+    carregarAno(); 
+    renderPaginaGastos();
+};
 document.getElementById("btnFecharConfig").onclick = () => document.getElementById("modalConfiguracoes").style.display = "none";
 document.getElementById("btnGerenciarCategorias").onclick = () => { document.getElementById("modalCategorias").style.display = "flex"; renderCategoriasModal(); };
 document.getElementById("btnGerenciarCartoes").onclick = () => { document.getElementById("modalCartoes").style.display = "flex"; renderCartoesModal(); };
@@ -1116,8 +1489,51 @@ function carregarAno() {
   atualizarTudo(ano);
 }
 
-const s1 = document.getElementById("ano"); const s2 = document.getElementById("anoGastos");
-[s1, s2].forEach(s => { if(!s) return; for (let a = 2024; a <= 2035; a++) { const o = document.createElement("option"); o.value = a; o.text = a; if(a === hoje.getFullYear()) o.selected = true; s.appendChild(o); } s.onchange = () => { carregarAno(); renderPaginaGastos(); }; });
+// FUNÇÃO PARA ATUALIZAR OS SELETORES DE ANO DINAMICAMENTE
+function atualizarSeletorAnos() {
+    const seletores = [document.getElementById("ano"), document.getElementById("anoGastos")];
+    
+    // 1. Pega as chaves do objeto 'dados' (que são os anos criados)
+    let anosCriados = Object.keys(dados).map(Number);
+    
+    // 2. Garante o ano atual e o próximo ano na lista para expansão
+    const anoHoje = new Date().getFullYear();
+    const proximoAno = anoHoje + 1;
+    if (!anosCriados.includes(anoHoje)) anosCriados.push(anoHoje);
+    if (!anosCriados.includes(proximoAno)) anosCriados.push(proximoAno);
+    
+    // 3. Ordena os anos (do menor para o maior)
+    anosCriados.sort((a, b) => a - b);
+
+    seletores.forEach(s => {
+        if (!s) return;
+        
+        // Salva qual ano estava selecionado antes de limpar
+        const valorAntigo = s.value;
+        s.innerHTML = ""; 
+
+        anosCriados.forEach(a => {
+            const o = document.createElement("option");
+            o.value = a;
+            o.text = a;
+            
+            // Se for o ano que já estava ou o ano atual (caso seja a primeira carga)
+            if (valorAntigo) {
+                if (String(a) === String(valorAntigo)) o.selected = true;
+            } else {
+                if (a === anoHoje) o.selected = true;
+            }
+            
+            s.appendChild(o);
+        });
+
+        // Reaplica o evento de mudança
+        s.onchange = () => {
+            carregarAno();
+            renderPaginaGastos();
+        };
+    });
+}
 
 // Exibe/Esconde dias da semana no modal
 document.getElementById("lemRecorrente").onchange = (e) => {
@@ -1125,49 +1541,403 @@ document.getElementById("lemRecorrente").onchange = (e) => {
 };
 
 document.getElementById("btnSalvarLembrete").onclick = async () => {
+    const titulo = document.getElementById("lemTitulo").value;
+    const dataVal = document.getElementById("lemData").value;
+
+    if (!titulo || !dataVal) {
+        alert("Título e Data são obrigatórios.");
+        return;
+    }
+
+    // Se estivermos editando, removemos o antigo da lista antes de adicionar o novo
+    if (idEditando) {
+        lembretes = lembretes.filter(x => x.id !== idEditando);
+    }
+
     const recorrente = document.getElementById("lemRecorrente").checked;
     const diasSelecionados = Array.from(document.querySelectorAll("#escolhaDiasSemana input:checked")).map(i => parseInt(i.value));
 
-    const l = { 
-        id: Date.now(), 
-        nome: document.getElementById("lemTitulo").value, 
-        data: document.getElementById("lemData").value, 
+    const novoLembrete = { 
+        id: idEditando || Date.now(), // Mantém o ID se for edição, senão cria um novo
+        nome: titulo, 
+        data: dataVal, 
         hora: document.getElementById("lemHora").value,
         valor: parseValor(document.getElementById("lemValor").value),
         recorrente: recorrente,
         diasSemana: diasSelecionados
     };
     
-    lembretes.push(l);
+    lembretes.push(novoLembrete);
+    
+    // Reseta o estado de edição
+    idEditando = null;
+    document.getElementById("btnSalvarLembrete").innerText = "Salvar";
+
+    // Salva e atualiza tudo
     await salvarFirebase();
     renderLembretesHome();
     
-    // Limpeza
+    // Limpeza do Modal
     document.getElementById("modalLembrete").style.display = "none";
     document.getElementById("lemTitulo").value = "";
+    document.getElementById("lemData").value = "";
+    document.getElementById("lemHora").value = "";
     document.getElementById("lemValor").value = "";
     document.getElementById("lemRecorrente").checked = false;
     document.getElementById("escolhaDiasSemana").style.display = "none";
 
-    renderCalendario({cartoes, contasFixas, receitasFixas, lembretes, configuracoes, gastosDetalhes, abrirPostit});
+    // Recarrega o calendário se estiver visível
+    renderCalendario({cartoes, contasFixas, receitasFixas, lembretes, configuracoes, gastosDetalhes}, { abrirPostit });
 };
 
 function abrirPostit(l) {
+    const antigo = document.getElementById("popupPostit");
+    if(antigo) antigo.remove();
+
     const overlay = document.createElement("div"); 
     overlay.className = "modal-overlay"; 
     overlay.id = "popupPostit";
-    overlay.innerHTML = `<div class="modal-content postit-amarelo" style="background:#f1c40f; color:#000; padding:20px; border-radius:5px; min-width:250px;"><h3 style="margin-top:0; border-bottom:1px solid rgba(0,0,0,0.1); padding-bottom:5px;">${l.nome}</h3><p style="margin: 10px 0 5px 0;"><strong>📅 Data:</strong> ${l.data}</p><p style="margin: 0 0 5px 0;"><strong>⏰ Hora:</strong> ${l.hora || 'Não definida'}</p><p style="margin: 0 0 20px 0;"><strong>💰 Valor:</strong> ${l.valor ? formatar(l.valor) : '---'}</p><div style="display:flex; gap:10px;"><button class="btn sair" id="btnDelPostit" style="flex:1">Excluir</button><button class="btn" onclick="this.closest('.modal-overlay').remove()" style="flex:1; background:#333; color:#fff;">Fechar</button></div></div>`;
-    document.body.appendChild(overlay);
-    document.getElementById("btnDelPostit").onclick = async () => { 
-            if(confirm("Excluir este lembrete?")) {
-                lembretes = lembretes.filter(x => x.id !== l.id); 
-                await salvarFirebase(); 
-                
-                // ATUALIZAÇÃO AQUI:
-                renderLembretesHome(); // Atualiza a agenda na Home
-                renderCalendario({cartoes, contasFixas, receitasFixas, lembretes, configuracoes, gastosDetalhes, abrirPostit}); // Atualiza o Calendário
-                
-                overlay.remove(); 
-            }
+
+    const renderConteudo = (modoEdicao = false) => {
+        let infoRecorrencia = "";
+        if (l.recorrente && l.diasSemana?.length > 0) {
+            const nomesDias = ["dom", "seg", "ter", "qua", "qui", "sex", "sab"];
+            const diasTexto = l.diasSemana.map(d => nomesDias[d]).join(", ");
+            infoRecorrencia = `<small style="display:block; font-size:12px; opacity:0.6;">(toda ${diasTexto})</small>`;
+        }
+
+        if (!modoEdicao) {
+            return `
+                <div class="modal-content postit-amarelo" style="padding:25px; min-width:280px; position:relative;">
+                    <span class="btn-editar-p" style="position:absolute; right:15px; top:15px; cursor:pointer; font-size:20px;">✏️</span>
+                    <h3 style="margin-top:0; border-bottom:1px solid rgba(0,0,0,0.1); padding-bottom:8px; padding-right:30px;">
+                        ${l.nome} ${infoRecorrencia}
+                    </h3>
+                    <div style="margin: 15px 0; font-size: 18px;">
+                        <p>📅 <strong>Data:</strong> ${l.data.split('-').reverse().join('/')}</p>
+                        <p>⏰ <strong>Hora:</strong> ${l.hora || '---'}</p>
+                        <p>💰 <strong>Valor:</strong> ${l.valor ? formatar(l.valor) : '---'}</p>
+                    </div>
+                    <div style="display:flex; gap:10px; margin-top:20px;">
+                        <button class="btn btn-excluir-p" style="flex:1; background:#e74c3c; color:white;">Apagar</button>
+                        <button class="btn btn-fechar-p" style="flex:1; background:#333; color:#fff;">Fechar</button>
+                    </div>
+                </div>`;
+        } else {
+            return `
+                <div class="modal-content postit-amarelo modo-edicao" style="padding:25px; min-width:280px; position:relative;">
+                    <h3 style="margin-bottom:15px; font-size:14px; opacity:0.5; text-transform:uppercase;">Editando...</h3>
+                    <input type="text" class="postit-edit-input edit-nome" value="${l.nome}" placeholder="Título">
+                    <input type="date" class="postit-edit-input edit-data" value="${l.data}">
+                    <input type="time" class="postit-edit-input edit-hora" value="${l.hora || ''}">
+                    <input type="text" class="postit-edit-input edit-valor" value="${l.valor || ''}" placeholder="Valor R$">
+                    <div style="margin-top:15px; background: rgba(0,0,0,0.05); padding: 10px;">
+                        <label style="cursor:pointer; display:flex; align-items:center; gap:8px;">
+                            <input type="checkbox" class="edit-recorrente" ${l.recorrente ? 'checked' : ''}> Repetir semanalmente?
+                        </label>
+                        <div class="edit-dias" style="display:${l.recorrente ? 'grid' : 'none'}; grid-template-columns: repeat(7, 1fr); gap:5px; margin-top:10px;">
+                            ${[0,1,2,3,4,5,6].map(d => `<label style="display:flex; flex-direction:column; align-items:center; font-size:10px; cursor:pointer;"><input type="checkbox" value="${d}" ${l.diasSemana?.includes(d) ? 'checked' : ''}>${['D','S','T','Q','Q','S','S'][d]}</label>`).join('')}
+                        </div>
+                    </div>
+                    <div style="display:flex; gap:10px; margin-top:20px;">
+                        <button class="btn btn-salvar-p" style="flex:1; background:#27ae60; color:white;">Salvar</button>
+                        <button class="btn btn-cancelar-p" style="flex:1; background:#999; color:white;">Cancelar</button>
+                    </div>
+                </div>`;
+        }
+    };
+
+    // (O resto da função attachEvents permanece igual ao passo anterior)
+    const attachEvents = () => {
+        const btnEdit = overlay.querySelector(".btn-editar-p");
+        if(btnEdit) btnEdit.onclick = () => { overlay.innerHTML = renderConteudo(true); attachEvents(); };
+        const btnExcluir = overlay.querySelector(".btn-excluir-p");
+        if(btnExcluir) btnExcluir.onclick = async () => { if(confirm("Apagar?")) { lembretes = lembretes.filter(x => x.id !== l.id); await salvarFirebase(); renderLembretesHome(); renderCalendario({cartoes, contasFixas, receitasFixas, lembretes, configuracoes, gastosDetalhes}, { abrirPostit }); overlay.remove(); } };
+        const checkRec = overlay.querySelector(".edit-recorrente");
+        if(checkRec) checkRec.onchange = (e) => overlay.querySelector(".edit-dias").style.display = e.target.checked ? "grid" : "none";
+        const btnSalvar = overlay.querySelector(".btn-salvar-p");
+        if(btnSalvar) btnSalvar.onclick = async () => {
+            l.nome = overlay.querySelector(".edit-nome").value;
+            l.data = overlay.querySelector(".edit-data").value;
+            l.hora = overlay.querySelector(".edit-hora").value;
+            l.valor = parseValor(overlay.querySelector(".edit-valor").value);
+            l.recorrente = overlay.querySelector(".edit-recorrente").checked;
+            l.diasSemana = Array.from(overlay.querySelectorAll(".edit-dias input:checked")).map(i => parseInt(i.value));
+            await salvarFirebase(); renderLembretesHome();
+            renderCalendario({cartoes, contasFixas, receitasFixas, lembretes, configuracoes, gastosDetalhes}, { abrirPostit });
+            overlay.innerHTML = renderConteudo(false); attachEvents();
         };
+        const btnCancel = overlay.querySelector(".btn-cancelar-p") || overlay.querySelector(".btn-fechar-p");
+        if(btnCancel) btnCancel.onclick = () => { if(btnCancel.classList.contains('btn-cancelar-p')) { overlay.innerHTML = renderConteudo(false); attachEvents(); } else { overlay.remove(); } };
+    };
+
+    overlay.innerHTML = renderConteudo(false);
+    document.body.appendChild(overlay);
+    attachEvents();
+    overlay.onclick = (e) => { if(e.target === overlay) overlay.remove(); };
 }
+
+// FUNÇÕES DE IA
+
+async function conversarComIA(pergunta) {
+    const apiKey = configuracoes.geminiKey;
+    if (!apiKey) return "Erro: API Key não encontrada.";
+
+    const anoView = document.getElementById("ano")?.value || new Date().getFullYear();
+    const hojeData = new Date();
+    const dataISO = hojeData.toISOString().split('T')[0];
+
+    // Contexto fixo que vai em todas as mensagens
+    const contextoApp = {
+        usuario: configuracoes.nomeUsuario,
+        dataHoje: dataISO,
+        diaSemana: hojeData.toLocaleDateString('pt-BR', {weekday: 'long'}),
+        anoVisualizado: anoView,
+        cartoes: cartoes.map(c => ({ id: c.id, nome: c.nome })),
+        categorias: categorias.map(c => c.name)
+    };
+
+    const instrucaoSistema = `Você é o assistente do app "Contas Mensais". 
+    Hoje é ${contextoApp.diaSemana}, dia ${contextoApp.dataHoje}.
+    Dados do App: ${JSON.stringify(contextoApp)}.
+
+    REGRAS:
+    1. Se o usuário confirmar dados faltantes de um lembrete ou gasto, retorne o JSON de ação.
+    2. ADD_REMINDER: Precisa de Nome e Data (YYYY-MM-DD). Hora e Valor são opcionais.
+    3. ADD_EXPENSE: Precisa de Nome, Valor, Cartão (use o ID do contexto) e Mês (0-11).
+    4. Mantenha o contexto: se o usuário disse "Dentista" na mensagem anterior e agora disse "às 9h", ele ainda está falando do Dentista.
+    5. RESPOSTA JSON: Se for executar a ação, responda APENAS o JSON, sem texto antes ou depois.`;
+
+    // Adiciona a pergunta atual ao histórico
+    historicoChatIA.push({ role: "user", parts: [{ text: pergunta }] });
+
+    // Prepara o corpo da requisição com as instruções de sistema e o histórico
+    const corpoRequisicao = {
+        contents: [
+            { role: "user", parts: [{ text: instrucaoSistema }] }, // Instrução base
+            ...historicoChatIA // Memória da conversa
+        ],
+        generationConfig: { temperature: 0.7 }
+    };
+
+    try {
+        const response = await fetch(`https://generativelanguage.googleapis.com/v1/models/gemini-2.5-flash:generateContent?key=${apiKey}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(corpoRequisicao)
+        });
+
+        const data = await response.json();
+        if (data.error) return `Erro: ${data.error.message}`;
+
+        let text = data.candidates[0].content.parts[0].text;
+
+        // Adiciona a resposta da IA ao histórico para a próxima rodada
+        historicoChatIA.push({ role: "model", parts: [{ text: text }] });
+
+        // Limita o histórico para não ficar pesado (últimas 10 mensagens)
+        if (historicoChatIA.length > 10) historicoChatIA.shift();
+
+// Processa JSON se existir (limpando Markdown se necessário)
+        if (text.includes('"action"')) {
+            try {
+                // Remove blocos de código markdown (```json ... ```)
+                let jsonLimpo = text.replace(/```json|```/g, "").trim();
+                
+                // Tenta encontrar o conteúdo entre as chaves { }
+                const inicio = jsonLimpo.indexOf('{');
+                const fim = jsonLimpo.lastIndexOf('}');
+                
+                if (inicio !== -1 && fim !== -1) {
+                    jsonLimpo = jsonLimpo.substring(inicio, fim + 1);
+                    const acao = JSON.parse(jsonLimpo);
+                    return await processarAcaoIA(acao);
+                }
+            } catch (e) {
+                console.error("Falha ao processar comando da IA:", e);
+            }
+        }
+
+        return text;
+    } catch (e) {
+        return "Erro de conexão com o Gemini.";
+    }
+}
+
+async function processarAcaoIA(comando) {
+    const anoView = document.getElementById("ano")?.value || new Date().getFullYear();
+    historicoChatIA.push({ role: "model", parts: [{ text: `Ação executada: ${comando.action}` }] });
+
+
+    if (comando.action === "ADD_REMINDER") {
+        const novoLembrete = {
+            id: Date.now(),
+            nome: comando.data.nome,
+            data: comando.data.data,
+            hora: comando.data.hora || "",
+            valor: comando.data.valor || 0,
+            recorrente: false,
+            diasSemana: []
+        };
+        lembretes.push(novoLembrete);
+        await salvarFirebase();
+        renderLembretesHome();
+        // Atualiza calendário se estiver nele
+        if(window.location.hash === "#calendario") {
+            renderCalendario({cartoes, contasFixas, receitasFixas, lembretes, configuracoes, gastosDetalhes}, { abrirPostit });
+        }
+        return `✅ Lembrete **${comando.data.nome}** agendado para ${comando.data.data}!`;
+    }
+
+    if (comando.action === "ADD_EXPENSE") {
+        if (!gastosDetalhes[anoView]) gastosDetalhes[anoView] = [];
+        
+        const novoGasto = {
+            mes: comando.data.mes,
+            nome: comando.data.nome,
+            valor: comando.data.valor,
+            categoria: comando.data.categoria || categorias[0].name,
+            cartaoId: comando.data.cartaoId
+        };
+        
+        gastosDetalhes[anoView].push(novoGasto);
+        await salvarFirebase();
+        atualizarTudo(anoView);
+        
+        // Se estiver na tela de gastos, re-renderiza
+        if(window.location.hash === "#gastos") renderPaginaGastos();
+        
+        const nomeMes = nomesMesesFull[comando.data.mes];
+        return `✅ Gasto de **${formatar(comando.data.valor)}** em **${comando.data.nome}** registrado em ${nomeMes}!`;
+
+    }
+
+    return "Ação não reconhecida.";
+}
+
+function atualizarVisibilidadeBotaoIA() {
+    const btn = document.getElementById("btnAbrirChatIA");
+    const temChave = configuracoes.geminiKey && configuracoes.geminiKey.trim() !== "";
+    
+    // Mostra o botão se: tiver chave OU se a pessoa ainda não clicou em "Recusar"
+    if (temChave || configuracoes.assistenteDesativado !== true) {
+        btn.style.display = "block";
+    } else {
+        btn.style.display = "none";
+    }
+}
+
+// ================= GESTÃO DA IA (MEMÓRIA E EVENTOS) =================
+
+// LÓGICA DE ABERTURA DO ASSISTENTE
+document.getElementById("btnAbrirChatIA").onclick = () => {
+    const temChave = configuracoes.geminiKey && configuracoes.geminiKey.trim() !== "";
+
+    if (!temChave) {
+        // Se não configurou a chave, abre o tutorial
+        document.getElementById("modalConfigIA").style.display = "flex";
+    } else {
+        const chat = document.getElementById("modalChatIA");
+        // Se for fechar a janela, limpamos a memória para a próxima conversa ser limpa
+        if (chat.style.display === "flex") {
+            chat.style.display = "none";
+            historicoChatIA = []; // SUGESTÃO 3: Limpa o contexto ao fechar
+        } else {
+            chat.style.display = "flex";
+            document.getElementById("inputChatIA").focus();
+        }
+    }
+};
+
+// BOTÃO FECHAR (O "X" dentro da janelinha)
+// Se você tiver um botão de fechar no HTML, chame essa função:
+window.fecharWidgetIA = function() {
+    document.getElementById("modalChatIA").style.display = "none";
+    historicoChatIA = []; // Limpa a memória ao fechar no X também
+};
+
+// BOTÃO RECUSAR NO TUTORIAL
+document.getElementById("btnRecusarIA").onclick = async () => {
+    configuracoes.assistenteDesativado = true; // Salva a escolha de esconder
+    document.getElementById("modalConfigIA").style.display = "none";
+    atualizarVisibilidadeBotaoIA();
+    await salvarFirebase(); // Sincroniza com a nuvem
+};
+
+// BOTÃO ACEITAR E SALVAR CHAVE
+document.getElementById("btnAceitarIA").onclick = async () => {
+    const novaChave = document.getElementById("inputApiKeyIA").value.trim();
+    if (novaChave.length < 10) {
+        alert("Por favor, insira uma API Key válida.");
+        return;
+    }
+
+    configuracoes.assistenteDesativado = false; 
+    configuracoes.geminiKey = novaChave;
+    await salvarFirebase(); 
+    document.getElementById("modalConfigIA").style.display = "none";
+    document.getElementById("modalChatIA").style.display = "flex";
+    document.getElementById("inputChatIA").focus();
+    
+    const windowChat = document.getElementById("chatWindow");
+    windowChat.innerHTML += `<div class="msg-ia">Chave configurada com sucesso! Como posso analisar suas contas hoje?</div>`;
+};
+
+// FUNÇÃO CENTRAL DE ENVIAR MENSAGEM
+async function enviarMensagemIA() {
+    const input = document.getElementById("inputChatIA");
+    const windowChat = document.getElementById("chatWindow");
+    const texto = input.value.trim();
+
+    if (!texto) return;
+
+    // 1. Mostrar mensagem do usuário
+   windowChat.innerHTML += `<div class="msg-user">${formatarMarkdown(texto)}</div>`;
+    input.value = "";
+    windowChat.scrollTop = windowChat.scrollHeight;
+
+    // 2. Mostrar indicador de "Pensando..."
+    const loadingId = "loading-" + Date.now();
+    windowChat.innerHTML += `
+        <div class="msg-ia loading-msg" id="${loadingId}">
+            <div class="typing-dots">
+                <div class="dot"></div>
+                <div class="dot"></div>
+                <div class="dot"></div>
+            </div>
+        </div>`;
+    windowChat.scrollTop = windowChat.scrollHeight;
+
+    // 3. Chamar a IA (com histórico/memória)
+    try {
+        const resposta = await conversarComIA(texto);
+        
+        // 4. Remover o loading e mostrar a resposta real
+        const loadingEl = document.getElementById(loadingId);
+        if (loadingEl) loadingEl.remove();
+
+        windowChat.innerHTML += `<div class="msg-ia">${formatarMarkdown(resposta)}</div>`;
+    } catch (error) {
+        const loadingEl = document.getElementById(loadingId);
+        if (loadingEl) loadingEl.innerHTML = "Erro ao obter resposta.";
+    }
+
+    windowChat.scrollTop = windowChat.scrollHeight;
+}
+
+function formatarMarkdown(texto) {
+    // Substitui **texto** por <b>texto</b>
+    return texto.replace(/\*\*(.*?)\*\*/g, '<b>$1</b>');
+}
+
+// EVENTO DE CLIQUE NO BOTÃO ENVIAR
+document.getElementById("btnEnviarIA").onclick = enviarMensagemIA;
+
+// EVENTO DE ENTER NO CAMPO DE TEXTO
+document.getElementById("inputChatIA").onkeydown = (e) => {
+    if (e.key === "Enter") {
+        e.preventDefault(); 
+        enviarMensagemIA();
+    }
+};
+

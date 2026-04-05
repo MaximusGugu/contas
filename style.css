@@ -33,8 +33,8 @@ body.theme-noite {
   --P03: #2ecc71;
   --P04: #216796;
   --P05: #153a5c;
-  --P06: #0b1e2e;
-  --P07: #617dab;
+  --P06: #012e58;
+  --P07: #283d5e;
   --P08: #1c2533;
   --P09: #0b0e14;
   --BG-INPUT: #1c2533;
@@ -79,7 +79,7 @@ body.theme-grayscale {
   --P04: #636e72;
   --P05: #2d3436;
   --P06: #2d3436;
-  --P07: #565b5b;
+  --P07: #7a7e7e;
   --P08: #242424;
   --P09: #000000;
   --BG-INPUT: #565b5b;
@@ -88,17 +88,17 @@ body.theme-grayscale {
 }
 
 body.theme-natureza {
-  --P01: #F1F8E9; /* Super claro (Fundo) */
-  --P02: #F1F8E9; /* Super claro (Fundo Colunas) */
-  --P03: #DCEDC8; /* Verde menta (Fundo Inputs) */
-  --P04: #8BC34A; /* Verde folha (Destaque/Botões) */
-  --P05: #4CAF50; /* Verde natureza (Corpo dos Cards) */
-  --P06: #2E7D32; /* Verde floresta (Cabeçalhos) */
-  --P07: #1B5E20; /* Verde musgo escuro (Rodapé/Bordas) */
-  --P08: #102A12; /* Verde quase preto (Texto Principal) */
-  --P09: #051406; /* O mais escuro (Sombras/Textos) */
-  --BG-INPUT: #a8d07b;
-  --BG-IMG: url('https://raw.githubusercontent.com/MaximusGugu/contas/refs/heads/main/img/bg-site-natureza.webp');
+  --P01: #ffffff; /* Super claro (Fundo) */
+  --P02: #f1f9ff; /* Super claro (Fundo Colunas) */
+  --P03: #f0f8ff; /* Azul pastel (Fundo Inputs) */
+  --P04: #4FC3F7; /* Azul vívido (Destaque/Botões) */
+  --P05: #0091df; /* Azul céu (Corpo dos Cards) */
+  --P06: #0288D1; /* Azul oceano (Cabeçalhos) */
+  --P07: #01579B; /* Azul marinho (Rodapé/Bordas) */
+  --P08: #0f3e70; /* Azul quase preto (Texto Principal) */
+  --P09: #040D14; /* O mais escuro (Sombras/Textos) */
+  --BG-INPUT: #57b9e6;
+  --BG-IMG: url('https://raw.githubusercontent.com/MaximusGugu/contas/refs/heads/main/img/bg-site-ceu.webp');
   --POSTIT: #f3db23;
 }
 
@@ -122,7 +122,7 @@ body {
 
 #grafico {
   margin: 20px 0;
-  border-radius: 15px;
+  border-radius: 10px;
   padding: 10px;
   overflow: hidden; /* Garante que o fundo do gráfico respeite o arredondamento */
   background: var(--P06); /* Garante que não pisque branco ao carregar */
@@ -131,7 +131,7 @@ body {
 /* ================= ESTRUTURA DO MÊS ================= */
 .mes {
   background: var(--P03);
-  border-radius: 15px;
+  border-radius: 10px;
   margin-bottom: 20px;
   position: relative;
   overflow: hidden;
@@ -159,7 +159,7 @@ body {
   font-weight: 500;
   font-size: 16px;
   background: var(--P06);
-  color: var(--P03);
+  color: var(--P01);
 }
 
 .mesHeade:hover {
@@ -325,7 +325,7 @@ body {
 
 .mes.collapsed .mesHeader:hover {
   opacity: 1;
-  background: var(--P04);
+  background: var(--P06);
   transform: scale(1.005);
 }
 
@@ -337,7 +337,7 @@ body {
 }
 
 .mesAtual .mesHeader {
-  background-color: var(--P07);
+  background-color: var(--P04);
   color: var(--P02);
   font-weight: bold;
   transition: background 0.3s, color 0.3s;
@@ -348,11 +348,11 @@ body {
 }
 
 .mesAtual.collapsed .mesHeader {
-  background-color: var(--P07);
+  background-color: var(--P04);
 }
 
 .mesAtual.collapsed .mesHeader:hover {
-  background-color: var(--P04);
+  background-color: var(--P07);
 }
 
 .mesAtual .mesHeader:hover {
@@ -706,6 +706,7 @@ body {
   gap: 10px;
   align-items: center;
   margin-bottom: 20px;
+  margin-top: 40px !important;
   justify-content: center;
   color: var(--P07) !important;
 }
@@ -737,7 +738,7 @@ body {
 .auth-card {
   background: var(--P05);
   padding: 40px;
-  border-radius: 20px;
+  border-radius: 10px;
   box-shadow: 0 10px 30px rgba(0,0,0,0.3);
   width: 100%;
   max-width: 400px;
@@ -853,10 +854,65 @@ input.conta:not(.manual) {
   font-size: 18px;
   transition: all 0.2s;
 }
+
 .btn-cascata:hover { background: var(--P01); transform: scale(1.1); }
 
 .btn-cascata:active {
   transform: scale(0.9);
+}
+
+.form-rapido-despesa .inputPadrao {
+    font-size: 11px;
+    height: 30px;
+}
+
+.btn-quick-add {
+    background: var(--P04) !important;
+    color: white !important;
+    font-size: 11px !important;
+    line-height: 1;
+}
+
+.btn-quick-add:hover {
+  transform: scale(1.02);
+}
+
+.btn-show-quick-parcela {
+    background: var(--P06) !important;
+    color: var(--P03) !important;
+    font-size: 11px !important;
+    letter-spacing: 0.5px;
+}
+
+.btn-show-quick-parcela:hover {
+    background: var(--P04) !important;
+    color: white !important;
+}
+
+.btn-show-quick-add {
+    background: var(--P06) !important;
+    color: var(--P03) !important;
+    font-size: 11px !important;
+    letter-spacing: 0.5px;
+}
+
+.btn-show-quick-add:hover {
+    background: var(--P04) !important;
+    color: white !important;
+}
+
+.btn-cancelar-quick {
+  background:none;
+  border:none;
+  color:var(--P04);
+  font-size:10px;
+  cursor:pointer;
+}
+
+.btn-cancelar-quick:hover {
+  color: var(--P02);
+  transform: scale(1.01);
+  text-decoration: underline;
 }
 
 .auth-status {
@@ -919,7 +975,7 @@ input.conta:not(.manual) {
 .modal-content postit-amarelo {
     background: var(--P06);
     padding: 30px;
-    border-radius: 20px;
+    border-radius: 10px;
     width: 90%;
     max-width: 400px;
     box-shadow: 0 15px 35px rgba(0, 0, 0, 0.4);
@@ -934,7 +990,7 @@ input.conta:not(.manual) {
 .modal-content {
     background: var(--P05);
     padding: 30px;
-    border-radius: 20px;
+    border-radius: 10px;
     width: 90%;
     max-width: 400px;
     box-shadow: 0 15px 35px rgba(0, 0, 0, 0.4);
@@ -1057,6 +1113,28 @@ input.conta:not(.manual) {
     opacity: 0.4;
     background-color: var(--P04) !important;
 }
+
+/* Estilo para o item que está sendo arrastado */
+.event-reminder.dragging {
+    opacity: 0.5;
+    transform: scale(0.9);
+}
+
+/* Feedback visual para o dia que vai receber o item */
+.cal-day.drag-over {
+    background: rgba(255, 255, 255, 0.2) !important;
+    border: 2px dashed var(--P04) !important;
+}
+
+/* Ícone de edição no card do calendário */
+.btn-edit-inline {
+    float: right;
+    font-size: 10px;
+    cursor: pointer;
+    margin-left: 5px;
+    opacity: 0.6;
+}
+.btn-edit-inline:hover { opacity: 1; }
 
 .sortable-chosen {
     background-color: rgba(255, 255, 255, 0.1) !important;
@@ -1237,7 +1315,34 @@ element.style {
   color: var(--P01)
 }
 
-.controles-topo { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-bottom: 20px; justify-content: center; }
+/* Botão Fantasma de Adicionar Lembrete */
+.btn-add-ghost {
+    font-family: 'Sour Gummy', sans-serif !important;
+    font-size: 14px;
+    color: var(--P04); /* Verde */
+    border: 1px dashed var(--P04);
+    border-radius: 4px;
+    padding: 2px;
+    text-align: center;
+    opacity: 0; /* Começa invisível */
+    transition: 0.2s;
+    cursor: pointer;
+    background: transparent;
+    margin-top: auto !important;
+}
+
+/* Quando passar o mouse no DIA, mostra o botão */
+.cal-day:hover .btn-add-ghost {
+    opacity: 0.6;
+}
+
+/* Quando passar o mouse direto no BOTÃO, brilha mais */
+.btn-add-ghost:hover {
+    opacity: 1 !important;
+    color: var(--P01);
+    background: var(--P04);
+    transform: scale(1.02);
+}
 
 .auth-wrapper { display: flex; justify-content: center; align-items: center; min-height: 80vh; }
 
@@ -1293,7 +1398,7 @@ input.conta { border-left: 5px solid #2ecc71 !important; color: #27ae60; }
     padding: 8px 5px !important;
 }
 
-.badge { padding: 4px 10px; border-radius: 15px; font-weight: bold; display: inline-block; min-width: 80px; text-align: center; color: white; font-size: 10px; }
+.badge { padding: 4px 10px; border-radius: 10px; font-weight: bold; display: inline-block; min-width: 80px; text-align: center; color: white; font-size: 10px; }
 .badge.categoria { color: #D78341; border: 1px solid #D78341; }
 .badge.formato { background: #27ae60; }
 
@@ -1455,7 +1560,9 @@ input.conta:focus {
 /* GRID CALENDÁRIO */
 .calendario-container {
     background: var(--P06);
-    border-radius: 20px;
+    border-radius: 10px; /* O calendário fica reto nas bordas da tela */
+    width: 100%;
+    max-width: 100%;
     padding: 20px;
     color: var(--P02);
 }
@@ -1464,7 +1571,7 @@ input.conta:focus {
     display: grid;
     grid-template-columns: repeat(7, 1fr);
     gap: 8px;
-    margin-top: 15px;
+    width: 100%;
 }
 
 .cal-day-name {
@@ -1473,6 +1580,7 @@ input.conta:focus {
     color: var(--P04);
     font-size: 14px;
     padding-bottom: 10px;
+    margin-top: 15px;
 }
 
 .cal-day {
@@ -1484,14 +1592,27 @@ input.conta:focus {
     gap: 5px;
     border: 1px solid transparent;
     min-height: 100px;
-    min-width: 100px;
+    width: 100%; 
+    min-width: 0;
+    position: relative;
+}
+
+/* Estilo exclusivo para os dias na visão semanal */
+.weekly-view .cal-day {
+    min-height: 350px; /* Defina aqui a altura que desejar para a semana */
+    justify-content: flex-start; /* Garante que os cards comecem do topo */
 }
 
 .cal-day .event-reminder {
     margin-bottom: 5px;
 }
 
-.cal-day.today { border-color: var(--P04); background: rgba(215, 131, 65, 0.1); }
+.cal-day.today {
+  border: var(--P04) 2px solid;
+  background: var(--P07) !important;
+  box-shadow: 0px 0px 13px 5px color-mix(in srgb, var(--P04), transparent 70%);
+  }
+
 .cal-day.other-month { opacity: 0.2; pointer-events: none; }
 
 /* Efeito de destaque ao passar o mouse nos dias do calendário */
@@ -1511,30 +1632,151 @@ input.conta:focus {
 
 /* EVENTOS */
 .cal-event {
-    font-size: 10px;
+    font-size: 12px;
     padding: 3px 6px;
     border-radius: 4px;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
-    font-weight: bold;
+    font-weight: normal;
     pointer-events: auto;
+    height: fit-content;
 }
 
-.event-closing { background: #555 !important; color: white !important; }
-.event-salary { background: #f1c40f; color: #000; }
+/* ESTILO DOS CARDS NA VISÃO SEMANAL */
+.weekly-view .cal-event {
+    white-space: normal;
+    height: auto;
+    padding: 10px;
+    display: flex;
+    flex-direction: column;
+    justify-content: top;
+    gap: 4px;
+    background-color: color-mix(in srgb, var(--P06), transparent 50%);
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 8px;
+}
+
+.cal-event .event-closing {
+  background: var(--P08) !important;
+  height: auto;
+  color: white !important;
+}
+
+/* Ajuste de cores específicas na semana para manter legibilidade */
+.weekly-view .event-salary { background-color: color-mix(in srgb, #f1c40f, transparent 50%); }
+.weekly-view .event-card { background-color: color-mix(in srgb, var(--P04), transparent 50%); }
+.weekly-view .event-expense { background-color: color-mix(in srgb, #e74c3c, transparent 50%); }
+.weekly-view .event-income { background-color: color-mix(in srgb, #27ae60, transparent 50%); }
+
+/* Lembretes (Amarelos) na semana */
+.weekly-view .event-reminder {
+    background-color: color-mix(in srgb, var(--POSTIT), transparent 30%);
+    color: var(--P08) !important;
+    border: 1px solid var(--POSTIT);
+}
+
+/* Tipografia interna do card */
+.event-card-label { font-size: 9px; opacity: 0.7; text-transform: uppercase; font-weight: normal; }
+.event-card-title { font-size: 13px; font-weight: bold; line-height: 1.2; }
+.event-card-value { font-size: 12px; font-weight: 500; margin-top: 2px; }
+
+/* Tag de Feriado (Topo) */
+.cal-feriado-tag {
+    background: var(--P06);
+    color: var(--P04);
+    font-size: 10px;
+    font-weight: bold;
+    padding: 4px 8px;
+    border-radius: 4px;
+    text-align: center;
+    margin-bottom: 5px;
+    text-transform: uppercase;
+}
+
+/* BOTÃO DE ALTERNÂNCIA DE VISÃO */
+.toggle-group {
+    display: flex;
+    background: var(--P05);
+    border-radius: 8px;
+    padding: 2px;
+    gap: 2px;
+}
+
+.toggle-group .btn-toggle {
+    padding: 6px 12px;
+    border: none;
+    background: none;
+    color: var(--P02);
+    font-size: 11px;
+    font-weight: bold;
+    cursor: pointer;
+    border-radius: 6px;
+    transition: 0.2s;
+}
+
+.toggle-group .btn-toggle.active {
+    background: var(--P04);
+    color: white;
+}
+
+.event-closing { background: var(--P08) !important; color: white !important; }
+.event-salary {
+    background-color: #f1c40f !important; /* Amarelo ouro */
+    color: #000 !important;
+    font-weight: bold;
+}
 .event-expense { background: #e74c3c; color: #fff; }
 .event-income { background: #27ae60; color: #fff; }
 .event-card { background: var(--P04); color: #fff; }
-.event-reminder { background: var(--POSTIT); color: var(--P08); cursor: pointer; rotate: -3deg; scale: 1.2;
-box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+
+.event-reminder {
+  background-color: color-mix(in srgb, var(--POSTIT), transparent 35%);
+  border: 1px solid var(--POSTIT);
+  color: var(--P07);
+  cursor: pointer;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
   transition: transform 0.1s ease-in-out;
   will-change: transform;
+  font-size: 12px;
+}
+
+/* Isso impede que o lembrete que você está segurando bloqueie o 'chão' (dia) */
+.event-reminder.dragging {
+    pointer-events: none !important;
+    opacity: 0.4;
+}
+
+/* Feedback visual da Sour Gummy */
+.postit-amarelo, .event-reminder, .item-lembrete-home, .postit-edit-input {
+    font-family: 'Sour Gummy', sans-serif !important;
 }
 
 .event-reminder:hover {
-  transform: scale(1.1);
+  background-color: var(--POSTIT);
+  color: var(--P07);
+  
+  /* Mantém em 1 linha e expande a largura */
+  white-space: nowrap;
+  width: max-content;
+  min-width: 100%;
+  
+  /* Posicionamento para não bugar */
+  position: relative;
+  z-index: 100;
+  
+  /* Efeito visual solicitado */
+  transform: scale(1.1) rotate(-3deg);
+  box-shadow: 5px 5px 15px rgba(0,0,0,0.3);
+  transition: transform 0.05s ease-in-out;
+  
+  /* Importante: impede que elementos vizinhos capturem o mouse */
+  pointer-events: none; 
 }
+
+/* Reativa o clique apenas para o conteúdo interno se necessário, 
+   mas como você usa stopPropagation no JS, o ideal é: */
+.event-reminder:hover { pointer-events: auto; }
 
 /* Evento de Renda (Verde) */
 .event-income { 
@@ -1542,7 +1784,59 @@ box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
     color: white !important; 
 }
 
+#viewCalendario {
+    width: 80vw; /* Ocupa 80% da largura da janela */
+    position: relative;
+    left: 50%; /* Joga a borda esquerda do elemento para o meio da tela */
+    transform: translateX(-50%); /* Puxa o elemento de volta metade da sua própria largura */
+    margin-bottom: 50px; /* Espaço para o footer não grudar */
+}
+
+/* Ajuste para telas pequenas (Celular) */
+@media (max-width: 768px) {
+    #viewCalendario {
+        width: 95vw; /* No celular, 80% fica muito estreito, melhor usar 95% */
+    }
+}
+
 /* POST-IT */
+/* Fonte Global para Lembretes */
+.postit-amarelo, 
+.event-reminder, 
+.item-lembrete-home,
+.postit-edit-input {
+    font-family: 'Sour Gummy', sans-serif !important;
+}
+
+/* Post-it Padrão (Leitura) */
+.postit-amarelo {
+    background: #f1c40f !important;
+    color: #333 !important;
+    transform: rotate(-2deg); /* Gira para a esquerda */
+    transition: transform 0.3s ease;
+}
+
+.postit-amarelo input::placeholder {
+  color: var(--P07);
+}
+
+/* Post-it em Modo Edição */
+.postit-amarelo.modo-edicao {
+    background: #f1c40f !important;
+    transform: rotate(-3deg) scale(1.05); /* Gira para a direita e aumenta um pouco */
+}
+
+/* Arraste */
+.event-reminder.dragging {
+    opacity: 0.1 !important;
+}
+
+.cal-day.drag-over {
+    background: rgba(255, 255, 255, 0.4) !important;
+    box-shadow: inset 0 0 15px #f1c40f !important;
+    outline: 2px dashed #f1c40f !important;
+}
+
 .postit {
     background: #f1c40f;
     width: 250px;
@@ -1696,16 +1990,21 @@ box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
 }
 
 .dashboard-resumo {
-    margin-bottom: 30px;
+    margin-bottom: 15px;
+}
+
+/* Reduz o espaço entre os módulos de configuração fixa */
+#moduloContasFixas, #moduloReceitasFixas {
+    margin-bottom: 15px !important; /* Força um espaçamento menor que o padrão dos meses (.mes) */
 }
 
 .titulo-secao {
     color: var(--P07);
-    font-size: 20px;
+    font-size: 22px;
     margin-bottom: 15px;
     font-weight: bold;
     text-transform: uppercase;
-    letter-spacing: 1px;
+    /* letter-spacing: 1px; */
 }
 
 .dashboard-row {
@@ -1714,7 +2013,7 @@ box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
     align-items: stretch; /* Faz as duas colunas terem a mesma altura */
     padding: 20px;
     background-color: var(--P06);
-    border-radius: 20px;
+    border-radius: 10px;
 }
 
 .dashboard-col-grafico {

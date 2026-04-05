@@ -8,6 +8,8 @@
   <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script> <!-- ADICIONE ESTA LINHA -->
   <link rel="stylesheet" href="style.css">
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Sour+Gummy:wght@100..900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='8' fill='%233C5558' stroke='white' stroke-width='0.5'/><text x='50%' y='55%' dominant-baseline='middle' text-anchor='middle' fill='white' font-family='sans-serif' font-size='20' font-weight='bold'>$</text></svg>">
 </head>
 <body class="theme-planetario">
@@ -68,7 +70,7 @@
 
   <!-- CONTAINER DASHBOARD (GRÁFICO + AGENDA) -->
   <div class="dashboard-resumo">
-    <h2 class="titulo-secao">Resumo</h2>
+    <h2 class="titulo-secao" id="saudacaoDinamica" style="text-transform: none;">Resumo</h2>
     
     <div class="dashboard-row">
       <!-- Coluna do Gráfico (70%) -->
@@ -79,7 +81,7 @@
       <!-- Coluna da Agenda (30%) -->
       <div class="dashboard-col-agenda">
         <div id="moduloLembretesHome" class="mes" style="margin-bottom: 0; height: 100%;">
-          <div class="despHeader" style="background: var(--P04) !important;">
+          <div class="despHeader" style="background: var(--P05) !important;">
             <span>Esta semana</span>
           </div>
           <div class="mesBody" style="padding: 15px; display: flex; flex-direction: column; height: calc(100% - 40px);">
@@ -118,7 +120,7 @@
       <span>Configurar Receitas Fixas</span>
     </div>
     <div class="receitasBody">
-      <div class="item-fixo-destaque" style="background: rgba(255,255,255,0.1);margin-bottom: 20px;border-left: 5px solid var(--P04); display: flex; align-items: center; padding: 10px; border-radius: 8px;">
+      <div class="item-fixo-destaque" style="background: rgba(255,255,255,0.1);margin-bottom: 20px;border-left: 5px solid var(--P04); display: flex; align-items: center; padding: 10px;">
         <div class="icon" style="margin-right: 10px;">🏠</div>
         <span class="label" style="flex: 1; font-weight: bold; color: var(--P03);">Salário Padrão</span>
         <input type="text" id="salarioFixoBase" class="inputPadrao" placeholder="R$ 0,00" style="width:150px">
@@ -149,7 +151,7 @@
         <div id="areaCalendario"></div>
       </section>
 
-        <div class="controles-topo" style="padding-top: 40px;">
+        <div class="controles-topo">
             <button id="exportarTudoBtn" class="btn-secundario">EXPORTAR JSON</button>
             <label for="inputImport" class="btn-secundario" style="cursor:pointer">IMPORTAR JSON</label>
             <input type="file" id="inputImport" style="display: none;">
@@ -160,7 +162,7 @@
       <footer class="siteFooter">
           <div class="footer-container">
               <p>© 2026 <a href="http://planetario.framer.website/">Planetário Oficina Estúdio</a></p>
-              <spann><small>Versão 2.7</small></spann>
+              <spann><small>Versão 2.9</small></spann>
               <div class="theme-selector-footer">
                   <span>Tema:</span>
                   <select id="cfgTemaFooter" class="inputPadrao">
@@ -172,7 +174,7 @@
                       <option value="grayscale">Cinza</option>
                   </select>
               </div>
-          </div>
+            </div>
       </footer>
     </div>
   </div>
@@ -182,9 +184,10 @@
     <div class="modal-content" style="max-width: 450px;">
       <h3>Configurações do Perfil</h3>
       <div class="campo"><label>Nome de Exibição</label><input type="text" id="cfgNomeUsuario" class="inputPadrao"></div>
-      <div class="campo"><label>Dia Útil Salário</label><input type="number" id="cfgDiaSalario" class="inputPadrao"></div>
-      <div class="campo"><label>Dia de Virada do Mês</label><input type="number" id="cfgDiaVirada" class="inputPadrao"></div>
-      <div class="campo">
+      <div class="campo" style="margin-top: 10px;"><label>Dia Útil Salário</label><input type="number" id="cfgDiaSalario" class="inputPadrao"></div>
+      <div class="campo" style="margin-top: 10px;"><label>Dia de Virada do Mês</label><input type="number" id="cfgDiaVirada" class="inputPadrao"></div>
+      <div class="campo" style="margin-top: 10px;"><label>Gemini API Key</label><input type="password" id="cfgApiKey" class="inputPadrao" placeholder="Cole sua chave aqui"></div>
+      <div class="campo" style="margin-top: 10px;">
           <label>Referência de Mês</label>
           <div style="display:flex; gap:15px; margin-top:5px;">
             <label style="font-size:12px;"><input type="radio" name="refMes" id="refAtual" value="atual"> Mês Atual</label>
@@ -193,8 +196,8 @@
       </div>
       <hr style="margin: 20px 0; border: 0; border-top: 1px solid rgba(255,255,255,0.1);">
       <h4 style="margin-bottom:10px;">Segurança</h4>
-      <div class="campo"><label>Senha Antiga</label><input type="password" id="pwdAntiga" class="inputPadrao"></div>
-      <div class="campo"><label>Nova Senha</label><input type="password" id="pwdNova" class="inputPadrao"></div>
+      <div class="campo" style="margin-top: 10px;"><label>Senha Antiga</label><input type="password" id="pwdAntiga" class="inputPadrao"></div>
+      <div class="campo" style="margin-top: 10px;"><label>Nova Senha</label><input type="password" id="pwdNova" class="inputPadrao"></div>
       <div style="display: flex; justify-content: center; margin-bottom: 15px;">
       <button class="btn" id="btnSalvarSenha" style="margin-top: 10px; opacity: 50%;">Atualizar Senha</button>
       </div>
@@ -207,7 +210,7 @@
 
 <!-- MODAL LEMBRETE ATUALIZADO -->
   <div id="modalLembrete" class="modal-overlay" style="display:none;">
-    <div class="modal-content">
+    <div class="modal-content postit-amarelo modo-edicao">
       <h3>Novo Lembrete</h3>
       <div style="display: flex; flex-direction: column; gap: 15px;">
         <input type="text" id="lemTitulo" class="inputPadrao" placeholder="Título">
@@ -220,18 +223,18 @@
         <input type="text" id="lemValor" class="inputPadrao" placeholder="Valor (opcional)">
 
         <!-- CAMPOS DE RECORRÊNCIA -->
-        <label style="font-size: 13px; color: var(--P02); display: flex; align-items: center; gap: 8px;">
+        <label style="font-size: 13px; color: var(--P07); display: flex; align-items: center; gap: 8px;">
             <input type="checkbox" id="lemRecorrente"> Repetir semanalmente?
         </label>
         
         <div id="escolhaDiasSemana" style="display: none; grid-template-columns: repeat(7, 1fr); gap: 5px;">
-            <label title="Domingo" style="font-size: 10px; text-align: center; color: var(--P02);"><input type="checkbox" value="0">D</label>
-            <label title="Segunda" style="font-size: 10px; text-align: center; color: var(--P02);"><input type="checkbox" value="1">S</label>
-            <label title="Terça" style="font-size: 10px; text-align: center; color: var(--P02);"><input type="checkbox" value="2">T</label>
-            <label title="Quarta" style="font-size: 10px; text-align: center; color: var(--P02);"><input type="checkbox" value="3">Q</label>
-            <label title="Quinta" style="font-size: 10px; text-align: center; color: var(--P02);"><input type="checkbox" value="4">Q</label>
-            <label title="Sexta" style="font-size: 10px; text-align: center; color: var(--P02);"><input type="checkbox" value="5">S</label>
-            <label title="Sábado" style="font-size: 10px; text-align: center; color: var(--P02);"><input type="checkbox" value="6">S</label>
+            <label title="Domingo" style="font-size: 10px; text-align: center; color: var(--P07);"><input type="checkbox" value="0">D</label>
+            <label title="Segunda" style="font-size: 10px; text-align: center; color: var(--P07);"><input type="checkbox" value="1">S</label>
+            <label title="Terça" style="font-size: 10px; text-align: center; color: var(--P07);"><input type="checkbox" value="2">T</label>
+            <label title="Quarta" style="font-size: 10px; text-align: center; color: var(--P07);"><input type="checkbox" value="3">Q</label>
+            <label title="Quinta" style="font-size: 10px; text-align: center; color: var(--P07);"><input type="checkbox" value="4">Q</label>
+            <label title="Sexta" style="font-size: 10px; text-align: center; color: var(--P07);"><input type="checkbox" value="5">S</label>
+            <label title="Sábado" style="font-size: 10px; text-align: center; color: var(--P07);"><input type="checkbox" value="6">S</label>
         </div>
       </div>
 
