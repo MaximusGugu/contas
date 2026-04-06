@@ -120,12 +120,16 @@ body {
   background-repeat: no-repeat;
 }
 
+hr {
+  border-top: var(--P04) 1px solid;
+}
+
 #grafico {
-  margin: 20px 0;
-  border-radius: 10px;
-  padding: 10px;
-  overflow: hidden; /* Garante que o fundo do gráfico respeite o arredondamento */
-  background: var(--P06); /* Garante que não pisque branco ao carregar */
+    flex: 1; /* Faz o container do gráfico crescer junto com a coluna */
+    width: 100%;
+    background: rgba(255,255,255,0.05);
+    border-radius: 10px;
+    min-height: 350px; /* Garante visibilidade */
 }
 
 /* ================= ESTRUTURA DO MÊS ================= */
@@ -270,6 +274,9 @@ body {
 
 /* ================= ESTADOS (ABERTO/FECHADO) ================= */
 .mesBody {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
   padding: 20px;
   overflow: hidden;
   /* Reduzi para 1000px: quanto mais perto da altura real, mais rápida a resposta */
@@ -1251,15 +1258,12 @@ element.style {
   padding: 4px 8px;
   background: var(--P05);
   border-radius: 6px;
-  margin-bottom: 4px;
-  color: var(--P02);
+  margin-bottom: 10px;
   font-weight: bold;
-  transition: background 0.2s, transform 0.1s;
-  
+  transition: background-color 0.2s ease, transform 0.2s ease !important;  
 }
 
 .item-cartao-resumo:hover {
-    background: var(--P04) !important; /* Cor de destaque do tema */
     color: white !important;
     transform: translateX(5px); /* Leve deslocamento para a direita */
 }
@@ -1643,6 +1647,11 @@ input.conta:focus {
     height: fit-content;
 }
 
+.cal-event.event-card {
+    border: none;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
 /* ESTILO DOS CARDS NA VISÃO SEMANAL */
 .weekly-view .cal-event {
     white-space: normal;
@@ -1697,7 +1706,7 @@ input.conta:focus {
 /* BOTÃO DE ALTERNÂNCIA DE VISÃO */
 .toggle-group {
     display: flex;
-    background: var(--P05);
+    background: var(--P06);
     border-radius: 8px;
     padding: 2px;
     gap: 2px;
@@ -1745,11 +1754,6 @@ input.conta:focus {
 .event-reminder.dragging {
     pointer-events: none !important;
     opacity: 0.4;
-}
-
-/* Feedback visual da Sour Gummy */
-.postit-amarelo, .event-reminder, .item-lembrete-home, .postit-edit-input {
-    font-family: 'Sour Gummy', sans-serif !important;
 }
 
 .event-reminder:hover {
@@ -1802,8 +1806,7 @@ input.conta:focus {
 /* POST-IT */
 /* Fonte Global para Lembretes */
 .postit-amarelo, 
-.event-reminder, 
-.item-lembrete-home,
+.event-reminder,
 .postit-edit-input {
     font-family: 'Sour Gummy', sans-serif !important;
 }
@@ -1931,12 +1934,14 @@ input.conta:focus {
     justify-content: space-between;
     align-items: center;
     border-left: 4px solid var(--P04);
+    margin-bottom: 8px; /* Espaço entre itens */
+
 }
 
-.item-lembrete-home:hover {
+/* .item-lembrete-home:hover {
   background:rgba(255, 255, 255, 0.5);
   cursor: pointer;
-}
+} */
 
 .item-lembrete-home .info {
     display: flex;
@@ -2007,23 +2012,10 @@ input.conta:focus {
     /* letter-spacing: 1px; */
 }
 
-.dashboard-row {
-    display: flex;
-    gap: 20px;
-    align-items: stretch; /* Faz as duas colunas terem a mesma altura */
-    padding: 20px;
-    background-color: var(--P06);
-    border-radius: 10px;
-}
-
-.dashboard-col-grafico {
-    flex: 7; /* Ocupa 70% */
-    min-width: 0;
-}
-
-.dashboard-col-agenda {
-    flex: 3; /* Ocupa 30% */
-    min-width: 250px;
+/* Garante que o item da agenda não tenha margens internas sobrando */
+.item-lembrete-home {
+    margin-bottom: 0 !important;
+    padding: 10px 12px;
 }
 
 /* Responsivo para Celular */
@@ -2037,10 +2029,8 @@ input.conta:focus {
     }
 }
 
-/* Ajuste no gráfico para não sobrar espaço branco */
-#grafico {
-    margin: 0 !important;
-    height: 100%;
+.apexcharts-canvas {
+    height: 100% !important;
 }
 
 /* Cores dinâmicas para a agenda lateral */
@@ -2050,8 +2040,156 @@ input.conta:focus {
 .agenda-tipo-income { border-left-color: #27ae60 !important; } /* Verde */
 .agenda-tipo-salary { border-left-color: #f1c40f !important; } /* Amarelo */
 
-/* Ajuste para caber mais itens na coluna estreita */
+/* 1. CONTAINER PAI: Define a altura mínima e garante colunas iguais */
+.dashboard-row {
+    display: flex;
+    gap: 20px;
+    align-items: stretch; /* Garante colunas de alturas iguais */
+    background-color: var(--P06);
+    padding: 20px;
+    border-radius: 10px;
+    min-height: 400px; /* Altura mínima solicitada */
+}
+
+/* 2. COLUNA DO GRÁFICO: Estica para preencher o lado esquerdo */
+.dashboard-col-grafico {
+    flex: 7;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+}
+
+#grafico {
+    flex: 1; /* O gráfico cresce para ocupar 100% da altura da coluna */
+    width: 100%;
+    background: rgba(255,255,255,0.05);
+    border-radius: 10px;
+}
+
+/* 3. COLUNA DA AGENDA: O segredo para o gráfico não ficar maior que ela */
+.dashboard-col-agenda {
+    flex: 3;
+    min-width: 280px;
+    display: flex; 
+    flex-direction: column;
+}
+
+#moduloLembretesHome {
+    width: 100%;
+    height: 100%; /* Faz o card preencher a coluna */
+    background: var(--P03);
+    border-radius: 10px;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    margin-bottom: 0 !important; /* Remove margens que possam quebrar o alinhamento */
+}
+
+#moduloLembretesHome .mesBody {
+    padding: 15px;
+    gap: 5px;
+    display: flex;
+    flex-direction: column;
+    flex: 1; /* Isso empurra o que estiver abaixo (o botão) */
+    max-height: none !important; /* Garante que não colapse como os meses da home */
+    opacity: 1 !important;
+}
+
+#listaLembretesHome {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+/* 7. O BOTÃO - O segredo do alinhamento inferior */
+#btnIrCalendario {
+    width: 100%;
+    margin-top: auto; /* Empurra o botão para o fim do container .mesBody */
+    background: var(--P05);
+    color: var(--P03);
+    padding: 12px;
+    border-radius: 8px;
+    font-weight: bold;
+    cursor: pointer;
+    border: none;
+    transition: 0.2s;
+}
+
+#btnIrCalendario:hover {
+    background: var(--P04);
+    color: white;
+}
+
 .item-lembrete-home {
-    padding: 8px 12px;
-    margin-bottom: 4px;
+    background: rgba(0, 0, 0, 0.05);
+    border-left: 4px solid var(--P04);
+    padding: 10px;
+    border-radius: 6px;
+}
+
+/* CONTAINER FLUTUANTE NO CANTO INFERIOR DIREITO */
+.save-container-floating {
+    position: fixed;
+    bottom: 30px;
+    right: 30px;
+    z-index: 2000; /* Garante que fique acima de tudo */
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+}
+
+/* O BOTÃO DE SALVAR ESPECÍFICO */
+#salvarNuvemBtn {
+    padding: 15px 25px;
+    border-radius: 50px; /* Deixa redondinho/oval */
+    box-shadow: 0 8px 8px rgba(0, 0, 0, 0.2); /* Sombra pesada para dar profundidade */
+    background-color: var(--P04); /* Cor de destaque do seu tema */
+    color: white;
+    border: 1px solid var(--P01);
+    font-size: 12px;
+    font-weight: bold;
+    cursor: pointer;
+    transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    white-space: nowrap;
+}
+
+#salvarNuvemBtn:hover {
+    transform: scale(1.1) translateY(-5px);
+    background-color: var(--P06);
+    box-shadow: 0 10px 10px rgba(0, 0, 0, 0.3);
+}
+
+#salvarNuvemBtn:active {
+    transform: scale(0.95);
+}
+
+/* O AVISO DE ALTERAÇÃO PENDENTE FLUTUANTE */
+#statusAlteracao {
+    background: #e74c3c;
+    color: white;
+    padding: 5px 12px;
+    border-radius: 20px;
+    font-size: 11px;
+    font-weight: bold;
+    box-shadow: 0 4px 10px rgba(0,0,0,0.2);
+    animation: pulse-red 2s infinite;
+}
+
+@keyframes pulse-red {
+    0% { transform: scale(1); box-shadow: 0 0 0 0 rgba(231, 76, 60, 0.7); }
+    70% { transform: scale(1.05); box-shadow: 0 0 0 10px rgba(231, 76, 60, 0); }
+    100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(231, 76, 60, 0); }
+}
+
+/* AJUSTE PARA MOBILE (Para não cobrir conteúdos importantes) */
+@media (max-width: 600px) {
+    .save-container-floating {
+        bottom: 20px;
+        right: 20px;
+    }
+    #salvarNuvemBtn {
+        padding: 12px 18px;
+        font-size: 12px;
+    }
 }

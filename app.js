@@ -1,7 +1,7 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, onAuthStateChanged, signOut, updatePassword, reauthenticateWithCredential, EmailAuthProvider } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import { getFirestore, doc, setDoc, getDoc } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
-import { renderCalendario, calcularDiaPagamento } from "./calendario.js";
+import { renderCalendario, calcularDiaPagamento, obterFeriados } from "./calendario.js";
 
 const firebaseConfig = {
   apiKey: "AIzaSyBb12Oevy0LkVc876iCh-xYegQWfqCgC3I",
@@ -40,6 +40,7 @@ let historicoChatIA = []; // Armazena a memória da conversa
 
 const hoje = new Date();
 const nomesMesesFull = ["Janeiro","Fevereiro","Março","Abril","Maio","Junho","Julho","Agosto","Setembro","Outubro","Novembro","Dezembro"];
+const nomesMesesCurto = ["JAN", "FEV", "MAR", "ABR", "MAI", "JUN", "JUL", "AGO", "SET", "OUT", "NOV", "DEZ"];
 let contextParcelaCartao = { mes: 0, ano: 2024 };
 
 // ================= FUNÇÕES DE APOIO =================
@@ -65,6 +66,29 @@ window.atualizarDataLembrete = async (id, novaData, novoDiaSemana) => {
     );
 };
 
+function congelarHistoricoFixas() {
+    // Usamos o mês e ano real de hoje como limite para o passado
+    const hoje = new Date();
+    const mesAtualReal = hoje.getMonth();
+    const anoAtualReal = hoje.getFullYear();
+    
+    const anos = Object.keys(dados).map(Number).sort((a, b) => a - b);
+    
+    anos.forEach(ano => {
+        if (!dados[ano].meses) return;
+        dados[ano].meses.forEach((m, idx) => {
+            // Se o mês/ano for estritamente anterior ao mês atual real
+            if (ano < anoAtualReal || (ano === anoAtualReal && idx < mesAtualReal)) {
+                // Se esse mês ainda não tem uma "foto" do passado, tiramos uma agora
+                // com os dados atuais (antes de serem alterados)
+                if (!m.fixasSnapshot) {
+                    m.fixasSnapshot = JSON.parse(JSON.stringify(contasFixas));
+                }
+            }
+        });
+    });
+}
+
 function aplicarTema(tema) { 
     const t = tema || "planetario";
     document.body.className = "theme-" + t; 
@@ -85,107 +109,95 @@ function atualizarTituloSite() {
     }
 }
 
-function renderLembretesHome() {
+let estaCarregandoLembretes = false;
+
+async function renderLembretesHome() {
     const lista = document.getElementById("listaLembretesHome");
     if (!lista) return;
-    lista.innerHTML = "";
 
-    // 1. CALCULAR O INTERVALO DA SEMANA (Domingo a Sábado)
-    const hoje = new Date();
-    const domingo = new Date(hoje);
-    domingo.setDate(hoje.getDate() - hoje.getDay());
-    domingo.setHours(0,0,0,0);
+    try {
+        const hoje = new Date();
+        const feriados = await obterFeriados(hoje.getFullYear());
+        const anoSelecionado = Number(document.getElementById("ano")?.value) || hoje.getFullYear();
 
-    const sabado = new Date(domingo);
-    sabado.setDate(domingo.getDate() + 6);
-    sabado.setHours(23,59,59,999);
+        const domingo = new Date(hoje);
+        domingo.setDate(hoje.getDate() - hoje.getDay());
+        domingo.setHours(0,0,0,0);
 
-    // PASSO 3: Captura o ano selecionado no seletor do topo
-    const anoSelecionado = Number(document.getElementById("ano")?.value) || hoje.getFullYear();
+        const sabado = new Date(domingo);
+        sabado.setDate(domingo.getDate() + 6);
+        sabado.setHours(23,59,59,999);
 
-    let eventosSemana = [];
+        let eventosSemana = [];
 
-    // 2. COLETAR TUDO QUE CAI NESSA SEMANA
-    for (let d = new Date(domingo); d <= sabado; d.setDate(d.getDate() + 1)) {
-        const diaNum = d.getDate();
-        const mesIdx = d.getMonth();
-        const anoDoDia = d.getFullYear(); // Ano real do dia sendo processado
-        const isoData = d.toISOString().split('T')[0];
+        for (let d = new Date(domingo); d <= sabado; d.setDate(d.getDate() + 1)) {
+            const diaNum = d.getDate();
+            const mesIdx = d.getMonth();
+            const anoDoDia = d.getFullYear();
+            const isoData = d.toLocaleDateString('en-CA'); 
 
-        // A. Lembretes manuais
-        lembretes.filter(l => l.data === isoData).forEach(l => {
-            eventosSemana.push({ nome: l.nome, info: l.hora || "Lembrete", valor: null, data: new Date(d), tipo: "reminder" });
-        });
+            lembretes.filter(l => l.data === isoData).forEach(l => {
+                eventosSemana.push({ nome: l.nome, info: l.hora || "Lembrete", valor: null, data: new Date(d), tipo: "reminder" });
+            });
 
-        // B. Cartões (Soma Variáveis do ano selecionado + Fixas)
-        cartoes.forEach(c => {
-            if (parseInt(c.vencimento) === diaNum) {
-                // Busca gastos variáveis usando o ano selecionado no seletor
-                const totalVariavel = (gastosDetalhes[anoSelecionado] || [])
-                    .filter(g => g.mes === mesIdx && String(g.cartaoId) === String(c.id))
-                    .reduce((acc, g) => acc + g.valor, 0);
+            cartoes.forEach(c => {
+                if (parseInt(c.vencimento) === diaNum) {
+                    const totalVariavel = (gastosDetalhes[anoSelecionado] || [])
+                        .filter(g => g.mes === mesIdx && String(g.cartaoId) === String(c.id))
+                        .reduce((acc, g) => acc + g.valor, 0);
+                    const totalFixoNoCard = contasFixas
+                        .filter(f => f.ativo && String(f.cartaoId) === String(c.id))
+                        .reduce((acc, f) => acc + f.valor, 0);
+                    
+                    if ((totalVariavel + totalFixoNoCard) > 0) {
+                        eventosSemana.push({ nome: `Fatura: ${c.nome}`, info: "Cartão", valor: totalVariavel + totalFixoNoCard, data: new Date(d), tipo: "card" });
+                    }
+                }
+            });
 
-                // Soma despesas fixas vinculadas ao cartão
-                const totalFixoNoCard = contasFixas
-                    .filter(f => f.ativo && String(f.cartaoId) === String(c.id))
-                    .reduce((acc, f) => acc + f.valor, 0);
+            contasFixas.forEach(f => {
+                if (f.ativo && parseInt(f.dia) === diaNum && !f.cartaoId) {
+                    eventosSemana.push({ nome: f.nome, info: "Despesa Fixa", valor: f.valor, data: new Date(d), tipo: "expense" });
+                }
+            });
 
-                const totalGeral = totalVariavel + totalFixoNoCard;
-                
-                eventosSemana.push({ 
-                    nome: `Fatura: ${c.nome}`, 
-                    info: "Cartão", 
-                    valor: totalGeral, 
-                    data: new Date(d), 
-                    tipo: "card" 
-                });
+            receitasFixas.forEach(r => {
+                if (r.ativo && parseInt(r.dia) === diaNum) {
+                    eventosSemana.push({ nome: r.nome, info: "Recebimento", valor: r.valor, data: new Date(d), tipo: "income" });
+                }
+            });
+
+            const diaSalario = calcularDiaPagamento(configuracoes.diaSalario || 5, mesIdx, anoDoDia, feriados);
+            if (diaNum === diaSalario) {
+                eventosSemana.push({ nome: "Pagamento Salário", info: "Dinheiro", valor: salarioFixoBase, data: new Date(d), tipo: "salary" });
             }
-        });
-
-        // C. Despesas Fixas (Apenas as que NÃO são em cartão)
-        contasFixas.forEach(f => {
-            if (f.ativo && parseInt(f.dia) === diaNum && !f.cartaoId) {
-                eventosSemana.push({ nome: f.nome, info: "Despesa Fixa", valor: f.valor, data: new Date(d), tipo: "expense" });
-            }
-        });
-
-        // D. Receitas Fixas
-        receitasFixas.forEach(r => {
-            if (r.ativo && parseInt(r.dia) === diaNum) {
-                eventosSemana.push({ nome: r.nome, info: "Recebimento", valor: r.valor, data: new Date(d), tipo: "income" });
-            }
-        });
-
-        // E. Quinto dia útil (Salário)
-        const diaSalario = calcularDiaPagamento(configuracoes.diaSalario || 5, mesIdx, anoDoDia);
-        if (diaNum === diaSalario) {
-            eventosSemana.push({ nome: "Pagamento Salário", info: "Dinheiro", valor: salarioFixoBase, data: new Date(d), tipo: "salary" });
         }
-    }
 
-    // 3. RENDERIZAR
-    if (eventosSemana.length === 0) {
-        lista.innerHTML = `<div class="lembrete-vazio">Nada planejado para esta semana.</div>`;
-        return;
-    }
+        eventosSemana.sort((a, b) => a.data - b.data);
 
-    eventosSemana.sort((a, b) => a.data - b.data);
+        let htmlFinal = "";
+        if (eventosSemana.length === 0) {
+            htmlFinal = `<div class="lembrete-vazio">Nada para esta semana.</div>`;
+        } else {
+            eventosSemana.forEach(ev => {
+                const dataFormatada = ev.data.toLocaleDateString('pt-BR', { weekday: 'short', day: '2-digit' });
+                const textoValor = (ev.valor !== null && ev.valor !== 0) ? ` | <b>${formatar(ev.valor)}</b>` : "";
+                htmlFinal += `
+                    <div class="item-lembrete-home agenda-tipo-${ev.tipo}">
+                        <div class="info">
+                            <span class="titulo" style="font-size:14px">${ev.nome}</span>
+                            <span class="data" style="font-size:11px">${dataFormatada.toUpperCase()} • ${ev.info}${textoValor}</span>
+                        </div>
+                    </div>`;
+            });
+        }
 
-    eventosSemana.forEach(ev => {
-        const dataFormatada = ev.data.toLocaleDateString('pt-BR', { weekday: 'short', day: '2-digit' });
-        const div = document.createElement("div");
-        div.className = `item-lembrete-home agenda-tipo-${ev.tipo}`;
-        
-        const textoValor = (ev.valor !== null && ev.valor !== 0) ? ` | <b>${formatar(ev.valor)}</b>` : "";
+        lista.innerHTML = htmlFinal;
+        setTimeout(() => {
+            window.dispatchEvent(new Event('resize'));
+        }, 300);
 
-        div.innerHTML = `
-            <div class="info">
-                <span class="titulo" style="font-size:12px">${ev.nome}</span>
-                <span class="data" style="font-size:10px">${dataFormatada.toUpperCase()} • ${ev.info}${textoValor}</span>
-            </div>
-        `;
-        lista.appendChild(div);
-    });
+    } catch (e) { console.error(e); }
 }
 
 function getMesReferenciaAtivo() {
@@ -214,18 +226,19 @@ function atualizarSaudacao() {
     const hora = agora.getHours();
     let saudacao = "";
 
-    // 1. Define a saudação baseada na hora
     if (hora >= 6 && hora < 12) saudacao = "Bom dia";
     else if (hora >= 12 && hora < 18) saudacao = "Boa tarde";
     else saudacao = "Boa noite";
 
-    // 2. Formata a data (ex: segunda-feira, 20 de maio de 2024)
     const opcoes = { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' };
+    
+    // 1. Gera a data por extenso
     let dataExtenso = agora.toLocaleDateString('pt-BR', opcoes);
     
-    // Capitaliza a primeira letra do dia da semana
-    dataExtenso = dataExtenso.charAt(0).toUpperCase() + dataExtenso.slice(1);
+    // 2. CORREÇÃO AQUI: Força tudo para minúsculo
+    dataExtenso = dataExtenso.toLowerCase();
 
+    // 3. Monta o HTML (Mantendo o "H" de "Hoje" maiúsculo para iniciar a frase corretamente)
     el.innerHTML = `${saudacao}! Hoje é ${dataExtenso}. <span style="opacity: 0.7; font-weight: normal;">Aqui está o seu resumo:</span>`;
 }
 
@@ -282,7 +295,7 @@ async function salvarFirebase() {
     await setDoc(doc(db, "financas", usuarioLogado.uid), pacote);
     btn.innerText = "✅ SALVO NA NUVEM"; 
     salvarDadosLocal(false);
-    setTimeout(() => { if(btn) btn.innerText = "☁️ SALVAR NA NUVEM"; }, 2000);
+    setTimeout(() => { if(btn) btn.innerText = "☁️ SALVAR"; }, 2000);
   } catch (e) { console.error(e); }
 }
 
@@ -308,83 +321,105 @@ function atualizarTudo(anoParaVisualizar, pendente = true) {
   anosOrdenados.forEach(ano => {
     if (!dados[ano] || !dados[ano].meses) return;
     dados[ano].meses.forEach((m, idx) => {
-      if (!ehOPrimeiroMesDeTodos && m.contaManual !== true) {
-          m.conta = saldoAcumulado;
-      }
-const dManuais = (m.despesas || []).filter(x => x.checked).reduce((acc, b) => acc + b.valor, 0);
-      const gastosMes = (gastosDetalhes[ano] || []).filter(g => g.mes === idx);
-      const tCr = gastosMes.filter(g => cartoes.find(c => c.id == g.cartaoId)?.tipo === 'Crédito').reduce((acc, g) => acc + g.valor, 0);
-      const fixasNoCard = contasFixas.filter(f => f.ativo && f.cartaoId).reduce((acc, f) => acc + f.valor, 0);
-// Soma "Outros" da Home + Receitas Fixas que tenham dia definido
-      const eTotal = (m.empresa || []).filter(x => x.checked).reduce((acc, b) => acc + b.valor, 0);
-      const rFixasNoMes = receitasFixas.filter(rf => rf.ativo).reduce((acc, rf) => acc + rf.valor, 0);      const tDisp = (m.salario || 0) + (m.conta || 0) + eTotal;
-      const saldoFinal = tDisp - (dManuais + tCr + fixasNoCard);
-      m.saldoCalculadoFinal = saldoFinal; 
-      saldoAcumulado = saldoFinal; ehOPrimeiroMesDeTodos = false;
+      if (!m.fixasDesativadas) m.fixasDesativadas = {};
+      if (!ehOPrimeiroMesDeTodos && m.contaManual !== true) m.conta = saldoAcumulado;
 
+      const dManuaisHome = (m.despesas || []).filter(x => x.checked).reduce((acc, b) => acc + b.valor, 0);
+      const gastosDetalhados = (gastosDetalhes[ano] || []).filter(g => g.mes === idx);
+      
+      const tCrVariavel = gastosDetalhados.filter(g => cartoes.find(c => c.id == g.cartaoId)?.tipo === 'Crédito').reduce((acc, g) => acc + g.valor, 0);
+      const tDbVariavel = gastosDetalhados.filter(g => cartoes.find(c => c.id == g.cartaoId)?.tipo === 'Débito').reduce((acc, g) => acc + g.valor, 0);
+
+      const listaBaseFixas = m.fixasSnapshot ? m.fixasSnapshot : contasFixas;
+      const fixasAtivas = listaBaseFixas.filter(f => f.ativo && !m.fixasDesativadas[f.id]);
+      const fixasNoCard = fixasAtivas.filter(f => f.cartaoId).reduce((acc, f) => acc + f.valor, 0);
+      const fixasNoDinheiro = fixasAtivas.filter(f => !f.cartaoId).reduce((acc, f) => acc + f.valor, 0);
+
+      const eTotal = (m.empresa || []).filter(x => x.checked).reduce((acc, b) => acc + b.valor, 0);
+      const tDisp = (m.salario || 0) + (m.conta || 0) + eTotal;
+      
+      const totalGastoMes = dManuaisHome + tCrVariavel + tDbVariavel + fixasNoCard + fixasNoDinheiro;
+      const saldoFinal = tDisp - totalGastoMes;
+      
+      m.saldoCalculadoFinal = saldoFinal; 
+      saldoAcumulado = saldoFinal; 
+      ehOPrimeiroMesDeTodos = false;
+
+      // ATUALIZAÇÃO APENAS DA HOME (RESUMO)
       if (ano === Number(anoParaVisualizar)) {
-        const info = mesesDOM.find(item => item.index === idx);
-        if (info) {
-          const dom = info.dom;
+        const infoHome = mesesDOM.find(item => item.index === idx);
+        if (infoHome) {
+          const dom = infoHome.dom;
           const listaCartoesDiv = dom.querySelector(".listaCartoesDinamica");
           if (listaCartoesDiv) {
               listaCartoesDiv.innerHTML = "";
-              
-              // 1. Pega gastos variáveis do mês que são crédito
-              const crdGastosVariaveis = gastosMes.filter(g => cartoes.find(c => c.id == g.cartaoId)?.tipo === 'Crédito');
-              
-              // 2. Pega despesas fixas que estão em algum cartão
-              const crdGastosFixos = contasFixas.filter(f => f.ativo && f.cartaoId);
-
               const totaisPorCartao = {};
-
-              // Somar variáveis
-              crdGastosVariaveis.forEach(g => { 
-                  totaisPorCartao[g.cartaoId] = (totaisPorCartao[g.cartaoId] || 0) + g.valor; 
-              });
-
-              // Somar fixas
-              crdGastosFixos.forEach(f => {
-                  totaisPorCartao[f.cartaoId] = (totaisPorCartao[f.cartaoId] || 0) + f.valor;
-              });
+              gastosDetalhados.filter(g => cartoes.find(c => c.id == g.cartaoId)?.tipo === 'Crédito')
+                               .forEach(g => { totaisPorCartao[g.cartaoId] = (totaisPorCartao[g.cartaoId] || 0) + g.valor; });
+              fixasAtivas.filter(f => f.cartaoId)
+                         .forEach(f => { totaisPorCartao[f.cartaoId] = (totaisPorCartao[f.cartaoId] || 0) + f.valor; });
 
               if (Object.keys(totaisPorCartao).length > 0) {
                   listaCartoesDiv.innerHTML = "<small style='display:block;margin-bottom:5px;opacity:0.6'>RESUMO DE CARTÕES (CRÉDITO):</small>";
                   Object.keys(totaisPorCartao).forEach(cid => {
                       const cObj = cartoes.find(c => c.id == cid);
-                      if (!cObj) return; // Pula se o cartão foi excluído
-                      
-                      const itemC = document.createElement("div"); 
-                      itemC.className = "item-cartao-resumo";
-                      itemC.style.cursor = "pointer";
-                      itemC.innerHTML = `<span>💳 ${cObj.nome}</span> <span>${formatar(totaisPorCartao[cid])}</span>`;
-                      itemC.onclick = () => { 
-                          document.getElementById("anoGastos").value = ano; 
-                          filtrosPorMes[idx] = cid; 
-                          mesesGastosAbertos.add(idx); 
-                          window.location.hash = "#gastos";
-                      };
-                      listaCartoesDiv.appendChild(itemC);
+                        if (cObj) {
+                            const itemC = document.createElement("div"); 
+                            itemC.className = "item-cartao-resumo";
+                            itemC.style.cursor = "pointer";
+                            
+                            // Cor do cartão vinda do cadastro
+                            const corCard = cObj.color || 'var(--P04)';
+                            itemC.style.borderLeft = `4px solid ${corCard}`;
+
+                            // EFEITO HOVER DINÂMICO VIA JS
+                            itemC.onmouseenter = () => {
+                                itemC.style.backgroundColor = corCard + "33"; // Adiciona transparência (33 em hex é ~20%)
+                                itemC.style.transform = "translateX(5px)";
+                            };
+                            itemC.onmouseleave = () => {
+                                itemC.style.backgroundColor = ""; // Volta ao padrão do CSS
+                                itemC.style.transform = "";
+                            };
+
+                            itemC.innerHTML = `<span>💳 ${cObj.nome}</span> <span>${formatar(totaisPorCartao[cid])}</span>`;
+                            itemC.onclick = () => { 
+                                document.getElementById("anoGastos").value = ano; 
+                                mesesGastosAbertos.clear();
+                                mesesGastosAbertos.add(idx); 
+                                filtrosPorMes[idx] = cid; 
+                                window.scrollTargetMes = idx;
+                                window.location.hash = "#gastos";
+                            };
+                            listaCartoesDiv.appendChild(itemC);
+                        }
                   });
               }
           }
-          dom.querySelector(".totalDespesas").textContent = formatar(dManuais + tCr + fixasNoCard);
+          dom.querySelector(".totalDespesas").textContent = formatar(totalGastoMes);
           dom.querySelector(".totalDinheiro").textContent = formatar(tDisp);
           const sEl = dom.querySelector(".saldo"); 
           sEl.textContent = formatar(saldoFinal);
           sEl.className = "saldo " + (saldoFinal >= 0 ? "positivo" : "negativo");
           dom.querySelector(".mesTotal").textContent = formatar(saldoFinal);
+          
           const inS = dom.querySelector("input.salario"); 
           const inC = dom.querySelector("input.conta");
           if (document.activeElement !== inS) inS.value = formatar(m.salario);
-          if (document.activeElement !== inC) { inC.value = formatar(m.conta); if (m.contaManual === true) inC.classList.add("manual"); else inC.classList.remove("manual"); }
+          if (document.activeElement !== inC) { 
+              inC.value = formatar(m.conta); 
+              if (m.contaManual === true) inC.classList.add("manual"); 
+              else inC.classList.remove("manual"); 
+          }
           if (ano === anoAt && idx === mesAt) dom.classList.add("mesAtual"); else dom.classList.remove("mesAtual");
         }
       }
     });
   });
-  salvarDadosLocal(pendente); atualizarGrafico(Number(anoParaVisualizar));
-  renderLembretesHome();
+
+  salvarDadosLocal(pendente); 
+  atualizarGrafico(Number(anoParaVisualizar));
+  renderLembretesHome(); // Essa chamada aqui deve ser a última
 }
 
 function atualizarGrafico(ano) {
@@ -395,57 +430,33 @@ function atualizarGrafico(ano) {
     const mesReal = agora.getMonth();
     const anoReal = agora.getFullYear();
 
-    const tempElement = document.createElement("div");
-    tempElement.className = "texto-claro"; tempElement.style.display = "none";
-    document.body.appendChild(tempElement);
-    const tColor = getComputedStyle(tempElement).color || '#000000';
-    document.body.removeChild(tempElement);
-
+    // Cores dinâmicas
     let pColor = getComputedStyle(document.body).getPropertyValue('--P04').trim() || '#D78341';
-    const bgColor = getComputedStyle(document.body).getPropertyValue('--P06').trim() || '#ffffff';
+    const tColor = "#ffffff"; 
 
     const saldos = dados[ano].meses.map(m => parseFloat((m.saldoCalculadoFinal || 0).toFixed(2)));
-    const labels = dados[ano].meses.map((_, i) => nomesMesesFull[i]);
+    const labels = dados[ano].meses.map((_, i) => nomesMesesCurto[i]);
 
-    // 1. GERA ARRAY DE CORES DINÂMICAS (Sólida para hoje/passado, 50% para futuro)
     const coresDinamicas = labels.map((_, i) => {
         const ehFuturo = (Number(ano) > anoReal) || (Number(ano) === anoReal && i > mesReal);
-        if (ehFuturo) {
-            // Se a cor for RGB (ex: rgb(215, 131, 65)), transforma em RGBA com 0.5
-            if (pColor.startsWith('rgb')) {
-                return pColor.replace('rgb', 'rgba').replace(')', ', 0.5)');
-            }
-            // Se for Hex (ex: #D78341), adiciona "80" (que é 50% em hex)
-            return pColor + "80"; 
-        }
-        return pColor; // Cor sólida
+        return ehFuturo ? pColor + "80" : pColor;
     });
 
     const options = { 
         series: [{ name: 'Saldo', data: saldos }], 
         chart: { 
             type: 'bar', 
-            height: 250, 
+            height: '100%', 
+            width: '100%',
             toolbar: { show: false }, 
-            background: bgColor, 
+            background: 'transparent',
             foreColor: tColor 
         }, 
-        colors: coresDinamicas, // Aplica o array de cores transparente/sólida
+        colors: coresDinamicas,
         xaxis: { categories: labels }, 
         yaxis: { labels: { formatter: (val) => "R$ " + val.toLocaleString('pt-BR') } }, 
         grid: { borderColor: 'rgba(255,255,255,0.1)' }, 
-        legend: { show: false }, // Esconde a legenda que o modo distributed cria
-        tooltip: { 
-            theme: 'dark',
-            y: {
-                title: {
-                    formatter: (seriesName, { seriesIndex, dataPointIndex, w }) => {
-                        const ehFuturo = (Number(ano) > anoReal) || (Number(ano) === anoReal && dataPointIndex > mesReal);
-                        return ehFuturo ? "Previsão:" : "Saldo Final:";
-                    }
-                }
-            }
-        }, 
+        legend: { show: false },
         dataLabels: { 
             enabled: true, 
             formatter: (val) => "R$ " + val.toLocaleString('pt-BR'), 
@@ -456,9 +467,23 @@ function atualizarGrafico(ano) {
             bar: { 
                 dataLabels: { position: 'top' }, 
                 borderRadius: 4,
-                distributed: true // NECESSÁRIO para aplicar o array de cores barra por barra
+                distributed: true
             } 
-        } 
+        },
+        // --- REGRA DE HOVER (TOOLTIP) RECUPERADA AQUI ---
+        tooltip: {
+            theme: 'dark',
+            y: {
+                formatter: (val) => "R$ " + val.toLocaleString('pt-BR'),
+                title: {
+                    formatter: (seriesName, { dataPointIndex }) => {
+                        // Verifica se o ano/mês da barra é futuro
+                        const ehFuturo = (Number(ano) > anoReal) || (Number(ano) === anoReal && dataPointIndex > mesReal);
+                        return ehFuturo ? "Previsão: " : "Saldo: ";
+                    }
+                }
+            }
+        }
     };
 
     if (chartResumo) chartResumo.destroy();
@@ -539,8 +564,9 @@ function criarMesDOM(ano, index, data) {
   const header = document.createElement("div"); header.className = "mesHeader";
   header.innerHTML = `<span>${nomesMesesFull[index]} ${ano}</span><div><span class="mesTotal">0,00</span><button class="duplicarMes" title="Duplicar">📑</button><button class="removeMes">×</button></div>`;
   header.onclick = () => { mes.classList.toggle("collapsed"); if(mes.classList.contains("collapsed")) mesesAbertos.delete(index); else mesesAbertos.add(index); };
-header.querySelector(".removeMes").onclick = (e) => { e.stopPropagation(); if(confirm("Apagar mês?")) { dados[ano].meses.splice(index, 1); carregarAno(); } };
-header.querySelector(".duplicarMes").onclick = (e) => { e.stopPropagation(); const clone = JSON.parse(JSON.stringify(data)); dados[ano].meses.push(clone); carregarAno(); };
+  header.querySelector(".removeMes").onclick = (e) => { e.stopPropagation(); if(confirm("Apagar mês?")) { dados[ano].meses.splice(index, 1); carregarAno(); } };
+  header.querySelector(".duplicarMes").onclick = (e) => { e.stopPropagation(); const clone = JSON.parse(JSON.stringify(data)); dados[ano].meses.push(clone); carregarAno(); };
+  
   const body = document.createElement("div"); body.className = "mesBody";
   body.innerHTML = `
     <div class="container">
@@ -558,42 +584,28 @@ header.querySelector(".duplicarMes").onclick = (e) => { e.stopPropagation(); con
                     </thead>
                     <tbody class="listaDesp"></tbody>
                 </table>
-<!-- ÁREA DE ADIÇÃO DE DESPESA -->
                 <div class="area-acoes-despesa" style="margin-top:15px; padding-top:15px; border-top:1px dashed rgba(255,255,255,0.1);">
-                    
-                    <!-- BOTÃO INICIAL -->
                     <button class="btn btn-show-quick-add" style="width:100%;">+ ADICIONAR DESPESA</button>
-
-                    <!-- FORMULÁRIO (ESCONDIDO) -->
                     <div class="form-rapido-despesa" style="display:none;">
-                        <!-- GRID 2x2 para os inputs -->
                         <div style="display:grid; grid-template-columns: 1fr 1fr; gap:5px; margin-bottom:5px;">
                             <input type="text" class="inputPadrao quick-nome" placeholder="O que comprou?">
                             <input type="text" class="inputPadrao quick-valor" placeholder="R$ 0,00">
-                            
                             <select class="inputPadrao quick-cat">
                                 ${categorias.map(c => `<option value="${c.name}">${c.name}</option>`).join('')}
                             </select>
-                            
                             <select class="inputPadrao quick-card">
                                 <option value="dinheiro">💵 Dinheiro</option>
                                 ${cartoes.map(c => `<option value="${c.id}">💳 ${c.nome}</option>`).join('')}
                             </select>
                         </div>
-
-                        <!-- BOTÃO DE ADICIONAR CENTRALIZADO -->
                         <div style="display:flex; justify-content:center; flex-direction:column; align-items:center; gap:5px;">
                             <button class="btn btn-quick-add" style="width:100%; height:35px; font-size:20px; margin-top: 5px;">Adicionar</button>
                             <button class="btn-cancelar-quick">Cancelar</button>
                         </div>
                     </div>
                 </div>
-
                 <div class="area-acoes-parcelamento" style="margin-top:10px;">
-                    <!-- BOTÃO INICIAL -->
                     <button class="btn btn-show-quick-parcela" style="width:100%;">+ PARCELAR COMPRA</button>
-
-                    <!-- FORMULÁRIO DE PARCELAMENTO (ESCONDIDO) -->
                     <div class="form-rapido-parcela" style="display:none; padding: 10px; border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; margin-top: 5px;">
                         <div style="display:grid; grid-template-columns: 1fr 1fr; gap:5px; margin-bottom:5px;">
                             <input type="text" class="inputPadrao qp-nome" placeholder="O que parcelou?">
@@ -613,7 +625,6 @@ header.querySelector(".duplicarMes").onclick = (e) => { e.stopPropagation(); con
                         </div>
                     </div>
                 </div>
-
                 <div class="listaCartoesDinamica"></div>
             </div>
             <p class="rodapeColuna">Total: <span class="totalDespesas">0,00</span></p>
@@ -644,103 +655,123 @@ header.querySelector(".duplicarMes").onclick = (e) => { e.stopPropagation(); con
         </div>
     </div>
     <div class="totalFinal">TOTAL: <span class="saldo">0,00</span></div>`;
-  const listD = body.querySelector(".listaDesp"); const listE = body.querySelector(".listaEmp");
-  data.despesas.forEach(item => criarItem(listD, item, data.despesas, ano)); (data.empresa || []).forEach(item => criarItem(listE, item, data.empresa, ano));
-  const inS = body.querySelector("input.salario"); const inC = body.querySelector("input.conta"); const btnC = body.querySelector(".btn-cascata");
+
+  const listD = body.querySelector(".listaDesp"); 
+  const listE = body.querySelector(".listaEmp");
+
+  // 1. PRIMEIRO: EXIBIR RENDAS FIXAS SINCRONIZADAS NO TOPO
+  receitasFixas.filter(rf => rf.ativo).forEach(rf => {
+      if (!data.receitasDesativadas) data.receitasDesativadas = {};
+      const tr = document.createElement("tr");
+      const desativada = data.receitasDesativadas[rf.id] === true;
+      tr.style.opacity = desativada ? "0.3" : "1";
+      tr.innerHTML = `
+        <td style="width: 1%;"><input type="checkbox" ${!desativada ? 'checked' : ''}></td>
+        <td style="font-style: italic; font-size:12px; color: #2ecc71;">${rf.nome} <small>(fixo)</small></td>
+        <td style="text-align:right; opacity: 0.7; font-size:12px;">${formatar(rf.valor)}</td>
+        <td></td>
+      `;
+      tr.querySelector("input").onchange = (e) => {
+          data.receitasDesativadas[rf.id] = !e.target.checked;
+          atualizarTudo(ano);
+          tr.style.opacity = e.target.checked ? "1" : "0.3";
+      };
+      listE.appendChild(tr);
+  });
+
+  // 2. DEPOIS: EXIBIR RENDAS MANUAIS
+  (data.empresa || []).forEach(item => criarItem(listE, item, data.empresa, ano));
+
+    // 3. PRIMEIRO: EXIBIR DESPESAS FIXAS SINCRONIZADAS NO TOPO (SEM CARTÃO)
+    // AJUSTE: Agora ele olha se o mês está congelado (Snapshot) ou se usa a lista global
+    const listaParaRenderizar = data.fixasSnapshot ? data.fixasSnapshot : contasFixas;
+
+    listaParaRenderizar.filter(f => f.ativo && !f.cartaoId).forEach(f => {
+        if (!data.fixasDesativadas) data.fixasDesativadas = {};
+        const tr = document.createElement("tr");
+        const desativada = data.fixasDesativadas[f.id] === true;
+        tr.style.opacity = desativada ? "0.3" : "1";
+        tr.innerHTML = `
+            <td style="width: 1%;"><input type="checkbox" ${!desativada ? 'checked' : ''}></td>
+            <td style="font-style: italic; font-size:12px; opacity: 0.7;">${f.nome} <small>(fixo)</small></td>
+            <td style="text-align:right; opacity: 0.7; font-size:12px;">${formatar(f.valor)}</td>
+            <td></td>
+        `;
+        tr.querySelector("input").onchange = (e) => {
+            data.fixasDesativadas[f.id] = !e.target.checked;
+            atualizarTudo(ano);
+            tr.style.opacity = e.target.checked ? "1" : "0.3";
+        };
+        listD.appendChild(tr);
+    });
+
+  // 4. DEPOIS: EXIBIR DESPESAS MANUAIS
+  data.despesas.forEach(item => criarItem(listD, item, data.despesas, ano));
+
+  const inS = body.querySelector("input.salario"); 
+  const inC = body.querySelector("input.conta"); 
+  const btnC = body.querySelector(".btn-cascata");
+  
   inS.value = formatar(data.salario || 0); inC.value = formatar(data.conta || 0);
   aplicarComportamentoInput(inS, () => data.salario, (v) => { data.salario = v; atualizarTudo(ano); }, ano);
-  inC.addEventListener("blur", () => { const txt = inC.value.trim(); if (txt === "") data.contaManual = false; else { data.conta = parseValor(txt); data.contaManual = true; } atualizarTudo(ano); });
+  
+  inC.addEventListener("blur", () => { 
+      const txt = inC.value.trim(); 
+      if (txt === "") data.contaManual = false; 
+      else { data.conta = parseValor(txt); data.contaManual = true; } 
+      atualizarTudo(ano); 
+  });
+  
   inC.addEventListener("keydown", (e) => { if(e.key === "Enter") inC.blur(); });
-  btnC.onclick = () => { const anos = Object.keys(dados).map(Number).sort((a,b)=>a-b); let found = false; anos.forEach(a => dados[a].meses.forEach((m, i) => { if(a == ano && i == index) found = true; else if(found) m.contaManual = false; })); atualizarTudo(ano); };
-  // LÓGICA DO LANÇAMENTO RÁPIDO
+  
+  btnC.onclick = () => { 
+      const anos = Object.keys(dados).map(Number).sort((a,b)=>a-b); 
+      let found = false; 
+      anos.forEach(a => dados[a].meses.forEach((m, i) => { 
+          if(a == ano && i == index) found = true; 
+          else if(found) m.contaManual = false; 
+      })); 
+      atualizarTudo(ano); 
+  };
 
-  // LÓGICA DO FORMULÁRIO RÁPIDO
+  // LOGICA FORMULARIOS RÁPIDOS (DESPESA E PARCELAMENTO)
   const btnShow = body.querySelector(".btn-show-quick-add");
   const formQuick = body.querySelector(".form-rapido-despesa");
   const btnCancel = body.querySelector(".btn-cancelar-quick");
   const btnAddFinal = body.querySelector(".btn-quick-add");
 
-  // Mostrar formulário
-  btnShow.onclick = () => {
-      btnShow.style.display = "none";
-      formQuick.style.display = "block";
-      body.querySelector(".quick-nome").focus();
-  };
+  btnShow.onclick = () => { btnShow.style.display = "none"; formQuick.style.display = "block"; body.querySelector(".quick-nome").focus(); };
+  btnCancel.onclick = () => { btnShow.style.display = "block"; formQuick.style.display = "none"; };
 
-  // Cancelar
-  btnCancel.onclick = () => {
-      btnShow.style.display = "block";
-      formQuick.style.display = "none";
-  };
-
-// ADICIONAR DE FATO (Com Feedback)
   btnAddFinal.onclick = async () => {
       const nome = body.querySelector(".quick-nome").value;
       const valorRaw = body.querySelector(".quick-valor").value;
       const valor = parseValor(valorRaw);
       const categoria = body.querySelector(".quick-cat").value;
       const cartaoId = body.querySelector(".quick-card").value;
+      if (!nome || valor <= 0) { alert("Preencha nome e valor."); return; }
 
-      if (!nome || valor <= 0) {
-          alert("Por favor, preencha o nome e um valor válido.");
-          return;
-      }
-
-      // 1. Define a mensagem baseada no método de pagamento
-      const msgFeedback = (cartaoId === "dinheiro") ? "✅ Adicionado!" : "💳 Registrado no cartão!";
-
-      // 2. Lógica de salvamento (Dinheiro vs Cartão)
       if (cartaoId === "dinheiro") {
-          data.despesas.push({ nome: nome, valor: valor, checked: true, categoria: categoria });
+          const novoItem = { nome: nome, valor: valor, checked: true, categoria: categoria };
+          data.despesas.push(novoItem);
+          criarItem(listD, novoItem, data.despesas, ano);
       } else {
           if (!gastosDetalhes[ano]) gastosDetalhes[ano] = [];
-          gastosDetalhes[ano].push({
-              mes: index,
-              nome: nome,
-              valor: valor,
-              categoria: categoria,
-              cartaoId: cartaoId
-          });
+          gastosDetalhes[ano].push({ mes: index, nome: nome, valor: valor, categoria: categoria, cartaoId: cartaoId });
       }
-
-      // 3. Salva os dados
-      salvarDadosLocal();
-      await salvarFirebase(); 
-
-      // 4. FEEDBACK VISUAL
-      formQuick.style.display = "none"; // Esconde o formulário
-      btnShow.style.display = "block";  // Mostra o botão principal
-      
-      const textoOriginal = btnShow.innerText;
-      btnShow.innerText = msgFeedback; // Muda o texto para o feedback
-      btnShow.style.backgroundColor = "#27ae60"; // Muda para verde temporariamente
-      btnShow.style.color = "white";
-
-      // 5. Reseta o botão e a interface após 2 segundos
-      setTimeout(() => {
-          btnShow.innerText = textoOriginal;
-          btnShow.style.backgroundColor = ""; // Volta para a cor do tema
-          btnShow.style.color = "";
-          carregarAno(); // Recarrega a UI para mostrar o novo item na lista
-      }, 2000);
+      salvarDadosLocal(); atualizarTudo(ano);
+      formQuick.style.display = "none"; btnShow.style.display = "block";
+      const textoOriginal = btnShow.innerText; btnShow.innerText = "✅ Adicionado!"; btnShow.style.backgroundColor = "#27ae60";
+      setTimeout(() => { btnShow.innerText = textoOriginal; btnShow.style.backgroundColor = ""; }, 2000);
   };
 
-  // --- LÓGICA DO PARCELAMENTO RÁPIDO ---
   const btnShowP = body.querySelector(".btn-show-quick-parcela");
   const formQuickP = body.querySelector(".form-rapido-parcela");
   const btnCancelP = body.querySelector(".btn-cancelar-p-quick");
   const btnAddFinalP = body.querySelector(".btn-quick-p-add");
 
-  btnShowP.onclick = () => {
-      btnShowP.style.display = "none";
-      formQuickP.style.display = "block";
-      body.querySelector(".qp-nome").focus();
-  };
-
-  btnCancelP.onclick = () => {
-      btnShowP.style.display = "block";
-      formQuickP.style.display = "none";
-  };
+  btnShowP.onclick = () => { btnShowP.style.display = "none"; formQuickP.style.display = "block"; body.querySelector(".qp-nome").focus(); };
+  btnCancelP.onclick = () => { btnShowP.style.display = "block"; formQuickP.style.display = "none"; };
 
   btnAddFinalP.onclick = async () => {
       const nome = body.querySelector(".qp-nome").value;
@@ -748,64 +779,28 @@ header.querySelector(".duplicarMes").onclick = (e) => { e.stopPropagation(); con
       const qtd = parseInt(body.querySelector(".qp-qtd").value);
       const categoria = body.querySelector(".qp-cat").value;
       const cartaoId = body.querySelector(".qp-card").value;
-
-      if (!nome || valorTotal <= 0 || !qtd) {
-          alert("Preencha todos os campos corretamente.");
-          return;
-      }
-
+      if (!nome || valorTotal <= 0 || !qtd) { alert("Dados inválidos."); return; }
       const valorParcela = Number((valorTotal / qtd).toFixed(2));
-      const pId = Date.now(); // ID único para o grupo de parcelas
-
+      const pId = Date.now();
       if (cartaoId === "dinheiro") {
-          // Se for dinheiro, salvamos na memória de parcelas (Home)
-          parcelasMemoria.push({
-              id: pId,
-              nome: nome,
-              valorParcela: valorParcela,
-              parcelas: qtd,
-              inicio: index,
-              ano: Number(ano),
-              categoria: categoria
-          });
+          parcelasMemoria.push({ id: pId, nome: nome, valorParcela: valorParcela, parcelas: qtd, inicio: index, ano: Number(ano), categoria: categoria });
       } else {
-          // Se for cartão, distribuímos nos gastos detalhados
-          let mesC = index;
-          let anoC = Number(ano);
+          let mesC = index, anoC = Number(ano);
           for (let i = 1; i <= qtd; i++) {
               if (!gastosDetalhes[anoC]) gastosDetalhes[anoC] = [];
-              gastosDetalhes[anoC].push({
-                  mes: mesC,
-                  nome: `${nome} (${i}/${qtd})`,
-                  valor: valorParcela,
-                  categoria: categoria,
-                  cartaoId: cartaoId,
-                  parcelaId: pId
-              });
-              mesC++;
-              if (mesC > 11) { mesC = 0; anoC++; }
+              gastosDetalhes[anoC].push({ mes: mesC, nome: `${nome} (${i}/${qtd})`, valor: valorParcela, categoria: categoria, cartaoId: cartaoId, parcelaId: pId });
+              mesC++; if (mesC > 11) { mesC = 0; anoC++; }
           }
       }
-
-      // Salva e Feedback
-      salvarDadosLocal();
-      await salvarFirebase();
-
-      formQuickP.style.display = "none";
-      btnShowP.style.display = "block";
-      const textoOriginal = btnShowP.innerText;
-      btnShowP.innerText = "✅ Parcelas Criadas!";
-      btnShowP.style.backgroundColor = "#27ae60";
-
-      setTimeout(() => {
-          btnShowP.innerText = textoOriginal;
-          btnShowP.style.backgroundColor = "";
-          carregarAno();
-      }, 2000);
+      salvarDadosLocal(); await salvarFirebase();
+      formQuickP.style.display = "none"; btnShowP.style.display = "block";
+      const txtOrig = btnShowP.innerText; btnShowP.innerText = "✅ Parcelas Criadas!"; btnShowP.style.backgroundColor = "#27ae60";
+      setTimeout(() => { btnShowP.innerText = txtOrig; btnShowP.style.backgroundColor = ""; carregarAno(); }, 2000);
   };
   
   body.querySelector(".addEmp").onclick = () => { if(!data.empresa) data.empresa=[]; data.empresa.push({nome:"", valor:0, checked:true}); carregarAno(); };
-  mes.appendChild(header); mes.appendChild(body); return mes;
+  mes.appendChild(header); mes.appendChild(body); 
+  return mes;
 }
 
 // ================= GESTÃO DE GASTOS DETALHADOS =================
@@ -814,33 +809,43 @@ function renderPaginaGastos() {
     const area = document.getElementById("areaGastosMensais"); 
     const anoView = document.getElementById("anoGastos").value; 
     const { mesAt, anoAt } = getMesReferenciaAtivo();
+    
+    // Abre o mês atual por padrão se nada estiver aberto
+    if (mesesGastosAbertos.size === 0 && Number(anoView) === anoAt && !window.scrollTargetMes) {
+        mesesGastosAbertos.add(mesAt);
+    }
+
     area.innerHTML = "";
 
     for (let m = 0; m < 12; m++) {
+        const mData = dados[anoView]?.meses[m];
+        if (!mData) continue;
+        if (!mData.fixasDesativadas) mData.fixasDesativadas = {};
+
         const mesBox = document.createElement("div"); 
+        mesBox.setAttribute("data-mes-idx", m);
+        mesBox.id = `box-gastos-mes-${m}`;
+        
         const isMesAtual = (m === mesAt && Number(anoView) === anoAt); 
-        const isOpen = mesesGastosAbertos.has(m) || isMesAtual;
+        const isOpen = mesesGastosAbertos.has(m);
+
         mesBox.className = "mes " + (isOpen ? "" : "collapsed") + (isMesAtual ? " mesAtual" : "");
 
-        // --- LÓGICA DE GASTOS ---
         const filtroAtual = filtrosPorMes[m] || "todos";
-        
-        // 1. Gastos Manuais (Detalhes)
         let gastosManuais = (gastosDetalhes[anoView] || []).filter(g => g.mes === m);
         
-        // 2. Gastos Fixos vindos das Configurações (apenas os que têm cartão)
-        let gastosFixos = contasFixas.filter(f => f.ativo && f.cartaoId);
+        // Verifica se usa a lista global ou o Snapshot (histórico congelado)
+        const listaBaseFixas = mData.fixasSnapshot ? mData.fixasSnapshot : contasFixas;
+        let gastosFixos = listaBaseFixas.filter(f => f.ativo && f.cartaoId);
 
-        // Aplicar Filtro de Cartão em ambos
         if(filtroAtual !== "todos") {
             gastosManuais = gastosManuais.filter(g => g.cartaoId == filtroAtual);
             gastosFixos = gastosFixos.filter(f => f.cartaoId == filtroAtual);
         }
 
-        // Calcular Totais (Fixos + Manuais)
-        const todosGastos = [...gastosFixos, ...gastosManuais];
-        const tCr = todosGastos.filter(g => cartoes.find(c => c.id == g.cartaoId)?.tipo === 'Crédito').reduce((a,b) => a + b.valor, 0);
-        const tDb = todosGastos.filter(g => cartoes.find(c => c.id == g.cartaoId)?.tipo === 'Débito').reduce((a,b) => a + b.valor, 0);
+        const tCr = gastosManuais.filter(g => cartoes.find(c => c.id == g.cartaoId)?.tipo === 'Crédito').reduce((a,b) => a + b.valor, 0) +
+                    gastosFixos.filter(f => !mData.fixasDesativadas[f.id]).reduce((a,b) => a + b.valor, 0);
+        const tDb = gastosManuais.filter(g => cartoes.find(c => c.id == g.cartaoId)?.tipo === 'Débito').reduce((a,b) => a + b.valor, 0);
 
         mesBox.innerHTML = `
             <div class="mesHeader">
@@ -848,17 +853,20 @@ function renderPaginaGastos() {
                 <span>${formatar(tCr + tDb)}</span>
             </div>
             <div class="mesBody">
-                <div class="filtro-interno">
-                    <span style="font-size:12px; opacity:0.8">Exibir cartão:</span>
-                    <select class="inputPadrao sel-filtro-mes" style="width:auto; height:30px; font-size:12px;">
-                        <option value="todos">Todos</option>
-                        ${cartoes.map(c => `<option value="${c.id}" ${filtroAtual == c.id ? 'selected' : ''}>${c.nome}</option>`).join('')}
-                    </select>
+                <div class="filtro-interno" style="margin-bottom:10px; display:flex; justify-content:space-between; align-items:center;">
+                    <div>
+                        <span style="font-size:12px; opacity:0.8">Exibir cartão:</span>
+                        <select class="inputPadrao sel-filtro-mes" style="width:auto; height:30px; font-size:12px;">
+                            <option value="todos">Todos</option>
+                            ${cartoes.map(c => `<option value="${c.id}" ${filtroAtual == c.id ? 'selected' : ''}>${c.nome}</option>`).join('')}
+                        </select>
+                    </div>
                 </div>
                 <div id="chart-pizza-${m}" style="display:flex; justify-content:center; margin: 15px 0;"></div>
                 <table class="tabela-gastos">
                     <thead>
                         <tr>
+                            <th style="width:1%"></th>
                             <th>Gasto</th>
                             <th style="cursor:pointer" onclick="document.getElementById('modalCategorias').style.display='flex'; renderCategoriasModal();">Categoria ✏️</th>
                             <th>Cartão</th>
@@ -867,23 +875,22 @@ function renderPaginaGastos() {
                         </tr>
                     </thead>
                     <tbody id="tbody-gastos-${m}"></tbody>
-                                        <tfoot>
-                                            <tr>
-                                                <td><input type="text" placeholder="Gasto..." id="add-nome-${m}" class="inputPadrao"></td>
-                                                <td><select id="add-cat-${m}" class="inputPadrao">${categorias.map(c => `<option value="${c.name}">${c.name}</option>`).join('')}</select></td>
-                                                <td><select id="add-card-${m}" class="inputPadrao">${cartoes.map(c => `<option value="${c.id}">${c.nome}</option>`).join('')}</select></td>
-                                                <td><input type="text" placeholder="0,00" id="add-val-${m}" class="inputPadrao input-valor-add"></td>
-                                                <td><button class="btn" id="btn-add-${m}" style="width:40px">+</button></td>
-                                            </tr>
-                                        </tfoot>
+                    <tfoot>
+                        <tr>
+                            <td></td>
+                            <td><input type="text" placeholder="Gasto..." id="add-nome-${m}" class="inputPadrao"></td>
+                            <td><select id="add-cat-${m}" class="inputPadrao">${categorias.map(c => `<option value="${c.name}">${c.name}</option>`).join('')}</select></td>
+                            <td><select id="add-card-${m}" class="inputPadrao">${cartoes.map(c => `<option value="${c.id}">${c.nome}</option>`).join('')}</select></td>
+                            <td><input type="text" placeholder="0,00" id="add-val-${m}" class="inputPadrao input-valor-add"></td>
+                            <td><button class="btn" id="btn-add-${m}" style="width:40px">+</button></td>
+                        </tr>
+                    </tfoot>
                 </table>
-                <!-- BOTÃO DE PARCELAMENTO CENTRALIZADO -->
                 <div style="display: flex; justify-content: center; margin-bottom: 15px;">
                     <button class="btn" style="background: var(--P05); width: auto; font-size: 11px; padding: 10px 20px;" id="btn-add-parcela-${m}">
                         + NOVO PARCELAMENTO
                     </button>
                 </div>
-
                 <div class="resumo-gastos-inferior">
                     <div class="barra-resumo credito">Crédito <span>${formatar(tCr)}</span></div>
                     <div class="barra-resumo debito">Débito <span>${formatar(tDb)}</span></div>
@@ -891,6 +898,7 @@ function renderPaginaGastos() {
                 </div>
             </div>`;
 
+        // Evento do Accordion (Abrir/Fechar Mês)
         mesBox.querySelector(".mesHeader").onclick = () => { 
             mesBox.classList.toggle("collapsed"); 
             if(mesBox.classList.contains("collapsed")) mesesGastosAbertos.delete(m); 
@@ -906,108 +914,153 @@ function renderPaginaGastos() {
 
         const tbody = document.getElementById(`tbody-gastos-${m}`);
 
-        // --- RENDERIZAR GASTOS FIXOS (SINCRONIZADOS) ---
-        if (gastosFixos.length > 0) {
-            const trHeader = document.createElement("tr");
-            trHeader.innerHTML = `<td colspan="5" style="background: rgba(255,255,255,0.05); font-size: 10px; font-weight: bold; color: var(--P04); padding: 5px 12px;">DESPESAS FIXAS SINCRONIZADAS</td>`;
-            tbody.appendChild(trHeader);
-
-            gastosFixos.forEach(g => {
-                const tr = document.createElement("tr");
-                tr.style.opacity = "0.8"; // Diferenciar visualmente
-                const catI = categorias.find(c => c.name === g.categoria) || {color: "#888"};
-                const cardN = cartoes.find(c => c.id == g.cartaoId)?.nome || "Cartão";
-                
-                tr.innerHTML = `
-                    <td style="font-style: italic;">${g.nome}</td>
-                    <td><span class="badge" style="border: 1px solid ${catI.color}; color: ${catI.color}">${g.categoria}</span></td>
-                    <td>💳 ${cardN}</td>
-                    <td>${formatar(g.valor)}</td>
-                    <td title="Gerenciado em 'Resumo'">⚙️</td>
-                `;
-                tbody.appendChild(tr);
-            });
-
-            const trSpacer = document.createElement("tr");
-            trSpacer.innerHTML = `<td colspan="5" style="background: rgba(255,255,255,0.05); font-size: 10px; font-weight: bold; color: var(--P04); padding: 5px 12px;">GASTOS DO MÊS</td>`;
-            tbody.appendChild(trSpacer);
-        }
-
-        // --- RENDERIZAR GASTOS MANUAIS ---
-        gastosManuais.forEach((g, idx) => {
-            const tr = document.createElement("tr"); 
+        // 1. RENDERIZAR GASTOS FIXOS (SINCRONIZADOS)
+        gastosFixos.forEach(g => {
+            const tr = document.createElement("tr");
+            const desativada = mData.fixasDesativadas[g.id] === true;
+            tr.style.opacity = desativada ? "0.3" : "0.8";
             const catI = categorias.find(c => c.name === g.categoria) || {color: "#888"};
+            const cardN = cartoes.find(c => c.id == g.cartaoId)?.nome || "Cartão";
             tr.innerHTML = `
-                <td><input type="text" class="input-tabela-edit" value="${g.nome}" data-key="nome"></td>
-                <td><select class="input-tabela-edit" data-key="categoria" style="border-left: 5px solid ${catI.color}">${categorias.map(c => `<option value="${c.name}" ${g.categoria === c.name ? 'selected' : ''}>${c.name}</option>`).join('')}</select></td>
-                <td><select class="input-tabela-edit" data-key="cartaoId">${cartoes.map(c => `<option value="${c.id}" ${g.cartaoId == c.id ? 'selected' : ''}>${c.nome}</option>`).join('')}</select></td>
-                <td><input type="text" class="input-tabela-edit" value="${formatar(g.valor)}" data-key="valor"></td>
-                <td><button class="removeItem" id="rem-${m}-${idx}">×</button></td>`;
-            
-            tr.querySelectorAll('.input-tabela-edit').forEach(input => { 
-                input.onblur = (e) => { 
-                    const key = input.getAttribute('data-key'); 
-                    let val = e.target.value; 
-                    if(key === 'valor') val = parseValor(val); 
-                    g[key] = val; 
-                    salvarDadosLocal(); 
-                    renderPaginaGastos(); 
-                }; 
-                if(input.tagName === 'INPUT') input.onkeydown = (e) => { if(e.key === 'Enter') input.blur(); }; 
-            });
-
-            tr.querySelector(".removeItem").onclick = () => { 
-                if(g.parcelaId) { 
-                    if(confirm("Apagar todas as parcelas?")) { 
-                        Object.keys(gastosDetalhes).forEach(ano => { gastosDetalhes[ano] = gastosDetalhes[ano].filter(item => item.parcelaId !== g.parcelaId); }); 
-                        salvarDadosLocal(); 
-                        renderPaginaGastos(); 
-                    } 
-                } else { 
-                    gastosDetalhes[anoView] = gastosDetalhes[anoView].filter(item => item !== g); 
-                    salvarDadosLocal(); 
-                    atualizarTudo(anoView); // Força o recalculo global
-                    renderPaginaGastos(); 
-                } 
+                <td><input type="checkbox" ${!desativada ? 'checked' : ''}></td>
+                <td style="font-style: italic;">${g.nome}</td>
+                <td><span class="badge" style="border: 1px solid ${catI.color}; color: ${catI.color}">${g.categoria}</span></td>
+                <td>💳 ${cardN}</td>
+                <td>${formatar(g.valor)}</td>
+                <td title="Configuração Global">⚙️</td>`;
+            tr.querySelector("input").onchange = (e) => {
+                mData.fixasDesativadas[g.id] = !e.target.checked;
+                atualizarTudo(anoView);
+                renderPaginaGastos();
             };
             tbody.appendChild(tr);
         });
 
-        // Configuração dos botões de Adicionar...
+        // 2. RENDERIZAR GASTOS MANUAIS (VARIÁVEIS)
+        gastosManuais.forEach((g) => {
+            const tr = document.createElement("tr"); 
+            const catCor = categorias.find(c => c.name === g.categoria)?.color || "transparent";
+            const cardCor = cartoes.find(c => String(c.id) === String(g.cartaoId))?.color || "transparent";
+
+            tr.innerHTML = `
+                <td></td>
+                <td><input type="text" class="input-tabela-edit nome" value="${g.nome}"></td>
+                <td><select class="input-tabela-edit cat" style="border-left: 5px solid ${catCor}">${categorias.map(c => `<option value="${c.name}" ${g.categoria === c.name ? 'selected' : ''}>${c.name}</option>`).join('')}</select></td>
+                <td><select class="input-tabela-edit card" style="border-left: 5px solid ${cardCor}">${cartoes.map(c => `<option value="${c.id}" ${g.cartaoId == c.id ? 'selected' : ''}>${c.nome}</option>`).join('')}</select></td>
+                <td><input type="text" class="input-tabela-edit valor" value="${formatar(g.valor)}"></td>
+                <td><button class="removeItem">×</button></td>`;
+            
+            const inVal = tr.querySelector(".valor");
+            inVal.onfocus = () => { inVal.dataset.old = inVal.value; inVal.value = ""; };
+            inVal.onblur = (e) => {
+                const txt = e.target.value.trim();
+                if (txt !== "") g.valor = parseValor(txt);
+                inVal.value = formatar(g.valor);
+                salvarDadosLocal(); atualizarTudo(anoView);
+            };
+            inVal.onkeydown = (ev) => { if(ev.key === "Enter") inVal.blur(); };
+
+            tr.querySelector(".nome").onblur = (e) => { g.nome = e.target.value; salvarDadosLocal(); };
+            tr.querySelector(".cat").onchange = (e) => { g.categoria = e.target.value; salvarDadosLocal(); renderPaginaGastos(); };
+            tr.querySelector(".card").onchange = (e) => { g.cartaoId = e.target.value; salvarDadosLocal(); atualizarTudo(anoView); renderPaginaGastos(); };
+
+            // BOTÃO REMOVER COM EXCLUSÃO EM CADEIA PARA PARCELAS
+            tr.querySelector(".removeItem").onclick = () => {
+                if (g.parcelaId) {
+                    if (confirm("Deseja remover TODAS as parcelas desta compra?")) {
+                        gastosDetalhes[anoView] = gastosDetalhes[anoView].filter(item => item.parcelaId !== g.parcelaId);
+                    } else return;
+                } else {
+                    const idxGlobal = gastosDetalhes[anoView].indexOf(g);
+                    if (idxGlobal > -1) gastosDetalhes[anoView].splice(idxGlobal, 1);
+                }
+                salvarDadosLocal(); atualizarTudo(anoView); renderPaginaGastos();
+            };
+            tbody.appendChild(tr);
+        });
+
+        // 3. CONFIGURAÇÃO DOS BOTÕES DE AÇÃO DO MÊS (ADICIONAR / PARCELAR)
+        const addValInput = document.getElementById(`add-val-${m}`);
+        addValInput.onfocus = () => { addValInput.value = ""; };
+        addValInput.onblur = () => { if(addValInput.value.trim() !== "") addValInput.value = formatar(parseValor(addValInput.value)); };
+        addValInput.onkeydown = (ev) => { if(ev.key === "Enter") document.getElementById(`btn-add-${m}`).click(); };
+
         document.getElementById(`btn-add-${m}`).onclick = () => { 
             const n = document.getElementById(`add-nome-${m}`).value, 
-                  c = document.getElementById(`add-cat-${m}`).value, 
-                  crd = document.getElementById(`add-card-${m}`).value, 
                   v = parseValor(document.getElementById(`add-val-${m}`).value); 
             if(!n || v <= 0) return; 
             if(!gastosDetalhes[anoView]) gastosDetalhes[anoView] = []; 
-            gastosDetalhes[anoView].push({ mes: m, nome: n, valor: v, categoria: c, cartaoId: crd }); 
-            salvarDadosLocal(); 
-            atualizarTudo(anoView); // Força o recalculo global
-            renderPaginaGastos(); 
+            gastosDetalhes[anoView].push({ 
+                mes: m, nome: n, valor: v, 
+                categoria: document.getElementById(`add-cat-${m}`).value, 
+                cartaoId: document.getElementById(`add-card-${m}`).value 
+            }); 
+            salvarDadosLocal(); atualizarTudo(anoView); renderPaginaGastos(); 
         };
 
         document.getElementById(`btn-add-parcela-${m}`).onclick = () => { 
             contextParcelaCartao = { mes: m, ano: Number(anoView) }; 
             document.getElementById("pcNome").value = document.getElementById(`add-nome-${m}`).value; 
             document.getElementById("pcValorTotal").value = document.getElementById(`add-val-${m}`).value; 
-            const sCard = document.getElementById("pcCartao"); 
-            sCard.innerHTML = cartoes.map(c => `<option value="${c.id}">${c.nome}</option>`).join(''); 
-            sCard.value = document.getElementById(`add-card-${m}`).value; 
-            const sCat = document.getElementById("pcCategoria"); 
-            sCat.innerHTML = categorias.map(c => `<option value="${c.name}">${c.name}</option>`).join(''); 
-            sCat.value = document.getElementById(`add-cat-${m}`).value; 
+            document.getElementById("pcCartao").innerHTML = cartoes.map(c => `<option value="${c.id}">${c.nome}</option>`).join(''); 
+            document.getElementById("pcCartao").value = document.getElementById(`add-card-${m}`).value; 
+            document.getElementById("pcCategoria").innerHTML = categorias.map(c => `<option value="${c.name}">${c.name}</option>`).join(''); 
+            document.getElementById("pcCategoria").value = document.getElementById(`add-cat-${m}`).value; 
             document.getElementById("modalParcelaCartao").style.display = "flex"; 
         };
+    }
+
+    // Scroll automático se houver um alvo (clique vindo da Home)
+    if (window.scrollTargetMes !== undefined) {
+        const targetEl = document.getElementById(`box-gastos-mes-${window.scrollTargetMes}`);
+        if (targetEl) {
+            setTimeout(() => {
+                targetEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                window.scrollTargetMes = undefined;
+            }, 100);
+        }
     }
 }
 
 document.getElementById("btnSalvarParcelaCartao").onclick = () => {
-    const nome = document.getElementById("pcNome").value, cartaoId = document.getElementById("pcCartao").value, categoria = document.getElementById("pcCategoria").value, total = parseValor(document.getElementById("pcValorTotal").value), qtd = parseInt(document.getElementById("pcQtd").value), pId = Date.now();
-    if(!nome || total <= 0 || qtd <= 0) return;
-    const valP = Number((total / qtd).toFixed(2)); let mesC = contextParcelaCartao.mes, anoC = contextParcelaCartao.ano;
-    for(let i = 1; i <= qtd; i++) { if(!gastosDetalhes[anoC]) gastosDetalhes[anoC] = []; gastosDetalhes[anoC].push({ mes: mesC, nome: `${nome} (${i}/${qtd})`, valor: valP, categoria: categoria, cartaoId: cartaoId, parcelaId: pId }); mesC++; if(mesC > 11) { mesC = 0; anoC++; } }
-    document.getElementById("modalParcelaCartao").style.display = "none"; salvarDadosLocal(); renderPaginaGastos();
+    const nome = document.getElementById("pcNome").value;
+    const cartaoId = document.getElementById("pcCartao").value;
+    const categoria = document.getElementById("pcCategoria").value;
+    const total = parseValor(document.getElementById("pcValorTotal").value);
+    const qtd = parseInt(document.getElementById("pcQtd").value);
+    
+    // Gera um ID único para este grupo de parcelas
+    const pId = Date.now(); 
+
+    if(!nome || total <= 0 || qtd <= 0) {
+        alert("Preencha todos os campos corretamente.");
+        return;
+    }
+
+    const valP = Number((total / qtd).toFixed(2));
+    let mesC = contextParcelaCartao.mes;
+    let anoC = contextParcelaCartao.ano;
+
+    for(let i = 1; i <= qtd; i++) {
+        if(!gastosDetalhes[anoC]) gastosDetalhes[anoC] = [];
+        
+        gastosDetalhes[anoC].push({
+            mes: mesC,
+            nome: `${nome} (${i}/${qtd})`,
+            valor: valP,
+            categoria: categoria,
+            cartaoId: cartaoId,
+            parcelaId: pId // OBRIGATÓRIO para a exclusão em cadeia
+        });
+
+        mesC++;
+        if(mesC > 11) { mesC = 0; anoC++; }
+    }
+
+    document.getElementById("modalParcelaCartao").style.display = "none";
+    salvarDadosLocal();
+    atualizarTudo(contextParcelaCartao.ano);
+    renderPaginaGastos();
 };
 
 function renderPizza(mesIdx, gastos) {
@@ -1061,95 +1114,148 @@ window.editarLembrete = (l) => {
 };
 
 function renderContasFixas() {
-  const container = document.getElementById("listaContasFixas"); 
-  if (!container) return; 
-  
-  // Criamos a estrutura da tabela
-  container.innerHTML = `
-    <table class="tabela-gastos">
-      <thead>
-        <tr>
-          <th style="width: 1%;"></th>
-          <th style="width: 1%;">ok</th>
-          <th>Nome da Despesa</th>
-          <th style="width: 80px;">Dia</th>
-          <th style="width: 150px;">Valor</th>
-          <th style="width: 150px;">Categoria</th>
-          <th style="width: 150px;">Cartão</th>
-          <th style="width: 1%;"></th>
-        </tr>
-      </thead>
-      <tbody id="tbodyFixas"></tbody>
-    </table>
-  `;
+    const renderTabela = (containerId, tipoFiltro) => {
+        const container = document.getElementById(containerId);
+        if (!container) return;
 
-  const tbody = document.getElementById("tbodyFixas");
+        container.innerHTML = `
+            <table class="tabela-gastos">
+              <thead>
+                <tr>
+                  <th style="width: 1%;"></th>
+                  <th style="width: 1%;">ok</th>
+                  <th>Nome</th>
+                  <th style="width: 100px;">Dia</th>
+                  <th style="width: 120px;">Valor</th>
+                  <th style="width: 150px;">Categoria</th>
+                  <th style="width: 150px;">Cartão</th>
+                  <th style="width: 1%;"></th>
+                </tr>
+              </thead>
+              <tbody class="tbody-fixo" data-tipo="${tipoFiltro}"></tbody>
+            </table>
+        `;
 
-  contasFixas.forEach((cf) => {
-    const tr = document.createElement("tr"); 
-    tr.setAttribute("data-id", cf.id);
-    
-    tr.innerHTML = `
-      <td class="drag-handle" style="cursor:grab; text-align:center; opacity:0.5;">☰</td>
-      <td><input type="checkbox" ${cf.ativo?'checked':''} class="check-fixo"></td>
-      <td><input type="text" class="input-tabela-edit" value="${cf.nome}" placeholder="Nome"></td>
-      <td><input type="number" class="input-tabela-edit" value="${cf.dia||1}" title="Dia"></td>
-      <td><input type="text" class="input-tabela-edit valor-fixo" value="${formatar(cf.valor)}"></td>
-      <td>
-        <select class="input-tabela-edit cat-fixo">
-            ${categorias.map(c=>`<option value="${c.name}" ${cf.categoria===c.name?'selected':''}>${c.name}</option>`).join('')}
-        </select>
-      </td>
-      <td>
-        <select class="input-tabela-edit card-fixo">
-            <option value="" >Nenhum</option>
-            ${cartoes.filter(c=>c.tipo==='Crédito').map(c=>`<option value="${c.id}" ${String(cf.cartaoId) === String(c.id) ? 'selected' : ''}>${c.nome}</option>`).join('')}
-        </select>
-      </td>
-      <td><button class="removeItem">×</button></td>`;
+        const tbody = container.querySelector("tbody");
+        const itensFiltrados = contasFixas.filter(cf => (cf.tipo || 'fixa') === tipoFiltro);
 
-    const [tdDrag, tdCheck, tdNome, tdDia, tdVal, tdCat, tdCard, tdBtn] = tr.children;
+        itensFiltrados.forEach((cf) => {
+            const tr = document.createElement("tr");
+            const catCor = categorias.find(c => c.name === cf.categoria)?.color || "transparent";
+            const cardCor = cartoes.find(c => String(c.id) === String(cf.cartaoId))?.color || "transparent";
 
-    tdCheck.querySelector("input").onchange = (e) => { cf.ativo = e.target.checked; salvarDadosLocal(); }; 
-    tdNome.querySelector("input").onblur = (e) => { cf.nome = e.target.value; salvarDadosLocal(); };
-    tdDia.querySelector("input").onblur = (e) => { cf.dia = parseInt(e.target.value) || 1; salvarDadosLocal(); };
-    
-    aplicarComportamentoInput(tdVal.querySelector("input"), () => cf.valor, (v) => { cf.valor = v; }); 
-    
-    tdCat.querySelector("select").onchange = (e) => { cf.categoria = e.target.value; salvarDadosLocal(); };
-    tdCard.querySelector("select").onchange = (e) => { cf.cartaoId = e.target.value; salvarDadosLocal(); };
+            tr.innerHTML = `
+                <td class="drag-handle">☰</td>
+                <td><input type="checkbox" ${cf.ativo ? 'checked' : ''} class="check-fixo"></td>
+                <td><input type="text" class="input-tabela-edit nome" value="${cf.nome}"></td>
+                <td><input type="number" class="input-tabela-edit dia" value="${cf.dia || 1}"></td>
+                <td><input type="text" class="input-tabela-edit valor" value="${formatar(cf.valor)}"></td>
+                <td>
+                    <select class="input-tabela-edit cat" style="border-left: 5px solid ${catCor}">
+                        ${categorias.map(c => `<option value="${c.name}" ${cf.categoria === c.name ? 'selected' : ''}>${c.name}</option>`).join('')}
+                    </select>
+                </td>
+                <td>
+                    <select class="input-tabela-edit card" style="border-left: 5px solid ${cardCor}">
+                        <option value="">💵 Dinheiro</option>
+                        ${cartoes.map(c => `<option value="${c.id}" ${String(cf.cartaoId) === String(c.id) ? 'selected' : ''}>${c.nome}</option>`).join('')}
+                    </select>
+                </td>
+                <td><button class="removeItem">×</button></td>
+            `;
 
-    tdBtn.querySelector("button").onclick = () => { 
-        contasFixas = contasFixas.filter(c => c.id !== cf.id); 
-        renderContasFixas(); 
-        salvarDadosLocal(); 
+            // --- LÓGICA DOS INPUTS ---
+
+            // Nome
+            const inNome = tr.querySelector(".nome");
+            inNome.onblur = (e) => {
+                if (cf.nome !== e.target.value) {
+                    congelarHistoricoFixas();
+                    cf.nome = e.target.value;
+                    salvarDadosLocal();
+                    carregarAno();
+                }
+            };
+            inNome.onkeydown = (ev) => { if(ev.key === "Enter") inNome.blur(); };
+
+            // Dia
+            const inDia = tr.querySelector(".dia");
+            inDia.onblur = (e) => {
+                const nDia = parseInt(e.target.value) || 1;
+                if (cf.dia !== nDia) {
+                    congelarHistoricoFixas();
+                    cf.dia = nDia;
+                    salvarDadosLocal();
+                    carregarAno();
+                }
+            };
+            inDia.onkeydown = (ev) => { if(ev.key === "Enter") inDia.blur(); };
+
+            // Valor (Input Financeiro)
+            const inValor = tr.querySelector(".valor");
+            inValor.onfocus = () => {
+                inValor.dataset.old = inValor.value;
+                inValor.value = "";
+            };
+            inValor.onblur = (e) => {
+                const txt = e.target.value.trim();
+                if (txt === "") {
+                    inValor.value = inValor.dataset.old;
+                } else {
+                    const nVal = parseValor(txt);
+                    if (cf.valor !== nVal) {
+                        congelarHistoricoFixas();
+                        cf.valor = nVal;
+                        salvarDadosLocal();
+                        carregarAno();
+                    }
+                }
+                // GARANTE A FORMATAÇÃO R$ AO SAIR
+                inValor.value = formatar(cf.valor);
+            };
+            inValor.onkeydown = (ev) => { if(ev.key === "Enter") inValor.blur(); };
+
+            // Checkbox Ativo
+            tr.querySelector(".check-fixo").onchange = (e) => {
+                congelarHistoricoFixas();
+                cf.ativo = e.target.checked;
+                salvarDadosLocal();
+                carregarAno();
+            };
+
+            // Categorias e Cartões
+            tr.querySelector(".cat").onchange = (e) => {
+                cf.categoria = e.target.value;
+                tr.querySelector(".cat").style.borderLeft = `5px solid ${categorias.find(c => c.name === e.target.value).color}`;
+                salvarDadosLocal();
+                carregarAno();
+            };
+
+            tr.querySelector(".card").onchange = (e) => {
+                congelarHistoricoFixas();
+                cf.cartaoId = e.target.value;
+                const cor = cartoes.find(c => String(c.id) === String(e.target.value))?.color || "transparent";
+                tr.querySelector(".card").style.borderLeft = `5px solid ${cor}`;
+                salvarDadosLocal();
+                carregarAno();
+            };
+
+            // Remover
+            tr.querySelector(".removeItem").onclick = () => {
+                if (confirm("Remover dos meses futuros?")) {
+                    congelarHistoricoFixas();
+                    contasFixas = contasFixas.filter(item => item.id !== cf.id);
+                    renderContasFixas();
+                    carregarAno();
+                }
+            };
+
+            tbody.appendChild(tr);
+        });
     };
-    
-    tbody.appendChild(tr);
-  });
 
-  // Inicializa o arrastar e soltar no corpo da tabela
-  if(typeof Sortable !== 'undefined') {
-    Sortable.create(tbody, { 
-        handle: '.drag-handle', 
-        animation: 150, 
-          onEnd: () => { 
-                      const novoArrayOrdenado = []; 
-                      tbody.querySelectorAll('tr').forEach(el => { 
-                          const idNoHtml = el.getAttribute('data-id');
-                          // Buscamos o item comparando como String para não haver erro de tipo
-                          const itemEncontrado = contasFixas.find(x => String(x.id) === idNoHtml); 
-                          if(itemEncontrado) novoArrayOrdenado.push(itemEncontrado); 
-                      }); 
-                      contasFixas = novoArrayOrdenado; 
-                      salvarDadosLocal(); 
-
-                      // IMPORTANTÍSSIMO: Recarregar o ano para refletir a nova ordem nos meses
-                      const anoAtual = document.getElementById("ano").value;
-                      carregarAno(); 
-                  }
-    });
-  }
+    renderTabela("listaContasFixas", "fixa");
+    renderTabela("listaAssinaturasFixas", "assinatura");
 }
 
 function renderReceitasFixas() {
@@ -1158,7 +1264,7 @@ function renderReceitasFixas() {
   
   const iS = document.getElementById("salarioFixoBase"); 
   iS.value = formatar(salarioFixoBase);
-  aplicarComportamentoInput(iS, () => salarioFixoBase, (v) => { salarioFixoBase = v; }); 
+  aplicarComportamentoInput(iS, () => salarioFixoBase, (v) => { salarioFixoBase = v; atualizarTudo(document.getElementById("ano").value); }); 
   
   container.innerHTML = `
     <table class="tabela-gastos">
@@ -1189,16 +1295,17 @@ function renderReceitasFixas() {
     
     const [tdCheck, tdNome, tdDia, tdVal, tdBtn] = tr.children;
     
-    tdCheck.querySelector("input").onchange = (e) => { rf.ativo = e.target.checked; salvarDadosLocal(); }; 
-    tdNome.querySelector("input").onblur = (e) => { rf.nome = e.target.value; salvarDadosLocal(); };
+    tdCheck.querySelector("input").onchange = (e) => { rf.ativo = e.target.checked; salvarDadosLocal(); atualizarTudo(document.getElementById("ano").value); }; 
+    tdNome.querySelector("input").onblur = (e) => { rf.nome = e.target.value; salvarDadosLocal(); carregarAno(); };
     tdDia.querySelector("input").onblur = (e) => { rf.dia = parseInt(e.target.value) || 1; salvarDadosLocal(); };
     
-    aplicarComportamentoInput(tdVal.querySelector("input"), () => rf.valor, (v) => { rf.valor = v; }); 
+    aplicarComportamentoInput(tdVal.querySelector("input"), () => rf.valor, (v) => { rf.valor = v; atualizarTudo(document.getElementById("ano").value); }); 
     
     tdBtn.querySelector("button").onclick = () => { 
         receitasFixas = receitasFixas.filter(r => r.id !== rf.id); 
         renderReceitasFixas(); 
         salvarDadosLocal(); 
+        carregarAno();
     }; 
     tbody.appendChild(tr);
   });
@@ -1225,20 +1332,21 @@ function renderCartoesModal() {
     const lista = document.getElementById("listaCartoesModal"); if(!lista) return; lista.innerHTML = "";
     cartoes.forEach((c, index) => {
         const div = document.createElement("div"); div.className = "item";
+        div.style.marginBottom = "10px";
         div.innerHTML = `
-            <input type="text" class="inputPadrao" value="${c.nome}" style="flex:2">
+            <input type="color" class="seletor-cor-quadrado" value="${c.color || '#D78341'}" style="width:40px; height:40px; padding:0; border:none;">
+            <input type="text" class="inputPadrao" value="${c.nome}" style="flex:2" placeholder="Nome do Cartão">
             <select class="inputPadrao" style="width:100px">
                 <option value="Crédito" ${c.tipo=='Crédito'?'selected':''}>Crédito</option>
                 <option value="Débito" ${c.tipo=='Débito'?'selected':''}>Débito</option>
             </select>
-            <input type="number" class="inputPadrao" value="${c.fechamento || 25}" style="width:50px" title="Fechamento">
             <input type="number" class="inputPadrao" value="${c.vencimento}" style="width:50px" title="Vencimento">
             <button class="removeItem">×</button>`;
             
-        const [iN, sT, iF, iV, bR] = div.children;
+        const [iCol, iN, sT, iV, bR] = div.children;
+        iCol.onchange = (e) => { cartoes[index].color = e.target.value; salvarDadosLocal(); };
         iN.onblur = (e) => { cartoes[index].nome = e.target.value; salvarDadosLocal(); };
         sT.onchange = (e) => { cartoes[index].tipo = e.target.value; salvarDadosLocal(); };
-        iF.onblur = (e) => { cartoes[index].fechamento = parseInt(e.target.value); salvarDadosLocal(); };
         iV.onblur = (e) => { cartoes[index].vencimento = parseInt(e.target.value); salvarDadosLocal(); };
         bR.onclick = () => { cartoes.splice(index, 1); renderCartoesModal(); salvarDadosLocal(); };
         lista.appendChild(div);
@@ -1455,9 +1563,42 @@ document.getElementById("btnGerenciarCartoes").onclick = () => { document.getEle
 document.getElementById("btnFecharModal").onclick = () => { document.getElementById("modalCategorias").style.display = "none"; carregarAno(); renderContasFixas(); };
 document.getElementById("btnFecharCartoes").onclick = () => document.getElementById("modalCartoes").style.display = "none";
 document.getElementById("btnSalvarCartoes").onclick = async () => { await salvarFirebase(); document.getElementById("modalCartoes").style.display = "none"; carregarAno(); renderPaginaGastos(); };
-document.getElementById("btnAddCartao").onclick = () => { cartoes.push({ id: Date.now(), nome: "", tipo: "Crédito", vencimento: 10 }); renderCartoesModal(); };
-document.getElementById("btnAddContaFixa").onclick = () => { contasFixas.push({ id: Date.now(), nome: "", valor: 0, ativo: true, categoria: categorias[0].name }); renderContasFixas(); };
-document.getElementById("btnAddReceitaFixa").onclick = () => { receitasFixas.push({ id: Date.now(), nome: "", valor: 0, dia: 1, ativo: true }); renderReceitasFixas(); };
+document.getElementById("btnAddCartao").onclick = () => { 
+    // Adiciona o campo color ao novo objeto
+    cartoes.push({ id: Date.now(), nome: "", tipo: "Crédito", vencimento: 10, color: "#D78341" }); 
+    renderCartoesModal(); 
+};
+
+// Adicionar Despesa Fixa Comum
+document.getElementById("btnAddContaFixa").onclick = () => { 
+    contasFixas.push({ 
+        id: Date.now(), 
+        nome: "", 
+        valor: 0, 
+        dia: 1,
+        ativo: true, 
+        categoria: categorias[0].name,
+        cartaoId: "",
+        tipo: "fixa" // Diferencial
+    }); 
+    renderContasFixas(); 
+};
+
+// Adicionar Assinatura
+document.getElementById("btnAddAssinaturaFixa").onclick = () => { 
+    contasFixas.push({ 
+        id: Date.now(), 
+        nome: "", 
+        valor: 0, 
+        dia: 1,
+        ativo: true, 
+        categoria: "Lazer", // Sugestão padrão
+        cartaoId: cartoes.length > 0 ? cartoes[0].id : "", // Assinatura geralmente tem cartão
+        tipo: "assinatura" // Diferencial
+    }); 
+    renderContasFixas(); 
+};
+
 document.getElementById("salvarNuvemBtn").onclick = salvarFirebase;
 document.getElementById("headerContasFixas").onclick = () => document.getElementById("moduloContasFixas").classList.toggle("collapsed");
 document.getElementById("headerReceitasFixas").onclick = () => document.getElementById("moduloReceitasFixas").classList.toggle("collapsed");
@@ -1467,25 +1608,53 @@ document.getElementById("btnFecharParcelaCartao").onclick = () => document.getEl
 document.getElementById("btnIrCalendario").onclick = () => window.location.hash = "#calendario";
 
 function carregarAno() {
-  const sel = document.getElementById("ano"); const ano = sel ? sel.value : hoje.getFullYear(); if (!dados[ano]) dados[ano] = { meses: [] };
-  const area = document.getElementById("areaAno"); if(!area) return;
-  area.innerHTML = ""; mesesDOM = [];
-  const container = document.createElement("div"); area.appendChild(container);
-  const addBox = document.createElement("div"); addBox.className = "addMesBox";
-  const btnAdd = document.createElement("button"); btnAdd.innerText = "+ ADICIONAR MÊS";
-  btnAdd.onclick = () => {
-    let anoNum = Number(ano); if (!dados[anoNum]) dados[anoNum] = { meses: [] };
-    const n = { despesas: [], empresa: [], salario: salarioFixoBase, conta: 0, contaManual: false };
-    contasFixas.forEach(cf => { if (cf.ativo) n.despesas.push({ nome: cf.nome, valor: cf.valor || 0, checked: true, categoria: cf.categoria }); });
-    receitasFixas.forEach(rf => { if (rf.ativo) n.empresa.push({ nome: rf.nome, valor: rf.valor || 0, checked: true }); });
-    dados[anoNum].meses.push(n); carregarAno();
-  };
-  addBox.appendChild(btnAdd); area.prepend(addBox);
+  const sel = document.getElementById("ano"); 
+  const ano = sel ? sel.value : hoje.getFullYear(); 
+  if (!dados[ano]) dados[ano] = { meses: [] };
   
-  // APLICAR PARCELAS ANTES DE RENDERIZAR
+  const area = document.getElementById("areaAno"); 
+  if(!area) return;
+  area.innerHTML = ""; 
+  mesesDOM = [];
+  
+  const container = document.createElement("div"); 
+  area.appendChild(container);
+  
+  const addBox = document.createElement("div"); 
+  addBox.className = "addMesBox";
+  const btnAdd = document.createElement("button"); 
+  btnAdd.innerText = "+ ADICIONAR MÊS";
+  
+  btnAdd.onclick = () => {
+    let anoNum = Number(ano); 
+    if (!dados[anoNum]) dados[anoNum] = { meses: [] };
+    
+    // CRIAR MÊS LIMPO (Itens fixos são calculados via atualizarTudo, não copiados aqui)
+    const n = { 
+        despesas: [], 
+        empresa: [], 
+        salario: salarioFixoBase, 
+        conta: 0, 
+        contaManual: false,
+        fixasDesativadas: {},   // Controle individual de despesas
+        receitasDesativadas: {} // Controle individual de rendas
+    };
+    
+    dados[anoNum].meses.push(n); 
+    carregarAno();
+  };
+  
+  addBox.appendChild(btnAdd); 
+  area.prepend(addBox);
+  
   aplicarParcelas();
 
-  dados[ano].meses.forEach((m, i) => { const mDOM = criarMesDOM(ano, i, m); container.prepend(mDOM); mesesDOM.push({ dom: mDOM, index: i }); });
+  dados[ano].meses.forEach((m, i) => { 
+      const mDOM = criarMesDOM(ano, i, m); 
+      container.prepend(mDOM); 
+      mesesDOM.push({ dom: mDOM, index: i }); 
+  });
+  
   atualizarTudo(ano);
 }
 
@@ -1639,22 +1808,36 @@ function abrirPostit(l) {
                             ${[0,1,2,3,4,5,6].map(d => `<label style="display:flex; flex-direction:column; align-items:center; font-size:10px; cursor:pointer;"><input type="checkbox" value="${d}" ${l.diasSemana?.includes(d) ? 'checked' : ''}>${['D','S','T','Q','Q','S','S'][d]}</label>`).join('')}
                         </div>
                     </div>
-                    <div style="display:flex; gap:10px; margin-top:20px;">
-                        <button class="btn btn-salvar-p" style="flex:1; background:#27ae60; color:white;">Salvar</button>
-                        <button class="btn btn-cancelar-p" style="flex:1; background:#999; color:white;">Cancelar</button>
+                    <div style="display:flex; flex-direction:column; gap:10px; margin-top:20px;">
+                        <div style="display:flex; gap:10px; width:100%;">
+                            <button class="btn btn-salvar-p" style="flex:2; background:#27ae60; color:white;">Salvar</button>
+                            <button class="btn btn-cancelar-p" style="flex:1; background:#999; color:white;">Voltar</button>
+                        </div>
+                        <button class="btn btn-excluir-p" style="width:100%; background:#e74c3c; color:white; font-size:11px; padding:5px; height:40px;">Apagar Lembrete permanentemente</button>
                     </div>
                 </div>`;
         }
     };
 
-    // (O resto da função attachEvents permanece igual ao passo anterior)
     const attachEvents = () => {
         const btnEdit = overlay.querySelector(".btn-editar-p");
         if(btnEdit) btnEdit.onclick = () => { overlay.innerHTML = renderConteudo(true); attachEvents(); };
+        
+        // Evento de exclusão (funciona nos dois modos agora)
         const btnExcluir = overlay.querySelector(".btn-excluir-p");
-        if(btnExcluir) btnExcluir.onclick = async () => { if(confirm("Apagar?")) { lembretes = lembretes.filter(x => x.id !== l.id); await salvarFirebase(); renderLembretesHome(); renderCalendario({cartoes, contasFixas, receitasFixas, lembretes, configuracoes, gastosDetalhes}, { abrirPostit }); overlay.remove(); } };
+        if(btnExcluir) btnExcluir.onclick = async () => { 
+            if(confirm("Deseja apagar este lembrete permanentemente?")) { 
+                lembretes = lembretes.filter(x => x.id !== l.id); 
+                await salvarFirebase(); 
+                renderLembretesHome(); 
+                renderCalendario({cartoes, contasFixas, receitasFixas, lembretes, configuracoes, gastosDetalhes}, { abrirPostit }); 
+                overlay.remove(); 
+            } 
+        };
+
         const checkRec = overlay.querySelector(".edit-recorrente");
         if(checkRec) checkRec.onchange = (e) => overlay.querySelector(".edit-dias").style.display = e.target.checked ? "grid" : "none";
+        
         const btnSalvar = overlay.querySelector(".btn-salvar-p");
         if(btnSalvar) btnSalvar.onclick = async () => {
             l.nome = overlay.querySelector(".edit-nome").value;
@@ -1667,6 +1850,7 @@ function abrirPostit(l) {
             renderCalendario({cartoes, contasFixas, receitasFixas, lembretes, configuracoes, gastosDetalhes}, { abrirPostit });
             overlay.innerHTML = renderConteudo(false); attachEvents();
         };
+        
         const btnCancel = overlay.querySelector(".btn-cancelar-p") || overlay.querySelector(".btn-fechar-p");
         if(btnCancel) btnCancel.onclick = () => { if(btnCancel.classList.contains('btn-cancelar-p')) { overlay.innerHTML = renderConteudo(false); attachEvents(); } else { overlay.remove(); } };
     };
@@ -1940,4 +2124,3 @@ document.getElementById("inputChatIA").onkeydown = (e) => {
         enviarMensagemIA();
     }
 };
-

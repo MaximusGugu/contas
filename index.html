@@ -67,53 +67,65 @@
       <select id="ano" class="inputPadrao" style="width: auto;"></select>
     </div>
   </div>
+  <hr>
 
   <!-- CONTAINER DASHBOARD (GRÁFICO + AGENDA) -->
   <div class="dashboard-resumo">
     <h2 class="titulo-secao" id="saudacaoDinamica" style="text-transform: none;">Resumo</h2>
     
     <div class="dashboard-row">
-      <!-- Coluna do Gráfico (70%) -->
+      <!-- Coluna do Gráfico -->
       <div class="dashboard-col-grafico">
         <div id="grafico"></div>
       </div>
 
-      <!-- Coluna da Agenda (30%) -->
-      <div class="dashboard-col-agenda">
-        <div id="moduloLembretesHome" class="mes" style="margin-bottom: 0; height: 100%;">
+      <!-- Coluna da Agenda -->
+      <div class="dashboard-col-agenda"> <!-- Wrapper adicionado -->
+        <div id="moduloLembretesHome" class="mes">
           <div class="despHeader" style="background: var(--P05) !important;">
             <span>Esta semana</span>
           </div>
-          <div class="mesBody" style="padding: 15px; display: flex; flex-direction: column; height: calc(100% - 40px);">
-            <div id="listaLembretesHome" class="lista-lembretes-home" style="flex: 1;">
-              <!-- Gerado via JS -->
-            </div>
-            <button class="btn" id="btnIrCalendario" style="width:100%; margin-top:10px; background: var(--P05); color: var(--P03);">CALENDÁRIO</button>
+          <div class="mesBody">
+            <div id="listaLembretesHome" class="lista-lembretes-home"></div>
+            <button class="btn" id="btnIrCalendario">CALENDÁRIO</button>
           </div>
         </div>
       </div>
     </div>
+
   </div>
 
   <!-- Módulos de Configuração (abaixo do dashboard) -->
-  <div id="moduloContasFixas" class="mes collapsed">
+<div id="moduloContasFixas" class="mes collapsed">
     <div class="despHeader" id="headerContasFixas">
-      <span>Configurar Despesas Fixas</span>
+      <span>Configurar Despesas Fixas e Assinaturas</span>
     </div>
     <div class="receitasBody">
       <div class="fixed-list-header">
-        <p>Arraste para ordenar. Configure cartões e categorias aqui.</p>
+        <p>Itens fixos são gerados automaticamente em novos meses.</p>
         <div class="acoes-categorias">
           <span id="btnGerenciarCategorias">✏️ Categorias</span>
           <span id="btnGerenciarCartoes">💳 Cartões</span>
         </div>
       </div>
+
+      <!-- SEÇÃO DESPESAS FIXAS -->
+      <h4 class="titulo-secao" style="font-size: 14px; margin-bottom: 10px; color: var(--P04);">Despesas Fixas (Geral)</h4>
       <div id="listaContasFixas"></div>
-        <span style="display: flex; justify-content: center; margin-bottom: 15px;">
-          <button class="btn" id="btnAddContaFixa">+ Nova Despesa Fixa</button>
-        </span>
+      <div style="display: flex; justify-content: center; margin-bottom: 30px;">
+        <button class="btn" id="btnAddContaFixa">+ Nova Despesa Fixa</button>
+      </div>
+
+      <hr style="opacity: 0.2; margin-bottom: 20px;">
+
+      <!-- SEÇÃO ASSINATURAS -->
+      <h4 class="titulo-secao" style="font-size: 14px; margin-bottom: 10px; color: var(--P04);">Assinaturas (Streaming, Apps, etc)</h4>
+      <div id="listaAssinaturasFixas"></div>
+      <div style="display: flex; justify-content: center; margin-bottom: 15px;">
+        <button class="btn" id="btnAddAssinaturaFixa" style="background: var(--P05) !important;">+ Nova Assinatura</button>
+      </div>
     </div>
-  </div>
+</div>
 
   <div id="moduloReceitasFixas" class="mes collapsed">
     <div class="despHeader" id="headerReceitasFixas">
@@ -155,14 +167,14 @@
             <button id="exportarTudoBtn" class="btn-secundario">EXPORTAR JSON</button>
             <label for="inputImport" class="btn-secundario" style="cursor:pointer">IMPORTAR JSON</label>
             <input type="file" id="inputImport" style="display: none;">
-            <button id="salvarNuvemBtn" class="btn">☁️ SALVAR NA NUVEM</button>
-            <span id="statusAlteracao" style="display: none;">⚠️ Alterações pendentes</span>
+<!--             <button id="salvarNuvemBtn" class="btn">☁️ SALVAR NA NUVEM</button>
+            <span id="statusAlteracao" style="display: none;">⚠️ Alterações pendentes</span> -->
         </div>
 
       <footer class="siteFooter">
           <div class="footer-container">
               <p>© 2026 <a href="http://planetario.framer.website/">Planetário Oficina Estúdio</a></p>
-              <spann><small>Versão 2.9</small></spann>
+              <spann><small>Versão 2.9.4</small></spann>
               <div class="theme-selector-footer">
                   <span>Tema:</span>
                   <select id="cfgTemaFooter" class="inputPadrao">
@@ -288,6 +300,11 @@
     </div>
   </div>
 
-  <script type="module" src="app.js"></script>
+<div class="save-container-floating">
+    <span id="statusAlteracao" style="display: none;">⚠️ Alterações pendentes</span>
+    <button id="salvarNuvemBtn" class="btn">☁️ SALVAR</button>
+</div>
+
+<script type="module" src="app.js"></script>
 </body>
 </html>
