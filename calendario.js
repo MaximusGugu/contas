@@ -156,17 +156,21 @@ export async function renderCalendario(state, actions) {
             diaBox.innerHTML += `<div class="cal-event event-salary">${gerarCardHTML("💸 Pagamento Salário", "Renda", state.salarioFixoBase ? `R$ ${state.salarioFixoBase.toLocaleString('pt-BR')}` : null)}</div>`;
         }
 
-        // CARTÕES (Com cor dinâmica)
+        // CARTÕES
         state.cartoes.forEach(c => {
             if (parseInt(c.fechamento) === dia) diaBox.innerHTML += `<div class="cal-event event-closing">🔒 Fech. ${c.nome}</div>`;
             if (parseInt(c.vencimento) === dia) {
                 const totalV = (state.gastosDetalhes[ano] || []).filter(g => g.mes === mes && String(g.cartaoId) === String(c.id)).reduce((acc, g) => acc + g.valor, 0);
                 const totalF = state.contasFixas.filter(f => f.ativo && String(f.cartaoId) === String(c.id)).reduce((acc, f) => acc + f.valor, 0);
+                
+                // VERIFICA SE ESTÁ PAGO NO MÊS
+                const isPago = state.dados?.[ano]?.meses?.[mes]?.cartoesPagos?.[c.id] === true;
+
                 const divFatura = document.createElement("div");
                 divFatura.className = "cal-event event-card";
                 divFatura.style.backgroundColor = c.color || 'var(--P04)';
-                divFatura.style.color = "#fff";
-                divFatura.innerHTML = gerarCardHTML(`Fatura ${c.nome}`, "Cartão", `R$ ${(totalV + totalF).toLocaleString('pt-BR')}`);
+                divFatura.style.opacity = isPago ? '0.5' : '1';
+                divFatura.innerHTML = (isPago ? '✅ ' : '') + gerarCardHTML(`Fatura ${c.nome}`, "Cartão", `R$ ${(totalV + totalF).toLocaleString('pt-BR')}`);
                 diaBox.appendChild(divFatura);
             }
         });
@@ -174,9 +178,38 @@ export async function renderCalendario(state, actions) {
         // DESPESAS FIXAS
         state.contasFixas.forEach(f => {
             if (f.ativo && parseInt(f.dia) === dia && !f.cartaoId) {
-                diaBox.innerHTML += `<div class="cal-event event-expense">${gerarCardHTML(f.nome, "Conta Fixa", `R$ ${f.valor.toLocaleString('pt-BR')}`)}</div>`;
+                const mData = state.dados?.[ano]?.meses?.[mes];
+                const isPago = mData && mData.fixasDesativadas?.[f.id] !== true; // Se não está desativado, está pago (pela lógica do check)
+                
+                const divFixo = document.createElement("div");
+                divFixo.className = "cal-event event-expense";
+                divFixo.style.opacity = isPago ? '0.5' : '1';
+                divFixo.innerHTML = (isPago ? '✅ ' : '') + gerarCardHTML(f.nome, "Conta Fixa", `R$ ${f.valor.toLocaleString('pt-BR')}`);
+                diaBox.appendChild(divFixo);
             }
         });
+
+        // GASTOS VARIÁVEIS (Luz, Gás, etc)
+        const mDataVar = state.dados?.[ano]?.meses?.[mes];
+        if (mDataVar && mDataVar.despesas) {
+            mDataVar.despesas.forEach(d => {
+                if (d.dia && parseInt(d.dia) === dia) {
+                    const isPago = d.checked;
+                    const divVar = document.createElement("div");
+                    divVar.className = "cal-event";
+                    divVar.style.opacity = isPago ? '0.5' : '1';
+                    divVar.style.borderLeft = '3px solid #e67e22';
+                    divVar.style.background = 'rgba(230, 126, 34, 0.1)';
+                    divVar.style.color = 'white';
+                    divVar.style.fontSize = '11px';
+                    divVar.style.padding = '2px 4px';
+                    divVar.style.marginBottom = '2px';
+                    divVar.style.borderRadius = '4px';
+                    divVar.innerHTML = (isPago ? '✅ ' : '') + gerarCardHTML(d.nome, "Variável", d.valor > 0 ? `R$ ${d.valor.toLocaleString('pt-BR')}` : "Pendente");
+                    diaBox.appendChild(divVar);
+                }
+            });
+        }
 
         // RECEITAS FIXAS
         state.receitasFixas.forEach(r => {

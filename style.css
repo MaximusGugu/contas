@@ -25,6 +25,7 @@ body.theme-planetario {
   --BG-INPUT: #F8EED7;
   --BG-IMG: url('https://raw.githubusercontent.com/MaximusGugu/contas/refs/heads/main/img/bg-site-planetario.webp');
   --POSTIT: #f3db23;
+  --PAGO: #2ecc71;
 }
 
 body.theme-noite {
@@ -40,6 +41,7 @@ body.theme-noite {
   --BG-INPUT: #1c2533;
   --BG-IMG: url('https://raw.githubusercontent.com/MaximusGugu/contas/refs/heads/main/img/bg-site-dark.webp');;
   --POSTIT: #a7950f;
+  --PAGO: #2ecc71;
 }
 
 body.theme-doce {
@@ -55,6 +57,7 @@ body.theme-doce {
   --BG-INPUT: #ffeef2;
   --BG-IMG: url('https://raw.githubusercontent.com/MaximusGugu/contas/refs/heads/main/img/bg-site-doce.webp');
   --POSTIT: #f3db23;
+  --PAGO: #71f3a7;
 }
 
 body.theme-amanhecer {
@@ -70,6 +73,7 @@ body.theme-amanhecer {
   --BG-INPUT: #fff9e6;
   --BG-IMG: url('https://raw.githubusercontent.com/MaximusGugu/contas/refs/heads/main/img/bg-site-sunset.webp');
   --POSTIT: #f3db23;
+  --PAGO: #71f3a7;
 }
 
 body.theme-grayscale {
@@ -85,6 +89,7 @@ body.theme-grayscale {
   --BG-INPUT: #565b5b;
   --BG-IMG: url('https://raw.githubusercontent.com/MaximusGugu/contas/refs/heads/main/img/bg-site-grayscale.webp');
   --POSTIT: #f3db23;
+  --PAGO: #2ecc71;
 }
 
 body.theme-natureza {
@@ -100,6 +105,7 @@ body.theme-natureza {
   --BG-INPUT: #57b9e6;
   --BG-IMG: url('https://raw.githubusercontent.com/MaximusGugu/contas/refs/heads/main/img/bg-site-ceu.webp');
   --POSTIT: #f3db23;
+  --PAGO: #2ecc71;
 }
 
 body {
@@ -413,7 +419,7 @@ hr {
 }
 
 /* CORES RESULTADO */
-.positivo { color: #2ecc71; font-weight: bold; }
+.positivo { color: var(--PAGO); font-weight: bold; }
 .negativo { color: #e74c3c; font-weight: bold; }
 
 /* ================= CABEÇALHO TOPO ================= */
@@ -830,9 +836,6 @@ input.conta:not(.manual) {
   border-left: 5px solid #2ecc71 !important; /* Verde discreto para automático */
   color: #27ae60;
 }
-
-.positivo { color: #2ecc71; font-weight: bold; }
-.negativo { color: #e74c3c; font-weight: bold; }
 
 .campo {
   display: flex;
@@ -1275,6 +1278,7 @@ element.style {
 .item-cartao-resumo:hover {
     color: white !important;
     transform: translateX(5px); /* Leve deslocamento para a direita */
+    cursor: pointer;
 }
 
 .item-cartao-resumo:active {
@@ -1289,6 +1293,32 @@ element.style {
   margin-top: 20px;
   color: var(--P02);
   font-weight: bold;
+}
+
+/* Adicione estas classes no final do style.css */
+.item-pago input.input-tabela-edit, 
+.item-pago input.inputPadrao {
+    color: var(--PAGO) !important;
+    font-weight: bold;
+    transition: 0.3s;
+}
+
+/* Estilo para a linha do cartão quando pago */
+.item-cartao-resumo.pago {
+    border-left-width: 12px !important; /* Engrossa a borda quando pago */
+    opacity: 0.8;
+}
+
+.item-cartao-resumo.pago span:first-child {
+    text-decoration: line-through;
+    color: var(--PAGO);
+}
+
+/* Checkbox lateral para o resumo de cartões */
+.check-cartao {
+    margin-right: 10px;
+    cursor: pointer;
+    transform: scale(1.2);
 }
 
 .linhaInputs { display: flex; gap: 10px; margin-bottom: 10px; }
@@ -1947,6 +1977,11 @@ input.conta:focus {
   background:rgba(255, 255, 255, 0.5);
   cursor: pointer;
 } */
+
+.item-lembrete-home.hoje-agenda {
+    background: rgba(255, 255, 255, 0.15) !important;
+    border-right: 4px solid var(--P04); /* Adiciona uma borda na direita também para destacar */
+}
 
 .item-lembrete-home .info {
     display: flex;

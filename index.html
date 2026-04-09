@@ -100,31 +100,30 @@
     <div class="despHeader" id="headerContasFixas">
       <span>Configurar Despesas Fixas e Assinaturas</span>
     </div>
-    <div class="receitasBody">
-      <div class="fixed-list-header">
-        <p>Itens fixos são gerados automaticamente em novos meses.</p>
-        <div class="">
-          <span id="btnGerenciarCategorias" class="acoes-categorias">✏️ Categorias</span>
-          <span id="btnGerenciarCartoes" class="acoes-categorias">💳 Cartões</span>
-        </div>
-      </div>
-
-      <!-- SEÇÃO DESPESAS FIXAS -->
-      <h4 class="titulo-secao" style="font-size: 14px; margin-bottom: 10px; color: var(--P04);">Despesas Fixas (Geral)</h4>
-      <div id="listaContasFixas"></div>
-      <div style="display: flex; justify-content: center; margin-bottom: 30px;">
-        <button class="btn" id="btnAddContaFixa">+ Nova Despesa Fixa</button>
-      </div>
-
-      <hr style="opacity: 0.2; margin-bottom: 20px;">
-
-      <!-- SEÇÃO ASSINATURAS -->
-      <h4 class="titulo-secao" style="font-size: 14px; margin-bottom: 10px; color: var(--P04);">Assinaturas (Streaming, Apps, etc)</h4>
-      <div id="listaAssinaturasFixas"></div>
-      <div style="display: flex; justify-content: center; margin-bottom: 15px;">
-        <button class="btn" id="btnAddAssinaturaFixa">+ Nova Assinatura</button>
+<!-- COPIE E SUBSTITUA O CONTEÚDO DA DIV .receitasBody NO index.html -->
+<div class="receitasBody">
+    <div class="fixed-list-header">
+      <p>Itens fixos são gerados automaticamente em novos meses.</p>
+      <div class="">
+        <span id="btnGerenciarCategorias" class="acoes-categorias">✏️ Categorias</span>
+        <span id="btnGerenciarCartoes" class="acoes-categorias">💳 Cartões</span>
       </div>
     </div>
+
+    <!-- SEÇÃO DESPESAS FIXAS -->
+    <h4 class="titulo-secao" style="font-size: 14px; margin-bottom: 10px; color: var(--P04);">Despesas Fixas (Valor Imutável)</h4>
+    <div id="listaContasFixas"></div>
+    <div style="display: flex; justify-content: center; margin-bottom: 30px;">
+      <button class="btn" id="btnAddContaFixa">+ Nova Despesa Fixa</button>
+    </div>
+
+    <!-- SEÇÃO ASSINATURAS -->
+    <h4 class="titulo-secao" style="font-size: 14px; margin-bottom: 10px; color: var(--P04);">Assinaturas (Cartão de Crédito)</h4>
+    <div id="listaAssinaturasFixas"></div>
+    <div style="display: flex; justify-content: center; margin-bottom: 30px;">
+      <button class="btn" id="btnAddAssinaturaFixa">+ Nova Assinatura</button>
+    </div>
+  </div>
 </div>
 
   <div id="moduloReceitasFixas" class="mes collapsed">
@@ -248,7 +247,7 @@
       <footer class="siteFooter">
           <div class="footer-container">
               <p>© 2026 <a href="http://planetario.framer.website/">Planetário Oficina Estúdio</a></p>
-              <spann><small>Versão 3.0</small></spann>
+              <spann><small>Versão 3.1</small></spann>
               <div class="theme-selector-footer">
                   <span>Tema:</span>
                   <select id="cfgTemaFooter" class="inputPadrao">
