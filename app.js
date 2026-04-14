@@ -286,7 +286,7 @@ async function renderLembretesHome() {
             // 6. Salário
             const diaSalario = calcularDiaPagamento(configuracoes.diaSalario || 5, mesIdx, anoDoDia, feriados);
             if (diaNum === diaSalario) {
-                eventosSemana.push({ nome: "Pagamento Salário", info: "Dinheiro", valor: salarioFixoBase, data: new Date(dataLoop), tipo: "salary" });
+                eventosSemana.push({ nome: "Salário", info: "Dinheiro", valor: salarioFixoBase, data: new Date(dataLoop), tipo: "salary" });
             }
         }
 
@@ -1103,119 +1103,72 @@ function renderPaginaGastos() {
         area.appendChild(mesBox);
         const tbody = document.getElementById(`tbody-gastos-${m}`);
 
-        // 1. DESPESAS FIXAS SINCRONIZADAS
+        // FIXAS SINCRONIZADAS
         if (gastosFixos.length > 0) {
             const trH = document.createElement("tr");
             trH.innerHTML = `<td colspan="6" style="background:rgba(255,255,255,0.05); font-size:10px; color:var(--P04); padding:5px 12px;">FIXAS SINCRONIZADAS</td>`;
             tbody.appendChild(trH);
-
             gastosFixos.forEach(g => {
                 const tr = document.createElement("tr");
                 const desativada = mData.fixasDesativadas[g.id] === true;
                 const catCor = categorias.find(c => c.name === g.categoria)?.color || "#888";
                 tr.style.opacity = desativada ? "0.3" : "1";
-                tr.innerHTML = `
-                    <td><input type="checkbox" ${!desativada ? 'checked' : ''}></td>
-                    <td style="font-style:italic;">${g.nome}</td>
-                    <td><span class="badge" style="border:1px solid ${catCor}; color:${catCor}">${g.categoria}</span></td>
-                    <td>💳 ${cartoes.find(c => c.id == g.cartaoId)?.nome}</td>
-                    <td style="text-align:right;">${formatar(g.valor)}</td>
-                    <td>⚙️</td>`;
-                tr.querySelector("input").onchange = async (e) => {
-                    mData.fixasDesativadas[g.id] = !e.target.checked;
-                    await salvarFirebase();
-                    renderPaginaGastos();
-                    atualizarTudo(anoView);
-                };
+                tr.innerHTML = `<td><input type="checkbox" ${!desativada ? 'checked' : ''}></td><td style="font-style:italic;">${g.nome}</td><td><span class="badge" style="border:1px solid ${catCor}; color:${catCor}">${g.categoria}</span></td><td>💳 ${cartoes.find(c => c.id == g.cartaoId)?.nome}</td><td style="text-align:right;">${formatar(g.valor)}</td><td>⚙️</td>`;
+                tr.querySelector("input").onchange = async (e) => { mData.fixasDesativadas[g.id] = !e.target.checked; await salvarFirebase(); renderPaginaGastos(); atualizarTudo(anoView); };
                 tbody.appendChild(tr);
             });
         }
 
-        // 2. GASTOS VARIÁVEIS (MANUAIS)
+        // GASTOS MANUAIS
         gastosManuais.forEach(g => {
             const tr = document.createElement("tr");
             const catCor = categorias.find(c => c.name === g.categoria)?.color || "transparent";
             const cardCor = cartoes.find(c => String(c.id) === String(g.cartaoId))?.color || "transparent";
-
-            tr.innerHTML = `
-                <td></td>
-                <td><input type="text" class="input-tabela-edit nome-edit" value="${g.nome}"></td>
-                <td>
-                    <select class="input-tabela-edit cat-edit" style="border-left: 5px solid ${catCor}">
-                        ${categorias.map(c => `<option value="${c.name}" ${g.categoria === c.name ? 'selected' : ''}>${c.name}</option>`).join('')}
-                    </select>
-                </td>
-                <td>
-                    <select class="input-tabela-edit card-edit" style="border-left: 5px solid ${cardCor}">
-                        ${cartoes.map(c => `<option value="${c.id}" ${String(g.cartaoId) === String(c.id) ? 'selected' : ''}>${c.nome}</option>`).join('')}
-                    </select>
-                </td>
-                <td><input type="text" class="input-tabela-edit valor-edit" value="${formatar(g.valor)}" style="text-align:right;"></td>
-                <td><button class="removeItem">✖</button></td>
-            `;
-
+            tr.innerHTML = `<td></td><td><input type="text" class="input-tabela-edit nome-edit" value="${g.nome}"></td><td><select class="input-tabela-edit cat-edit" style="border-left: 5px solid ${catCor}">${categorias.map(c => `<option value="${c.name}" ${g.categoria === c.name ? 'selected' : ''}>${c.name}</option>`).join('')}</select></td><td><select class="input-tabela-edit card-edit" style="border-left: 5px solid ${cardCor}">${cartoes.map(c => `<option value="${c.id}" ${String(g.cartaoId) === String(c.id) ? 'selected' : ''}>${c.nome}</option>`).join('')}</select></td><td><input type="text" class="input-tabela-edit valor-edit" value="${formatar(g.valor)}" style="text-align:right;"></td><td><button class="removeItem">✖</button></td>`;
             const inNome = tr.querySelector(".nome-edit");
             const selCat = tr.querySelector(".cat-edit");
             const selCard = tr.querySelector(".card-edit");
             const inVal = tr.querySelector(".valor-edit");
-
             inNome.onblur = async () => { g.nome = inNome.value; await salvarFirebase(); };
-            selCat.onchange = async (e) => { 
-                g.categoria = e.target.value; 
-                e.target.style.borderLeft = `5px solid ${categorias.find(c => c.name === e.target.value).color}`;
-                await salvarFirebase(); renderPizza(m, [...gastosFixos, ...gastosManuais]); 
-            };
-            selCard.onchange = async (e) => { 
-                g.cartaoId = e.target.value; 
-                e.target.style.borderLeft = `5px solid ${cartoes.find(c => c.id == e.target.value).color}`;
-                await salvarFirebase(); renderPaginaGastos(); atualizarTudo(anoView); 
-            };
-            aplicarComportamentoInput(inVal, () => g.valor, async (v) => { 
-                g.valor = v; 
-                await salvarFirebase();
-                atualizarTudo(anoView); 
-                renderPaginaGastos(); 
-            }, anoView);
-
-            tr.querySelector(".removeItem").onclick = async () => {
-                if (g.parcelaId && confirm("Deseja apagar TODAS as parcelas deste gasto?")) {
-                    gastosDetalhes[anoView] = gastosDetalhes[anoView].filter(item => item.parcelaId !== g.parcelaId);
-                } else if(!g.parcelaId) {
-                    gastosDetalhes[anoView].splice(gastosDetalhes[anoView].indexOf(g), 1);
-                }
-                await salvarFirebase(); renderPaginaGastos(); carregarAno();
-            };
+            selCat.onchange = async (e) => { g.categoria = e.target.value; await salvarFirebase(); renderPizza(m, [...gastosFixos, ...gastosManuais]); renderPaginaGastos(); };
+            selCard.onchange = async (e) => { g.cartaoId = e.target.value; await salvarFirebase(); atualizarTudo(anoView); renderPaginaGastos(); };
+            aplicarComportamentoInput(inVal, () => g.valor, async (v) => { g.valor = v; await salvarFirebase(); atualizarTudo(anoView); renderPaginaGastos(); }, anoView);
+            tr.querySelector(".removeItem").onclick = async () => { if (g.parcelaId && confirm("Deseja apagar TODAS as parcelas deste gasto?")) { gastosDetalhes[anoView] = gastosDetalhes[anoView].filter(item => item.parcelaId !== g.parcelaId); } else if(!g.parcelaId) { gastosDetalhes[anoView].splice(gastosDetalhes[anoView].indexOf(g), 1); } await salvarFirebase(); renderPaginaGastos(); carregarAno(); };
             tbody.appendChild(tr);
         });
 
-        // Configuração dos eventos de botão (Add, Acordeon, Parcelamento)
-        mesBox.querySelector(".mesHeader").onclick = () => {
-            mesBox.classList.toggle("collapsed");
-            if(!mesBox.classList.contains("collapsed")) {
-                mesesGastosAbertos.add(m);
-                renderPizza(m, [...gastosFixos, ...gastosManuais]);
-            } else mesesGastosAbertos.delete(m);
-        };
-
+        // Eventos
+        mesBox.querySelector(".mesHeader").onclick = () => { mesBox.classList.toggle("collapsed"); if(!mesBox.classList.contains("collapsed")) { mesesGastosAbertos.add(m); renderPizza(m, [...gastosFixos, ...gastosManuais]); } else mesesGastosAbertos.delete(m); };
         mesBox.querySelector(".sel-filtro-mes").onchange = (e) => { filtrosPorMes[m] = e.target.value; renderPaginaGastos(); };
         mesBox.querySelector(`#btn-add-parcela-${m}`).onclick = () => window.abrirModalParcelamento(m, anoView);
         
-        mesBox.querySelector(`#btn-add-${m}`).onclick = async () => {
+        // --- FUNÇÃO DE ADICIONAR ---
+        const btnAddAction = async () => {
             const n = mesBox.querySelector(`#add-nome-${m}`).value;
             const v = parseValor(mesBox.querySelector(`#add-val-${m}`).value);
             if(!n || v <= 0) return alert("Preencha corretamente");
             if(!gastosDetalhes[anoView]) gastosDetalhes[anoView] = [];
-            gastosDetalhes[anoView].push({
-                mes: m, nome: n, valor: v,
-                categoria: mesBox.querySelector(`#add-cat-${m}`).value,
-                cartaoId: mesBox.querySelector(`#add-card-${m}`).value
-            });
+            gastosDetalhes[anoView].push({ mes: m, nome: n, valor: v, categoria: mesBox.querySelector(`#add-cat-${m}`).value, cartaoId: mesBox.querySelector(`#add-card-${m}`).value });
             await salvarFirebase(); renderPaginaGastos(); carregarAno();
+        };
+
+        mesBox.querySelector(`#btn-add-${m}`).onclick = btnAddAction;
+
+        // --- ADICIONADO: ENTER NO CAMPO VALOR ---
+        mesBox.querySelector(`#add-val-${m}`).onkeydown = (e) => {
+            if (e.key === "Enter") btnAddAction();
         };
 
         if(isOpen) renderPizza(m, [...gastosFixos, ...gastosManuais]);
     }
 }
+
+document.getElementById("btnNovoLembreteHome").onclick = (e) => {
+    e.stopPropagation(); // Evita fechar o acordeon se houver um clique pai
+    if(window.resetEdicao) window.resetEdicao();
+    document.getElementById("lemData").value = new Date().toLocaleDateString('en-CA'); // Preenche com a data de hoje
+    document.getElementById("modalLembrete").style.display = "flex";
+};
 
 document.getElementById("btnSalvarParcelaCartao").onclick = () => {
     const nome = document.getElementById("pcNome").value;
@@ -1819,7 +1772,30 @@ document.getElementById("btnSalvarSenha").onclick = async () => {
 }; // <-- Aqui estava o erro: precisava fechar a função
 
 document.getElementById("loginBtn").onclick = async () => { const e = document.getElementById("email").value, s = document.getElementById("senha").value; try { await signInWithEmailAndPassword(auth, e, s); senhaDoUsuario = s; sessionStorage.setItem("temp_key", s); } catch (err) { alert("Erro login"); } };
-document.getElementById("cadastroBtn").onclick = async () => { const e = document.getElementById("email").value, s = document.getElementById("senha").value; try { await createUserWithEmailAndPassword(auth, e, s); senhaDoUsuario = s; sessionStorage.setItem("temp_key", s); await salvarFirebase(); } catch (err) { alert("Erro cadastro"); } };
+document.getElementById("cadastroBtn").onclick = async () => { 
+    const n = document.getElementById("cadastroNome").value.trim();
+    const e = document.getElementById("email").value;
+    const s = document.getElementById("senha").value; 
+
+    if (!n) {
+        alert("Por favor, preencha seu nome.");
+        return;
+    }
+
+    try { 
+        await createUserWithEmailAndPassword(auth, e, s); 
+        senhaDoUsuario = s; 
+        sessionStorage.setItem("temp_key", s); 
+        
+        // Define o nome de exibição nas configurações e atualiza o site
+        configuracoes.nomeUsuario = n;
+        atualizarTituloSite();
+        
+        await salvarFirebase(); 
+    } catch (err) { 
+        alert("Erro ao cadastrar. Verifique os dados."); 
+    } 
+};
 document.getElementById("logoutBtn").onclick = () => { signOut(auth); sessionStorage.clear(); location.reload(); };
 document.getElementById("btnSettings").onclick = () => { 
     const modalCfg = document.getElementById("modalConfiguracoes"); 

@@ -46,7 +46,6 @@ export async function renderCalendario(state, actions) {
     const feriadosDoAno = await obterFeriados(exibindoAno);
     const nomesMeses = ["Janeiro","Fevereiro","Março","Abril","Maio","Junho","Julho","Agosto","Setembro","Outubro","Novembro","Dezembro"];
     
-    // CORREÇÃO FUSO HORÁRIO: Pega a data de hoje no fuso local do navegador
     const hojeLocal = new Date().toLocaleDateString('en-CA');
 
     area.innerHTML = `
@@ -108,52 +107,33 @@ export async function renderCalendario(state, actions) {
         const dia = dataObj.getDate();
         const mes = dataObj.getMonth();
         const ano = dataObj.getFullYear();
-        // CORREÇÃO FUSO HORÁRIO: Usa local em vez de ISO
         const isoDate = dataObj.toLocaleDateString('en-CA'); 
         const stringFeriado = `${(mes + 1).toString().padStart(2, '0')}-${dia.toString().padStart(2, '0')}`;
         const ehSemana = visaoAtual === 'semanal';
 
         const diaBox = document.createElement("div");
         diaBox.className = "cal-day" + (isoDate === hojeLocal ? " today" : "") + (feriadosDoAno.includes(stringFeriado) ? " holiday" : "");
-        
         diaBox.setAttribute("data-date", isoDate);
         diaBox.setAttribute("data-day-index", dataObj.getDay());
-
-        diaBox.onclick = (e) => {
-            if(e.target !== diaBox && !e.target.classList.contains('cal-number') && !e.target.classList.contains('btn-add-ghost')) return;
-            const campoData = document.getElementById("lemData");
-            if(campoData) campoData.value = isoDate;
-            if(window.resetEdicao) window.resetEdicao();
-            document.getElementById("modalLembrete").style.display = "flex";
-        };
-
-        diaBox.ondragover = (e) => { e.preventDefault(); diaBox.classList.add('drag-over'); };
-        diaBox.ondragleave = () => { diaBox.classList.remove('drag-over'); };
-        diaBox.ondrop = async (e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            diaBox.classList.remove('drag-over');
-            const lembreteId = e.dataTransfer.getData('text/plain');
-            const novaData = diaBox.getAttribute('data-date');
-            const novoDiaSemana = parseInt(diaBox.getAttribute('data-day-index'));
-            if (lembreteId && window.atualizarDataLembrete) { window.atualizarDataLembrete(lembreteId, novaData, novoDiaSemana); }
-            return false;
-        };
 
         diaBox.innerHTML = `<div class="cal-number">${dia}</div>`;
         if (ehSemana && feriadosDoAno.includes(stringFeriado)) {
             diaBox.innerHTML += `<div class="cal-feriado-tag">Feriado</div>`;
         }
 
-        const gerarCardHTML = (titulo, label, valor, hora, comPin = false) => {
+        const gerarCardHTML = (titulo, label, valor, comPin = false) => {
             const prefixo = comPin ? "📌 " : "";
             if (!ehSemana) return prefixo + titulo + (valor ? `: ${valor}` : "");
-            return `<div class="event-card-label">${label} ${hora ? '• ' + hora : ''}</div><div class="event-card-title">${prefixo}${titulo}</div>${valor ? `<div class="event-card-value">${valor}</div>` : ''}`;
+            return `<div class="event-card-label">${label}</div><div class="event-card-title">${prefixo}${titulo}</div>${valor ? `<div class="event-card-value">${valor}</div>` : ''}`;
         };
 
-        // SALÁRIO (Cálculo idêntico)
+        // --- FORMATADOR DE MOEDA COM 2 CASAS DECIMAIS ---
+        const fmt = (v) => v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+        // SALÁRIO
         if (dia === calcularDiaPagamento(state.configuracoes.diaSalario || 5, mes, ano, feriadosDoAno)) {
-            diaBox.innerHTML += `<div class="cal-event event-salary">${gerarCardHTML("💸 Pagamento Salário", "Renda", state.salarioFixoBase ? `R$ ${state.salarioFixoBase.toLocaleString('pt-BR')}` : null)}</div>`;
+            const valSal = state.salarioFixoBase ? `R$ ${fmt(state.salarioFixoBase)}` : null;
+            diaBox.innerHTML += `<div class="cal-event event-salary">${gerarCardHTML("💸 Salário", "Renda", valSal)}</div>`;
         }
 
         // CARTÕES
@@ -162,42 +142,40 @@ export async function renderCalendario(state, actions) {
             if (parseInt(c.vencimento) === dia) {
                 const totalV = (state.gastosDetalhes[ano] || []).filter(g => g.mes === mes && String(g.cartaoId) === String(c.id)).reduce((acc, g) => acc + g.valor, 0);
                 const totalF = state.contasFixas.filter(f => f.ativo && String(f.cartaoId) === String(c.id)).reduce((acc, f) => acc + f.valor, 0);
-                
-                // VERIFICA SE ESTÁ PAGO NO MÊS
                 const isPago = state.dados?.[ano]?.meses?.[mes]?.cartoesPagos?.[c.id] === true;
-
                 const divFatura = document.createElement("div");
                 divFatura.className = "cal-event event-card";
                 divFatura.style.backgroundColor = c.color || 'var(--P04)';
                 divFatura.style.opacity = isPago ? '0.5' : '1';
-                divFatura.innerHTML = (isPago ? '✅ ' : '') + gerarCardHTML(`Fatura ${c.nome}`, "Cartão", `R$ ${(totalV + totalF).toLocaleString('pt-BR')}`);
+                divFatura.innerHTML = (isPago ? '✅ ' : '') + gerarCardHTML(`Fatura ${c.nome}`, "Cartão", `R$ ${fmt(totalV + totalF)}`);
                 diaBox.appendChild(divFatura);
             }
         });
 
-        // DESPESAS FIXAS
-        state.contasFixas.forEach(f => {
-            if (f.ativo && parseInt(f.dia) === dia && !f.cartaoId) {
-                const mData = state.dados?.[ano]?.meses?.[mes];
-                const isPago = mData && mData.fixasDesativadas?.[f.id] !== true; // Se não está desativado, está pago (pela lógica do check)
-                
-                const divFixo = document.createElement("div");
-                divFixo.className = "cal-event event-expense";
-                divFixo.style.opacity = isPago ? '0.5' : '1';
-                divFixo.innerHTML = (isPago ? '✅ ' : '') + gerarCardHTML(f.nome, "Conta Fixa", `R$ ${f.valor.toLocaleString('pt-BR')}`);
-                diaBox.appendChild(divFixo);
-            }
-        });
+        // DESPESAS FIXAS E ASSINATURAS
+        const mDataFix = state.dados?.[ano]?.meses?.[mes];
+        const listaFixas = mDataFix?.fixasSnapshot ? mDataFix.fixasSnapshot : state.contasFixas;
+        if (listaFixas) {
+            listaFixas.forEach(f => {
+                if (f.ativo && parseInt(f.dia) === dia && mDataFix?.fixasDesativadas?.[f.id] !== true) {
+                    const valorEfetivo = (mDataFix?.fixasEditadas?.[f.id] !== undefined) ? mDataFix.fixasEditadas[f.id] : f.valor;
+                    const isPago = mDataFix?.fixasDesativadas?.[f.id] !== true;
+                    const divFixo = document.createElement("div");
+                    divFixo.className = "cal-event event-expense";
+                    divFixo.style.opacity = isPago ? '0.6' : '1';
+                    divFixo.innerHTML = gerarCardHTML((f.cartaoId ? "💳 " : "💸 ") + f.nome, f.cartaoId ? "Cartão" : "Dinheiro", `R$ ${fmt(valorEfetivo)}`);
+                    diaBox.appendChild(divFixo);
+                }
+            });
+        }
 
-        // GASTOS VARIÁVEIS (Luz, Gás, etc)
-        const mDataVar = state.dados?.[ano]?.meses?.[mes];
-        if (mDataVar && mDataVar.despesas) {
-            mDataVar.despesas.forEach(d => {
+        // GASTOS VARIÁVEIS (Aqueles que você coloca o dia manualmente no mês)
+        if (mDataFix && mDataFix.despesas) {
+            mDataFix.despesas.forEach(d => {
                 if (d.dia && parseInt(d.dia) === dia) {
-                    const isPago = d.checked;
                     const divVar = document.createElement("div");
                     divVar.className = "cal-event";
-                    divVar.style.opacity = isPago ? '0.5' : '1';
+                    divVar.style.opacity = d.checked ? '0.5' : '1';
                     divVar.style.borderLeft = '3px solid #e67e22';
                     divVar.style.background = 'rgba(230, 126, 34, 0.1)';
                     divVar.style.color = 'white';
@@ -205,7 +183,7 @@ export async function renderCalendario(state, actions) {
                     divVar.style.padding = '2px 4px';
                     divVar.style.marginBottom = '2px';
                     divVar.style.borderRadius = '4px';
-                    divVar.innerHTML = (isPago ? '✅ ' : '') + gerarCardHTML(d.nome, "Variável", d.valor > 0 ? `R$ ${d.valor.toLocaleString('pt-BR')}` : "Pendente");
+                    divVar.innerHTML = (d.checked ? '✅ ' : '') + gerarCardHTML(d.nome, "Variável", `R$ ${fmt(d.valor)}`);
                     diaBox.appendChild(divVar);
                 }
             });
@@ -214,7 +192,7 @@ export async function renderCalendario(state, actions) {
         // RECEITAS FIXAS
         state.receitasFixas.forEach(r => {
             if (r.ativo && parseInt(r.dia) === dia) {
-                diaBox.innerHTML += `<div class="cal-event event-income">${gerarCardHTML(r.nome, "Recebimento", `R$ ${r.valor.toLocaleString('pt-BR')}`)}</div>`;
+                diaBox.innerHTML += `<div class="cal-event event-income">${gerarCardHTML(r.nome, "Recebimento", `R$ ${fmt(r.valor)}`)}</div>`;
             }
         });
 
@@ -226,18 +204,15 @@ export async function renderCalendario(state, actions) {
             const horaFormatada = l.hora ? l.hora.replace(':', 'h') + ": " : "";
             const tituloHtml = `<div style="display:flex; justify-content:space-between; align-items:center; width:100%;"><span style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${ehSemana ? '📌 ' : ''}${horaFormatada}${l.nome}</span><span class="btn-edit-inline" style="cursor:pointer; font-size:12px; margin-left:4px;">✏️</span></div>`;
             if (!ehSemana) { ev.innerHTML = tituloHtml; } 
-            else { ev.innerHTML = `<div class="event-card-label">Lembrete</div><div class="event-card-title">${tituloHtml}</div>${l.valor ? `<div class="event-card-value">R$ ${l.valor.toLocaleString('pt-BR')}</div>` : ''}`; }
-            ev.ondragstart = (e) => { e.dataTransfer.setData('text/plain', String(l.id)); e.dataTransfer.effectAllowed = "move"; ev.classList.add('dragging'); };
+            else { ev.innerHTML = `<div class="event-card-label">Lembrete</div><div class="event-card-title">${tituloHtml}</div>${l.valor ? `<div class="event-card-value">R$ ${fmt(l.valor)}</div>` : ''}`; }
+            ev.ondragstart = (e) => { e.dataTransfer.setData('text/plain', String(l.id)); ev.classList.add('dragging'); };
             ev.ondragend = () => { ev.classList.remove('dragging'); };
             ev.onclick = (e) => { e.stopPropagation(); actions.abrirPostit(l); };
-            const btnLapis = ev.querySelector(".btn-edit-inline");
-            btnLapis.onclick = (e) => { e.stopPropagation(); actions.abrirPostit(l); setTimeout(() => { const btnEditarP = document.querySelector(".btn-editar-p"); if(btnEditarP) btnEditarP.click(); }, 50); };
             diaBox.appendChild(ev);
         });
 
         const btnGhost = document.createElement("div");
-        btnGhost.className = "btn-add-ghost";
-        btnGhost.innerHTML = "+";
+        btnGhost.className = "btn-add-ghost"; btnGhost.innerHTML = "+";
         btnGhost.onclick = (e) => { e.stopPropagation(); const campoData = document.getElementById("lemData"); if(campoData) campoData.value = isoDate; if(window.resetEdicao) window.resetEdicao(); document.getElementById("modalLembrete").style.display = "flex"; };
         diaBox.appendChild(btnGhost);
         grid.appendChild(diaBox);

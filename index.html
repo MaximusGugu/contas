@@ -10,6 +10,7 @@
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700&display=swap" rel="stylesheet">
     <link href="https://fonts.googleapis.com/css2?family=Sour+Gummy:wght@100..900&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="mobile.css" media="screen and (max-width: 768px)">
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='8' fill='%233C5558' stroke='white' stroke-width='0.5'/><text x='50%' y='55%' dominant-baseline='middle' text-anchor='middle' fill='white' font-family='sans-serif' font-size='20' font-weight='bold'>$</text></svg>">
 </head>
 <body class="theme-planetario">
@@ -27,9 +28,11 @@
         <p class="auth-toggle">Não tem conta? <a href="#" id="showSignup">Cadastre-se</a></p>
       </div>
       <div id="signupActions" style="display: none;">
-        <button class="btn" id="cadastroBtn">CRIAR CONTA</button>
-        <p class="auth-toggle">Já tem conta? <a href="#" id="showLogin">Fazer Login</a></p>
+          <input type="text" id="cadastroNome" placeholder="Seu Primeiro Nome" class="inputPadrao" style="margin-bottom: 15px;">
+          <button class="btn" id="cadastroBtn">CRIAR CONTA</button>
+          <p class="auth-toggle">Já tem conta? <a href="#" id="showLogin">Fazer Login</a></p>
       </div>
+      <p class="auth-toggle"><small>Versão 3.2.2</small></p>
     </div>
   </div>
 
@@ -82,13 +85,14 @@
       <!-- Coluna da Agenda -->
       <div class="dashboard-col-agenda"> <!-- Wrapper adicionado -->
         <div id="moduloLembretesHome" class="mes">
-          <div class="despHeader" style="background: var(--P05) !important;">
-            <span>Esta semana</span>
-          </div>
-          <div class="mesBody">
-            <div id="listaLembretesHome" class="lista-lembretes-home"></div>
-            <button class="btn" id="btnIrCalendario">CALENDÁRIO</button>
-          </div>
+            <div class="despHeader" style="background: var(--P05) !important; display: flex; justify-content: space-between; align-items: center;">
+                <span>Esta semana</span>
+                <button id="btnNovoLembreteHome" title="Novo Lembrete" style="background: none; border: none; color: white; cursor: pointer; font-size: 20px; font-weight: bold; line-height: 1;">+</button>
+            </div>
+            <div class="mesBody">
+                <div id="listaLembretesHome" class="lista-lembretes-home"></div>
+                <button class="btn" id="btnIrCalendario">CALENDÁRIO</button>
+            </div>
         </div>
       </div>
     </div>
@@ -247,7 +251,7 @@
       <footer class="siteFooter">
           <div class="footer-container">
               <p>© 2026 <a href="http://planetario.framer.website/">Planetário Oficina Estúdio</a></p>
-              <spann><small>Versão 3.1</small></spann>
+              <spann><small>Versão 3.2.2</small></spann>
               <div class="theme-selector-footer">
                   <span>Tema:</span>
                   <select id="cfgTemaFooter" class="inputPadrao">
