@@ -220,73 +220,37 @@ async function renderLembretesHome() {
             const mData = dados[anoDoDia]?.meses[mesIdx];
 
             // 1. Lembretes
-            lembretes.filter(l => l.data === isoData).forEach(l => {
-                eventosSemana.push({ nome: l.nome, info: l.hora || "Lembrete", valor: null, data: new Date(dataLoop), tipo: "reminder" });
+            lembretes.filter(l => l.data === isoData || (l.recorrente && l.diasSemana?.includes(dataLoop.getDay()))).forEach(l => {
+                eventosSemana.push({ nome: l.nome, info: l.hora || "Lembrete", valor: l.valor, data: new Date(dataLoop), tipo: "reminder" });
             });
 
-            // 2. Cartões (CONSULTANDO PAGAMENTO)
+            // 2. Cartões
             cartoes.forEach(c => {
                 if (parseInt(c.vencimento) === diaNum) {
-                    const totalVariavel = (gastosDetalhes[anoDoDia] || [])
-                        .filter(g => g.mes === mesIdx && String(g.cartaoId) === String(c.id))
-                        .reduce((acc, g) => acc + g.valor, 0);
-                    const totalFixoNoCard = contasFixas
-                        .filter(f => f.ativo && String(f.cartaoId) === String(c.id))
-                        .reduce((acc, f) => acc + f.valor, 0);
-                    
-                    if ((totalVariavel + totalFixoNoCard) > 0) {
+                    const totalV = (gastosDetalhes[anoDoDia] || []).filter(g => g.mes === mesIdx && String(g.cartaoId) === String(c.id)).reduce((acc, g) => acc + g.valor, 0);
+                    const totalF = contasFixas.filter(f => f.ativo && String(f.cartaoId) === String(c.id)).reduce((acc, f) => acc + f.valor, 0);
+                    if ((totalV + totalF) > 0) {
                         const pago = mData?.cartoesPagos?.[c.id] === true;
-                        eventosSemana.push({ 
-                            nome: `Fatura: ${c.nome}`, 
-                            info: pago ? "✅ PAGO" : "💳 PENDENTE", 
-                            valor: totalVariavel + totalFixoNoCard, 
-                            data: new Date(dataLoop), 
-                            tipo: "card" 
-                        });
+                        eventosSemana.push({ nome: `Fatura: ${c.nome}`, info: pago ? "✅ PAGO" : "💳 PENDENTE", valor: totalV + totalF, data: new Date(dataLoop), tipo: "card" });
                     }
                 }
             });
 
-            // 3. Despesas Fixas (CONSULTANDO PAGAMENTO)
-            contasFixas.forEach(f => {
-                if (f.ativo && parseInt(f.dia) === diaNum && !f.cartaoId) {
-                    const pendente = mData?.fixasDesativadas?.[f.id] === true;
-                    eventosSemana.push({ 
-                        nome: f.nome, 
-                        info: pendente ? "❌ PENDENTE" : "✅ PAGO", 
-                        valor: f.valor, 
-                        data: new Date(dataLoop), 
-                        tipo: "expense" 
-                    });
-                }
-            });
-
-            // 4. Gastos Variáveis
-            if (mData && mData.despesas) {
-                mData.despesas.forEach(itemDesp => {
-                    if (itemDesp.dia && parseInt(itemDesp.dia) === diaNum) {
-                        eventosSemana.push({ 
-                            nome: itemDesp.nome, 
-                            info: itemDesp.checked ? "✅ PAGO" : "⚠️ AGUARDANDO", 
-                            valor: itemDesp.valor, 
-                            data: new Date(dataLoop), 
-                            tipo: "expense" 
-                        });
+            // 3. Fixas e Variáveis
+            if (mData) {
+                // Fixas
+                contasFixas.forEach(f => {
+                    if (f.ativo && parseInt(f.dia) === diaNum && !f.cartaoId) {
+                        const pendente = mData.fixasDesativadas?.[f.id] === true;
+                        eventosSemana.push({ nome: f.nome, info: pendente ? "❌ PENDENTE" : "✅ PAGO", valor: f.valor, data: new Date(dataLoop), tipo: "expense" });
                     }
                 });
-            }
-
-            // 5. Receitas
-            receitasFixas.forEach(r => {
-                if (r.ativo && parseInt(r.dia) === diaNum) {
-                    eventosSemana.push({ nome: r.nome, info: "Recebimento", valor: r.valor, data: new Date(dataLoop), tipo: "income" });
-                }
-            });
-
-            // 6. Salário
-            const diaSalario = calcularDiaPagamento(configuracoes.diaSalario || 5, mesIdx, anoDoDia, feriados);
-            if (diaNum === diaSalario) {
-                eventosSemana.push({ nome: "Salário", info: "Dinheiro", valor: salarioFixoBase, data: new Date(dataLoop), tipo: "salary" });
+                // Variáveis
+                (mData.despesas || []).forEach(d => {
+                    if (d.dia && parseInt(d.dia) === diaNum) {
+                        eventosSemana.push({ nome: d.nome, info: d.checked ? "✅ PAGO" : "⚠️ AGUARDANDO", valor: d.valor, data: new Date(dataLoop), tipo: "expense" });
+                    }
+                });
             }
         }
 
@@ -298,9 +262,8 @@ async function renderLembretesHome() {
         } else {
             eventosSemana.forEach(ev => {
                 const dataFormatada = ev.data.toLocaleDateString('pt-BR', { weekday: 'short', day: '2-digit' });
-                const textoValor = (ev.valor !== null && ev.valor !== 0) ? ` | <b>${formatar(ev.valor)}</b>` : "";
+                const textoValor = (ev.valor && ev.valor > 0) ? ` | <b>${formatar(ev.valor)}</b>` : "";
                 const isPago = ev.info.includes("✅");
-
                 htmlFinal += `
                     <div class="item-lembrete-home agenda-tipo-${ev.tipo}" style="opacity: ${isPago ? '0.6' : '1'}">
                         <div class="info">
