@@ -1,0 +1,171 @@
+/* --- START OF FILE mobile.css --- */
+
+:root {
+    /* Ajustes de toque para mobile */
+    --MOBILE-PADDING: 15px;
+}
+
+body {
+    /* padding: 10px !important; */
+}
+
+/* 1. HEADER E NAVEGAÇÃO */
+.header-verde-full {
+    padding-bottom: 10px;
+}
+
+.topo {
+    flex-direction: column !important;
+    gap: 15px;
+    align-items: center;
+    text-align: center;
+}
+
+.logo-nav {
+    flex-direction: column;
+    gap: 15px;
+}
+
+.main-nav {
+    display: flex;
+    overflow-x: auto; /* Permite deslizar o menu se for muito grande */
+    width: 100vw;
+    justify-content: center;
+    padding: 5px 0;
+    gap: 10px;
+}
+
+.main-nav a {
+    font-size: 12px;
+    padding: 5px 10px;
+    white-space: nowrap; /* Não quebra linha no menu */
+}
+
+.auth-status {
+    width: 100%;
+    justify-content: center;
+}
+
+/* 2. DASHBOARD (GRÁFICO + AGENDA) */
+.dashboard-row {
+    flex-direction: column !important;
+    min-height: auto !important;
+    padding: 10px !important;
+}
+
+.dashboard-col-grafico, 
+.dashboard-col-agenda {
+    flex: none !important;
+    width: 100% !important;
+}
+
+#grafico {
+    min-height: 250px !important;
+}
+
+/* 3. CARTÕES DOS MESES (HOME) */
+.container {
+    flex-direction: column !important; /* Coluna Despesas em cima, Rendas embaixo */
+}
+
+.coluna {
+    padding: 10px !important;
+}
+
+.mesHeader {
+    padding: 10px !important;
+    font-size: 14px;
+}
+
+.mesHeader > div {
+    gap: 8px;
+}
+
+.totalFinal {
+    flex-direction: column;
+    gap: 15px;
+    font-size: 18px;
+}
+
+/* 4. TABELAS (O GRANDE PROBLEMA DO MOBILE) */
+.tabela-gastos {
+    display: block;
+    overflow-x: auto; /* Permite rolar a tabela pro lado se não couber */
+    -webkit-overflow-scrolling: touch;
+}
+
+.tabela-gastos th, 
+.tabela-gastos td {
+    padding: 6px 4px !important;
+    font-size: 12px !important;
+}
+
+/* Deixa os campos de input maiores para facilitar o toque */
+.input-tabela-edit, 
+.inputPadrao {
+    height: 35px;
+    font-size: 14px !important; /* Evita que o iPhone dê zoom automático no input */
+}
+
+/* 5. MODAIS */
+.modal-content {
+    width: 95% !important;
+    padding: 20px !important;
+    max-height: 90vh;
+    overflow-y: auto;
+}
+
+.modal-content h3 {
+    font-size: 18px;
+}
+
+/* 6. BOTÃO SALVAR FLUTUANTE */
+.save-container-floating {
+    bottom: 20px;
+    right: 20px;
+}
+
+#salvarNuvemBtn {
+    padding: 12px 20px;
+    font-size: 11px;
+}
+
+/* 7. CALENDÁRIO */
+.cal-grid {
+    gap: 2px !important;
+}
+
+.cal-day {
+    min-height: 70px !important;
+    padding: 4px !important;
+}
+
+.cal-number {
+    font-size: 11px !important;
+}
+
+.cal-event {
+    font-size: 9px !important;
+    padding: 1px 2px !important;
+}
+
+/* Na visão semanal do calendário, aumentar altura */
+.weekly-view .cal-day {
+    min-height: 300px !important;
+}
+
+/* 8. FORMULÁRIO DE LOGIN */
+.auth-card {
+    padding: 20px;
+    width: 90%;
+}
+
+.auth-card h1 {
+    font-size: 22px;
+}
+
+/* Ajuste nos botões de ação para não ficarem grudados */
+.area-acoes-despesa .btn {
+    padding: 12px 5px !important;
+    font-size: 10px !important;
+}
