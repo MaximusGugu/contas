@@ -11,6 +11,7 @@ const types = {
   ".js": "text/javascript; charset=utf-8",
   ".css": "text/css; charset=utf-8",
   ".json": "application/json; charset=utf-8",
+  ".webmanifest": "application/manifest+json; charset=utf-8",
   ".svg": "image/svg+xml",
   ".png": "image/png",
   ".webp": "image/webp"
@@ -26,6 +27,7 @@ createServer((req, res) => {
   }
 
   res.setHeader("Content-Type", types[extname(filePath)] || "application/octet-stream");
+  res.setHeader("Cache-Control", "no-store, max-age=0");
   createReadStream(filePath).pipe(res);
 }).listen(port, host, () => {
   console.log(`http://${host}:${port}/`);

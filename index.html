@@ -4,19 +4,33 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Contas Mensais</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <meta name="theme-color" content="#3C5558">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="Contas">
+  <link rel="apple-touch-icon" href="assets/icons/icon-192.png">
+  <link rel="icon" type="image/svg+xml" href="assets/icons/favicon.svg">
   <script src="https://cdn.jsdelivr.net/npm/apexcharts"></script>
   <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script> <!-- ADICIONE ESTA LINHA -->
-  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="style.css?v=4.2.20">
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
     <link href="https://fonts.googleapis.com/css2?family=Sour+Gummy:wght@100..900&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="style.css">
-  <link rel="stylesheet" href="mobile.css" media="screen and (max-width: 768px)">
-  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='8' fill='%233C5558' stroke='white' stroke-width='0.5'/><text x='50%' y='55%' dominant-baseline='middle' text-anchor='middle' fill='white' font-family='sans-serif' font-size='20' font-weight='bold'>$</text></svg>">
+  <link rel="stylesheet" href="style.css?v=4.2.20">
+  <link rel="stylesheet" href="mobile.css?v=4.2.20" media="screen and (max-width: 768px)">
 </head>
-<body class="theme-planetario">
+<body class="theme-planetario app-loading-active">
+
+  <div id="appLoadingScreen" class="app-loading-screen" role="status" aria-live="polite" aria-label="Carregando aplicativo">
+    <div class="app-loading-mark">
+      <img src="https://framerusercontent.com/images/0KuYhGQqOuOZyzgxkDr3oMUcgtM.svg" alt="Planetário Oficina Estúdio">
+    </div>
+  </div>
 
   <!-- CONTAINER DE AUTENTICAÇÃO -->
-  <div id="authContainer" class="auth-wrapper">
+  <div id="authContainer" class="auth-wrapper" style="display: none;">
     <div class="auth-card">
       <h1>CONTAS MENSAIS</h1>
       <div class="auth-inputs">
@@ -32,7 +46,7 @@
           <button class="btn" id="cadastroBtn">CRIAR CONTA</button>
           <p class="auth-toggle">Já tem conta? <a href="#" id="showLogin">Fazer Login</a></p>
       </div>
-      <p class="auth-toggle"><small>Versão 4.0</small></p>
+      <p class="auth-toggle"><small>Versão 4.2.20</small></p>
     </div>
   </div>
 
@@ -55,11 +69,10 @@
           </div>
           <div class="auth-status">
             <span id="displayEmail"></span>
-            <button id="btnSettings" title="Configurações" style="background:none; border:none; color:var(--P02); cursor:pointer; font-size:20px; padding:0 5px;">⚙️</button>
+            <button id="btnSettings" title="Configurações" style="background:none; border:none; color:var(--P02); cursor:pointer; font-size:20px; padding:0 5px;"><span class="material-icons">settings</span></button>
             <button id="logoutBtn" class="btn sair">Sair</button>
           </div>
         </div>
-      </div>
     </header>
 
     <div class="container-central">
@@ -86,7 +99,7 @@
         <div id="moduloLembretesHome" class="mes">
             <div class="despHeader" style="background: var(--P05) !important; display: flex; justify-content: space-between; align-items: center;">
                 <span>Lembretes</span>
-                <button id="btnConfigLembretesHome" title="Configurar exibicao" class="btn-icon-home">&#9881;</button>
+                <button id="btnConfigLembretesHome" title="Configurar exibicao" class="btn-icon-home"><span class="material-icons">settings</span></button>
             </div>
             <div class="mesBody">
                 <div id="listaLembretesHome" class="lista-lembretes-home"></div>
@@ -110,24 +123,45 @@
               </select>
               <select id="quickDespCartao" class="inputPadrao"></select>
             </div>
+            <div id="quickDespParcelamento" class="quick-parcelamento">
+              <label class="quick-toggle-parcelar">
+                <span>Parcelar?</span>
+                <select id="quickDespParcelar" class="inputPadrao">
+                  <option value="nao">Não</option>
+                  <option value="sim">Sim</option>
+                </select>
+              </label>
+              <input type="number" id="quickDespQtdParcelas" class="inputPadrao" min="2" step="1" placeholder="Número de parcelas">
+            </div>
+            <div id="moduloBalancoRapido" class="resumo-rapido-embutido">
+              <div id="graficoBalancoRapido"></div>
+              <div class="balanco-rapido-metricas">
+                <div class="metric-card-total-mes"><small>Total do m&ecirc;s</small><strong id="saldoAtualRapido">R$ 0,00</strong></div>
+                <div><small>Total dos cart&otilde;es</small><strong id="totalCartoesRapido">R$ 0,00</strong></div>
+              </div>
+              <div>
+                <small class="subtitulo-rapido">Ultimas entradas</small>
+                <div id="ultimasEntradasRapidas" class="ultimas-entradas"></div>
+              </div>
+            </div>
             <button class="btn" id="btnSalvarDespesaRapida">ADICIONAR DESPESA</button>
           </div>
         </div>
       </div>
-      <div class="home-card">
-        <div id="moduloBalancoRapido" class="mes">
+      <div class="home-card home-card-balanco-antigo">
+        <div id="moduloBalancoRapidoAntigo" class="mes">
           <div class="despHeader" style="background: var(--P05) !important;">
             <span>Resumo rápido</span>
           </div>
           <div class="mesBody balanco-rapido-body">
-            <div id="graficoBalancoRapido"></div>
+            <div id="graficoBalancoRapidoAntigo"></div>
             <div class="balanco-rapido-metricas">
-              <div><small>Saldo atual</small><strong id="saldoAtualRapido">R$ 0,00</strong></div>
-              <div><small>Total dos cartoes</small><strong id="totalCartoesRapido">R$ 0,00</strong></div>
+              <div class="metric-card-total-mes"><small>Total do m&ecirc;s</small><strong id="saldoAtualRapidoAntigo">R$ 0,00</strong></div>
+              <div><small>Total dos cart&otilde;es</small><strong id="totalCartoesRapidoAntigo">R$ 0,00</strong></div>
             </div>
             <div>
               <small class="subtitulo-rapido">Ultimas entradas</small>
-              <div id="ultimasEntradasRapidas" class="ultimas-entradas"></div>
+              <div id="ultimasEntradasRapidasAntigo" class="ultimas-entradas"></div>
             </div>
           </div>
         </div>
@@ -147,7 +181,7 @@
       <p>Itens fixos são gerados automaticamente em novos meses.</p>
       <div class="">
         <span id="btnGerenciarCategorias" class="acoes-categorias">✏️ Categorias</span>
-        <span id="btnGerenciarCartoes" class="acoes-categorias">💳 Cartões</span>
+        <span id="btnGerenciarCartoes" class="acoes-categorias"><span class="material-icons">credit_card</span> Cartões</span>
       </div>
     </div>
 
@@ -296,12 +330,70 @@
         <div class="notas-release-list">
           <h2 class="notas-grupo-titulo">Versão 4</h2>
           <div class="notas-release-card">
+            <p class="notas-kicker correcao">CORREÇÃO</p>
+            <h3>22/06/2026 - Versão 4.2.20</h3>
+            <p class="notas-intro">Correções nos fluxos de parcelamento e edição de lembretes, com atualização segura pelo mesmo identificador e renovação do cache do aplicativo.</p>
+            <ul>
+              <li>O botão de parcelamento da tela de Gastos voltou a usar o fluxo central do AppShell.</li>
+              <li>Lembretes editados preservam o mesmo ID e não são duplicados.</li>
+              <li>Falhas de salvamento mantêm o modal aberto e preservam os dados anteriores.</li>
+              <li>A aba Análise foi ocultada temporariamente do menu.</li>
+            </ul>
+          </div>
+          <div class="notas-release-card">
+            <p class="notas-kicker correcao">CORREÇÃO</p>
+            <h3>22/05/2026 - Versão 4.2.19</h3>
+            <p class="notas-intro">Ajuste focado em estabilizar a nova estrutura visual, refinar a tela de gastos e transformar a visão semanal do calendário em uma agenda por horário.</p>
+            <ul>
+              <li>AppShell unificado para deixar Home, Gastos, Calendário, Análise, Configurações e Notas com a mesma estrutura visual.</li>
+              <li>Lista central de Gastos ficou compacta por padrão, com edição inline expandida apenas no item selecionado.</li>
+              <li>Resumo da fatura corrigido para somar os cartões corretamente e permitir filtro por categoria e por cartão.</li>
+              <li>Calendário semanal ganhou grade por horário, ghost com snap de 30 minutos, preenchimento automático da hora do lembrete e régua lateral.</li>
+              <li>Configurações do calendário agora salvam visão mensal/semanal, hora de virada do dia e dia inicial da semana.</li>
+              <li>Favicon e ícones do PWA foram atualizados para a marca com fundo P06 e símbolo em P01.</li>
+            </ul>
+          </div>
+          <div class="notas-release-card">
+            <p class="notas-kicker">NOVA VERSÃO</p>
+            <h3>13/05/2026 - Versão 4.2</h3>
+            <p class="notas-intro">Versão focada em aproximar a Home do novo layout visual, padronizar controles e corrigir a persistência dos lembretes importados por backup.</p>
+            <ul>
+              <li>Home reorganizada com sidebar, Balanço Rápido, Despesas e Entradas.</li>
+              <li>Backup importado agora salva os lembretes novamente na nuvem.</li>
+              <li>Gastos pontuais da Home ganharam edição inline de nome e valor.</li>
+              <li>Últimos gastos mostram a tag do cartão usado.</li>
+            </ul>
+          </div>
+          <div class="notas-release-card">
+            <p class="notas-kicker">NOVA VERSÃO</p>
+            <h3>11/05/2026 - Versão 4.1</h3>
+            <p class="notas-intro">Versão focada em centralizar as preferências do app em um hub de configurações, deixando conta, cartões, categorias, salário, calendário, aparência e dados em um só lugar.</p>
+            <ul>
+              <li>Nova página de Configurações com seções organizadas por responsabilidade.</li>
+              <li>Configurações de salário ganharam opção entre dia útil e dia corrido.</li>
+              <li>Cartões, categorias e rendas passam a poder ser gerenciados pelo hub.</li>
+              <li>Exportação, importação, tema e notas de versão ficam acessíveis pela área de Dados/Aparência.</li>
+            </ul>
+          </div>
+          <div class="notas-release-card">
+            <p class="notas-kicker">CORREÇÃO</p>
+            <h3>11/05/2026 - Versão 4.0.1</h3>
+            <p class="notas-intro">Ajuste focado em deixar a home e o calendário mais completos, com filtros de período, rendas fixas visíveis e despesas rápidas com parcelamento direto.</p>
+            <ul>
+              <li>Configuração dos lembretes da home agora permite escolher o período exibido.</li>
+              <li>Rendas fixas aparecem nos lembretes da home e no calendário, respeitando filtros e status mensal.</li>
+              <li>Resumo rápido mostra somente entradas manuais de cartão.</li>
+              <li>Despesas rápidas em cartão podem ser parceladas.</li>
+              <li>Ícones principais foram atualizados para Material Icons Filled.</li>
+            </ul>
+          </div>
+          <div class="notas-release-card">
             <p class="notas-kicker">NOVA VERSÃO</p>
             <h3>11/05/2026 - Versão 4.0</h3>
             <p class="notas-intro">Versão focada em transformar a home, o calendário e os lembretes em experiências mais configuráveis e interativas. Também melhora os gastos detalhados com agrupamento por cartão, edição global de fixas e uma estrutura mais preparada para evoluções futuras.</p>
             <ul>
               <li>Nova home com Lembretes, Despesas rápidas e Resumo rápido.</li>
-              <li>Calendário ganhou views salvas, filtros por tipo/categoria e eventos visualmente padronizados.</li>
+              <li>Calendário ganhou exibições salvas, filtros por tipo/categoria e eventos visualmente padronizados.</li>
               <li>Lembretes ganharam categorias próprias, cores editáveis, anotações, checklist e contraste automático.</li>
               <li>Gastos Detalhados ganhou edição global de fixas, gerenciadores rápidos e agrupamento por cartão.</li>
               <li>Gráfico anual foi preservado na aba Análise e esta página de notas passou a aparecer no primeiro acesso.</li>
@@ -396,18 +488,35 @@
         </div>
       </section>
 
-        <div class="controles-topo">
+      <!-- VIEW CONFIGURAÇÕES -->
+      <section id="viewConfiguracoes" style="display: none;">
+        <div class="config-hub">
+          <aside class="config-hub-nav">
+            <h2>Configurações</h2>
+            <button class="config-hub-tab active" data-config-tab="conta"><span class="material-icons">person</span> Conta</button>
+            <button class="config-hub-tab" data-config-tab="salario"><span class="material-icons">payments</span> Salário e rendas</button>
+            <button class="config-hub-tab" data-config-tab="cartoes"><span class="material-icons">credit_card</span> Cartões</button>
+            <button class="config-hub-tab" data-config-tab="categorias"><span class="material-icons">category</span> Categorias</button>
+            <button class="config-hub-tab" data-config-tab="calendario"><span class="material-icons">calendar_month</span> Calendário</button>
+            <button class="config-hub-tab" data-config-tab="aparencia"><span class="material-icons">palette</span> Aparência</button>
+            <button class="config-hub-tab" data-config-tab="dados"><span class="material-icons">storage</span> Dados</button>
+          </aside>
+          <div class="config-hub-panel" id="configHubPanel"></div>
+        </div>
+      </section>
+
+        <div class="controles-topo" id="acoesDadosGlobais">
             <button id="exportarTudoBtn" class="btn-secundario">EXPORTAR DADOS</button>
             <label for="inputImport" class="btn-secundario" style="cursor:pointer">IMPORTAR DADOS</label>
             <input type="file" id="inputImport" style="display: none;">
-<!--             <button id="salvarNuvemBtn" class="btn">☁️ SALVAR NA NUVEM</button>
-            <span id="statusAlteracao" style="display: none;">⚠️ Alterações pendentes</span> -->
+    <button id="salvarNuvemBtn" class="btn">SALVAR</button>
+    <span id="statusAlteracao" style="display: none;">Altera&ccedil;&otilde;es pendentes</span>
         </div>
 
       <footer class="siteFooter">
           <div class="footer-container">
               <p>© 2026 <a href="http://planetario.framer.website/">Planetário Oficina Estúdio</a></p>
-              <spann><small>Versão 4.0</small></spann>
+              <spann><small>Versão 4.2.20</small></spann>
               <div class="theme-selector-footer">
                   <span>Tema:</span>
                   <select id="cfgTemaFooter" class="inputPadrao">
@@ -478,9 +587,11 @@
 
         <!-- CAMPOS DE RECORRÊNCIA -->
         <label style="font-size: 13px; color: var(--P07); display: flex; align-items: center; gap: 8px;">
-            <input type="checkbox" id="lemRecorrente"> Repetir semanalmente?
+            <input type="checkbox" id="lemRecorrente"> Repetir?
         </label>
         
+        <div id="opcoesRecorrencia" class="recorrencia-opcoes" style="display:none;">
+            <label><input type="radio" name="lemRecorrenciaTipo" value="semanal" checked> Semanalmente:</label>
         <div id="escolhaDiasSemana" style="display: none; grid-template-columns: repeat(7, 1fr); gap: 5px;">
             <label title="Domingo" style="font-size: 10px; text-align: center; color: var(--P07);"><input type="checkbox" value="0">D</label>
             <label title="Segunda" style="font-size: 10px; text-align: center; color: var(--P07);"><input type="checkbox" value="1">S</label>
@@ -490,11 +601,13 @@
             <label title="Sexta" style="font-size: 10px; text-align: center; color: var(--P07);"><input type="checkbox" value="5">S</label>
             <label title="Sábado" style="font-size: 10px; text-align: center; color: var(--P07);"><input type="checkbox" value="6">S</label>
         </div>
+            <label><input type="radio" name="lemRecorrenciaTipo" value="mensal"> Mensalmente</label>
+            <label class="recorrencia-intervalo"><input type="radio" name="lemRecorrenciaTipo" value="intervalo"> A cada <input type="number" id="lemIntervaloDias" class="inputPadrao" min="1" value="7"> dias</label>
       </div>
 
       <div style="display:flex; gap:10px; margin-top:15px;">
         <button class="btn" id="btnSalvarLembrete">Salvar</button>
-        <button class="btn sair" onclick="document.getElementById('modalLembrete').style.display='none'">Fechar</button>
+        <button class="btn sair" id="btnFecharLembrete" type="button">Fechar</button>
       </div>
     </div>
   </div>
@@ -532,9 +645,9 @@
   <!-- MODAL CARTÕES -->
   <div id="modalCartoes" class="modal-overlay" style="display:none;">
     <div class="modal-content">
-      <h3>Gerenciar Cartões</h3>
+      <h3>Gerenciar Cart&otilde;es</h3>
       <div id="listaCartoesModal"></div>
-      <button class="btn" id="btnAddCartao" style="width:100%; margin-top:10px;">+ Novo Cartão</button>
+      <button class="btn" id="btnAddCartao" style="width:100%; margin-top:10px;">+ Novo Cart&atilde;o</button>
       <div style="display:flex; gap:10px; margin-top:15px;">
         <button class="btn" id="btnSalvarCartoes">Salvar</button>
         <button class="btn sair" id="btnFecharCartoes">Fechar</button>
@@ -543,10 +656,10 @@
   </div>
 
 <div class="save-container-floating">
-    <span id="statusAlteracao" style="display: none;">⚠️ Alterações pendentes</span>
-    <button id="salvarNuvemBtn" class="btn">☁️ SALVAR</button>
+    <span id="statusAlteracaoFloating" style="display: none;">Altera&ccedil;&otilde;es pendentes</span>
+    <button id="salvarNuvemBtnFloating" class="btn">SALVAR</button>
 </div>
 
-<script type="module" src="src/main.js"></script>
+<script type="module" src="src/main.js?v=4.2.20"></script>
 </body>
 </html>

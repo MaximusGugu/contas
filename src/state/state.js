@@ -26,5 +26,9 @@ export const configuracoesPadrao = {
   diaVirada: 1,
   nomeUsuario: "",
   referenciaMes: "atual",
+  tipoDiaSalario: "util",
+  visaoCalendario: "mensal",
+  horaViradaCalendario: 21,
+  inicioSemanaCalendario: 0,
   tema: "planetario"
 };
