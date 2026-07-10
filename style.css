@@ -45,15 +45,15 @@ body.theme-noite {
 }
 
 body.theme-doce {
-  --P01: #fff5f6;
-  --P02: #fff5f6;
-  --P03: #ffeef2;
-  --P04: #fab1a0;
-  --P05: #fd79a8;
-  --P06: #e84393;
-  --P07: #7e1749;
-  --P08: #2d3436;
-  --P09: #2d3436;
+  --P01: #5b1237;
+  --P02: #6d1744;
+  --P03: #fff2f7;
+  --P04: #f783b2;
+  --P05: #f7a6c8;
+  --P06: #ffd4e4;
+  --P07: #8a174f;
+  --P08: #3b1028;
+  --P09: #2a0b1c;
   --BG-INPUT: #ffeef2;
   --BG-IMG: url('img/bg-site-doce.webp');
   --POSTIT: #f3db23;
@@ -6595,6 +6595,175 @@ body.pwa-standalone {
 
 #appShell > .siteFooter .footer-container {
   max-width: none;
+}
+
+body.theme-doce {
+  --home-soft-card-bg: color-mix(in srgb, var(--P06) 72%, white 28%);
+  --home-soft-card-darken: none;
+}
+
+body.theme-doce #appShell .figma-card,
+body.theme-doce #appShell .gastos-list-card,
+body.theme-doce #appShell .gastos-summary-card,
+body.theme-doce #appShell .calendar-filter-card,
+body.theme-doce #appShell #moduloLembretesHome,
+body.theme-doce #appShell #moduloDespesaRapida,
+body.theme-doce #appShell #moduloBalancoRapidoCard,
+body.theme-doce #appShell #moduloEntradasHome,
+body.theme-doce .figma-card,
+body.theme-doce .figma-card > .mesBody,
+body.theme-doce #appShell .app-card-body,
+body.theme-doce #appShell .calendar-filter-body {
+  background: var(--P06) !important;
+  color: var(--P01);
+}
+
+body.theme-doce #appShell .despHeader,
+body.theme-doce #appShell .calendar-filter-header,
+body.theme-doce #appShell .app-card-header,
+body.theme-doce .figma-card > .despHeader {
+  background: var(--P07) !important;
+  color: #fff6fa;
+}
+
+body.theme-doce #moduloLembretesHome.figma-card > .despHeader {
+  background: var(--P05) !important;
+  color: var(--P01);
+}
+
+body.theme-doce .item-lembrete-home,
+body.theme-doce .ultima-entrada,
+body.theme-doce .balanco-rapido-metricas > div,
+body.theme-doce .home-finance-row.is-card-row,
+body.theme-doce .gastos-row-compact,
+body.theme-doce .gastos-card-total,
+body.theme-doce .calendar-view-item {
+  background: color-mix(in srgb, var(--P06) 68%, white 32%) !important;
+  box-shadow: none !important;
+  color: var(--P01);
+}
+
+body.theme-doce .home-finance-row,
+body.theme-doce .gastos-row-compact,
+body.theme-doce .gastos-card-total {
+  border-bottom-color: color-mix(in srgb, var(--P01) 18%, transparent);
+}
+
+body.theme-doce .item-lembrete-home .titulo,
+body.theme-doce .item-lembrete-home .data,
+body.theme-doce .home-mini-title,
+body.theme-doce .home-cascata-control,
+body.theme-doce .home-cascata-help,
+body.theme-doce .home-row-name,
+body.theme-doce .home-row-value,
+body.theme-doce .ultima-entrada,
+body.theme-doce .ultima-entrada strong,
+body.theme-doce .balanco-rapido-metricas small,
+body.theme-doce .balanco-rapido-metricas strong,
+body.theme-doce .subtitulo-rapido,
+body.theme-doce .gastos-row-compact,
+body.theme-doce .gastos-row-name,
+body.theme-doce .gastos-row-date,
+body.theme-doce .gastos-row-value,
+body.theme-doce .gastos-card-total,
+body.theme-doce .calendar-filter-body,
+body.theme-doce .calendar-filter-body label {
+  color: var(--P01) !important;
+}
+
+body.theme-doce .home-row-value,
+body.theme-doce input.home-row-value,
+body.theme-doce .ultima-entrada strong,
+body.theme-doce .gastos-row-value,
+body.theme-doce .gastos-summary-value,
+body.theme-doce .gastos-card-total strong {
+  color: var(--P07) !important;
+}
+
+body.theme-doce .balanco-rapido-metricas > .metric-card-total-cartoes,
+body.theme-doce .balanco-rapido-metricas > .metric-card-total-mes,
+body.theme-doce .home-current-month,
+body.theme-doce .home-total-row {
+  background: var(--P04) !important;
+  color: var(--P01) !important;
+}
+
+body.theme-doce .balanco-rapido-metricas > .metric-card-total-cartoes small,
+body.theme-doce .balanco-rapido-metricas > .metric-card-total-cartoes strong,
+body.theme-doce .balanco-rapido-metricas > .metric-card-total-mes small,
+body.theme-doce .balanco-rapido-metricas > .metric-card-total-mes strong,
+body.theme-doce .home-current-month,
+body.theme-doce .home-total-row,
+body.theme-doce .home-total-row strong {
+  color: var(--P01) !important;
+}
+
+body.theme-doce input,
+body.theme-doce select,
+body.theme-doce textarea,
+body.theme-doce .inputPadrao,
+body.theme-doce .input-tabela-edit {
+  background-color: color-mix(in srgb, var(--P06) 62%, white 38%) !important;
+  border-color: color-mix(in srgb, var(--P07) 28%, transparent) !important;
+  color: var(--P01) !important;
+}
+
+body.theme-doce input::placeholder,
+body.theme-doce textarea::placeholder {
+  color: color-mix(in srgb, var(--P01) 55%, transparent) !important;
+}
+
+body.theme-doce .btn:not(.sair),
+body.theme-doce .home-action-btn,
+body.theme-doce #btnSalvarDespesaRapida,
+body.theme-doce #btnParcelaHome,
+body.theme-doce #btnAddEntradaHome {
+  background: var(--P05) !important;
+  color: var(--P01) !important;
+}
+
+body.theme-doce .btn:not(.sair):hover,
+body.theme-doce .home-action-btn:hover,
+body.theme-doce #btnSalvarDespesaRapida:hover,
+body.theme-doce #btnParcelaHome:hover,
+body.theme-doce #btnAddEntradaHome:hover {
+  background: var(--P04) !important;
+}
+
+body.theme-doce #appShell > .siteFooter {
+  background: var(--P05);
+  color: var(--P01);
+}
+
+body.theme-doce #appShell > .siteFooter a,
+body.theme-doce #appShell > .siteFooter select,
+body.theme-doce #appShell > .siteFooter label {
+  color: var(--P01) !important;
+}
+
+body.theme-grayscale.route-resumo #appShell .app-greeting,
+body.theme-grayscale.route-resumo #appShell .app-greeting span,
+body.theme-grayscale #appShell .balanco-rapido-metricas small,
+body.theme-grayscale #appShell .balanco-rapido-metricas strong,
+body.theme-grayscale #appShell .home-row-value,
+body.theme-grayscale #appShell input.home-row-value,
+body.theme-grayscale #appShell .ultima-entrada strong,
+body.theme-grayscale #appShell .home-total-row,
+body.theme-grayscale #appShell .home-total-row strong {
+  color: var(--P01) !important;
+}
+
+body.theme-grayscale #appShell .balanco-rapido-metricas > .metric-card-total-cartoes,
+body.theme-grayscale #appShell .balanco-rapido-metricas > .metric-card-total-mes,
+body.theme-grayscale #appShell .home-total-row,
+body.theme-grayscale #appShell .home-current-month {
+  background: color-mix(in srgb, var(--P04) 82%, white 18%) !important;
+}
+
+body.theme-grayscale #appShell .home-finance-row.is-checked,
+body.theme-grayscale #appShell .item-lembrete-home.is-past,
+body.theme-grayscale #appShell .ultima-entrada.is-muted {
+  opacity: 0.84;
 }
 
 @media (max-width: 900px) {
