@@ -1733,7 +1733,6 @@ input.conta { border-left: 5px solid #2ecc71 !important; color: #27ae60; }
 }
 
 .modal-overlay.modal-appshell {
-    display: flex !important;
     z-index: 5000 !important;
 }
 
@@ -2483,25 +2482,6 @@ input.conta:focus {
     display: flex;
     flex-direction: column;
     gap: 8px;
-}
-
-/* 7. O BOTÃO - O segredo do alinhamento inferior */
-#btnIrCalendario {
-    width: 100%;
-    margin-top: auto; /* Empurra o botão para o fim do container .mesBody */
-    background: var(--P05);
-    color: var(--P03);
-    padding: 12px;
-    border-radius: 8px;
-    font-weight: bold;
-    cursor: pointer;
-    border: none;
-    transition: 0.2s;
-}
-
-#btnIrCalendario:hover {
-    background: var(--P04);
-    color: white;
 }
 
 .item-lembrete-home {
@@ -5259,11 +5239,6 @@ body.figma-home-active {
   background: rgba(255, 248, 231, 0.78);
 }
 
-.figma-home-active #btnIrCalendario {
-  flex: 0 0 auto;
-  margin-top: 10px;
-}
-
 .figma-home-active #listaLembretesHome > * {
   flex: 0 0 auto;
 }
@@ -6596,6 +6571,54 @@ body.pwa-standalone {
 #appShell > .siteFooter .footer-container {
   max-width: none;
 }
+
+/* Shared controls; the mobile stylesheet gives these their compact presentation. */
+.app-bottom-nav,
+.gastos-row-mobile-actions,
+.mobile-card-toggle,
+.app-mobile-calendar-action,
+.app-mobile-tools,
+.calendar-mobile-days,
+.calendar-mobile-agenda,
+.app-account-menu > summary {
+  display: none;
+}
+
+.app-account-menu,
+.app-account-actions {
+  display: contents;
+}
+.app-responsive-field { display: contents; }
+.app-responsive-field > span { display: none; }
+
+#appShellSalvarBtn .material-icons {
+  display: none;
+}
+
+.app-greeting-name {
+  font-weight: inherit;
+}
+
+#appShell .app-greeting .app-greeting-date {
+  font-weight: inherit !important;
+}
+
+.app-install-dialog {
+  width: min(420px, calc(100% - 32px));
+  padding: 24px;
+  border: 1px solid var(--P05);
+  border-radius: 8px;
+  color: var(--P01);
+  background: var(--P06);
+  box-sizing: border-box;
+}
+
+.app-install-dialog::backdrop {
+  background: rgb(0 0 0 / 65%);
+}
+
+.app-install-dialog h2 { font-size: 20px; }
+.app-install-dialog p { line-height: 1.5; }
 
 body.theme-doce {
   --home-soft-card-bg: color-mix(in srgb, var(--P06) 72%, white 28%);

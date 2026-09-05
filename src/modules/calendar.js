@@ -1,6 +1,7 @@
 let dataFoco = new Date();
 let cacheFeriados = {};
 let visaoAtual = "mensal";
+let mobileAgendaDias = 30;
 
 export async function obterFeriados(ano) {
     if (cacheFeriados[ano]) return cacheFeriados[ano];
@@ -354,6 +355,8 @@ export async function renderCalendario(state, actions = {}) {
     root.querySelector("#btnAddViewCalendario").onclick = () => actions.criarViewCalendario?.();
     root.querySelector("#btnNovoLembrete").onclick = () => {
         if (window.resetEdicao) window.resetEdicao();
+        const dateInput = document.getElementById("lemData");
+        if (dateInput) dateInput.value = new Date().toLocaleDateString("en-CA");
         const modal = document.getElementById("modalLembrete");
         if (modal) modal.style.display = "flex";
     };
@@ -401,6 +404,7 @@ export async function renderCalendario(state, actions = {}) {
         const diaBox = document.createElement("div");
         diaBox.className = "cal-day" + (isoDate === hojeLocal ? " today" : "") + (feriadosDoAno.includes(stringFeriado) ? " holiday" : "");
         diaBox.dataset.horaVirada = String(horaViradaCalendario);
+        diaBox.dataset.date = isoDate;
         diaBox.innerHTML = `<div class="cal-number">${dia}</div>`;
         if (ehSemana) {
             const linhasPrincipais = [0, 6, 12, 18].map(hora => (
@@ -587,4 +591,77 @@ export async function renderCalendario(state, actions = {}) {
             grid.insertAdjacentHTML("beforeend", `<div class="cal-day other-month"><div class="cal-number">${diaOutroMes}</div></div>`);
         }
     }
+    montarAgendaMobile(root, state, actions, mostrarLembrete);
+}
+
+function montarAgendaMobile(root, state, actions, mostrarLembrete) {
+    const agenda = document.createElement("section");
+    agenda.className = "calendar-mobile-agenda";
+    agenda.setAttribute("aria-label", "Proximos lembretes");
+    const heading = document.createElement("h2");
+    heading.className = "calendar-mobile-heading";
+    heading.textContent = "Pr\u00f3ximos lembretes";
+    const list = document.createElement("div");
+    list.className = "calendar-mobile-agenda-list";
+    const more = document.createElement("button");
+    more.type = "button";
+    more.className = "btn calendar-mobile-more";
+    const footer = document.createElement("div");
+    footer.className = "calendar-mobile-range";
+    agenda.append(heading, list, footer, more);
+    root.querySelector(".calendar-dashboard-area").append(agenda);
+
+    function renderList() {
+        list.replaceChildren();
+        const start = new Date();
+        start.setHours(12, 0, 0, 0);
+        const reminders = (state.lembretes || []).filter(mostrarLembrete);
+        for (let offset = 0; offset < mobileAgendaDias; offset++) {
+            const day = new Date(start);
+            day.setDate(start.getDate() + offset);
+            const events = reminders.filter(item => lembreteOcorreNaData(item, day))
+                .sort((a, b) => minutosDoHorario(a.hora) - minutosDoHorario(b.hora));
+            if (!events.length) continue;
+            const group = document.createElement("section");
+            group.className = "calendar-agenda-day" + (offset === 0 ? " is-today" : "");
+            const date = document.createElement("h3");
+            date.className = "calendar-agenda-date";
+            date.innerHTML = `<small>${escapeHtml(day.toLocaleDateString("pt-BR", { weekday: "short" }).replace(".", ""))}</small><strong>${day.getDate()}</strong><small>${escapeHtml(day.toLocaleDateString("pt-BR", { month: "short" }).replace(".", ""))}</small>`;
+            date.setAttribute("aria-label", day.toLocaleDateString("pt-BR", { dateStyle: "full" }));
+            const entries = document.createElement("div");
+            entries.className = "calendar-agenda-entries";
+            for (const reminder of events) {
+                const category = (state.categoriasLembretes || []).find(cat => String(cat.id) === String(reminder.categoriaId));
+                const color = category?.cor || "#D78341";
+                const entry = document.createElement("button");
+                entry.type = "button";
+                entry.className = "calendar-agenda-reminder";
+                entry.style.setProperty("--lembrete-cor", color);
+                entry.style.backgroundColor = corComOpacidade(color, 0.9);
+                entry.style.color = getCorTextoContraste(color);
+                const detail = [reminder.hora || "Sem hor\u00e1rio", category?.nome, reminder.valor > 0 ? "R$ " + formatarValor(reminder.valor) : ""].filter(Boolean).join(" \u00b7 ");
+                entry.innerHTML = `<strong>${escapeHtml(reminder.nome || "Lembrete")}</strong><span>${escapeHtml(detail)}</span>`;
+                if (reminder.subtarefas?.length) {
+                    const done = reminder.subtarefas.filter(item => item.concluida).length;
+                    entry.insertAdjacentHTML("beforeend", `<small>${done}/${reminder.subtarefas.length} tarefas</small>`);
+                }
+                entry.onclick = () => actions.abrirPostit?.(reminder);
+                entries.append(entry);
+            }
+            group.append(date, entries);
+            list.append(group);
+        }
+        const end = new Date(start);
+        end.setDate(start.getDate() + mobileAgendaDias - 1);
+        footer.textContent = "At\u00e9 " + end.toLocaleDateString("pt-BR", { day: "numeric", month: "long", year: "numeric" });
+        if (!list.children.length) {
+            const empty = document.createElement("p");
+            empty.className = "home-empty-row";
+            empty.textContent = "Nenhum lembrete neste per\u00edodo com os filtros atuais.";
+            list.append(empty);
+        }
+        more.textContent = "Mostrar mais 30 dias";
+        more.onclick = () => { mobileAgendaDias += 30; renderList(); };
+    }
+    renderList();
 }

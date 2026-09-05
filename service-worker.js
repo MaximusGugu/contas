@@ -1,8 +1,8 @@
-const CACHE_VERSION = "contas-pwa-v5";
+const CACHE_VERSION = "contas-pwa-v7-mobile";
 const STATIC_CACHE = `${CACHE_VERSION}-static`;
 const RUNTIME_CACHE = `${CACHE_VERSION}-runtime`;
 const OFFLINE_URL = "offline.html";
-const APP_ASSET_VERSION = "4.2.20";
+const APP_ASSET_VERSION = "4.3.0";
 
 const APP_SHELL_ASSETS = [
   "./",
@@ -23,6 +23,7 @@ const APP_SHELL_ASSETS = [
   "src/firebase/firestore.js",
   "src/modules/calendar.js",
   "src/modules/themes.js",
+  "src/modules/mobile-shell.js",
   "src/state/state.js",
   "src/state/storage.js",
   "src/utils/dates.js",
@@ -86,8 +87,10 @@ self.addEventListener("message", (event) => {
 });
 
 self.addEventListener("fetch", (event) => {
-  const { request } = event;
-  if (request.method !== "GET") return;
+    const { request } = event;
+    if (request.method !== "GET") return;
+    // Development always reads the workspace, including edits made after installing the PWA.
+    if (["localhost", "127.0.0.1"].includes(self.location.hostname)) return;
 
   const url = new URL(request.url);
 
@@ -107,7 +110,8 @@ self.addEventListener("fetch", (event) => {
 });
 
 function isDynamicRequest(url) {
-  return DYNAMIC_HOST_MATCHERS.some((matcher) => matcher.test(url.hostname));
+  if (STATIC_HOSTS.has(url.origin)) return false;
+    return DYNAMIC_HOST_MATCHERS.some((matcher) => matcher.test(url.hostname));
 }
 
 function isCacheableStaticRequest(request, url) {

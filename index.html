@@ -2,30 +2,29 @@
 <html lang="pt-BR">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, interactive-widget=resizes-content">
   <title>Contas Mensais</title>
   <link rel="manifest" href="manifest.webmanifest">
   <meta name="theme-color" content="#3C5558">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="Contas">
   <link rel="apple-touch-icon" href="assets/icons/icon-192.png">
   <link rel="icon" type="image/svg+xml" href="assets/icons/favicon.svg">
   <script src="https://cdn.jsdelivr.net/npm/apexcharts"></script>
   <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script> <!-- ADICIONE ESTA LINHA -->
-  <link rel="stylesheet" href="style.css?v=4.2.20">
+  <link rel="stylesheet" href="style.css?v=4.3.0">
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700&display=swap" rel="stylesheet">
   <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
     <link href="https://fonts.googleapis.com/css2?family=Sour+Gummy:wght@100..900&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="style.css?v=4.2.20">
-  <link rel="stylesheet" href="mobile.css?v=4.2.20" media="screen and (max-width: 768px)">
+  <link rel="stylesheet" href="mobile.css?v=4.3.0" media="screen and (max-width: 900px)">
 </head>
 <body class="theme-planetario app-loading-active">
 
   <div id="appLoadingScreen" class="app-loading-screen" role="status" aria-live="polite" aria-label="Carregando aplicativo">
     <div class="app-loading-mark">
-      <img src="https://framerusercontent.com/images/0KuYhGQqOuOZyzgxkDr3oMUcgtM.svg" alt="Planetário Oficina Estúdio">
+      <img src="assets/icons/loading-logo.svg" alt="Planetário Oficina Estúdio">
     </div>
   </div>
 
@@ -46,7 +45,7 @@
           <button class="btn" id="cadastroBtn">CRIAR CONTA</button>
           <p class="auth-toggle">Já tem conta? <a href="#" id="showLogin">Fazer Login</a></p>
       </div>
-      <p class="auth-toggle"><small>Versão 4.2.20</small></p>
+      <p class="auth-toggle"><small>Versão 4.3.0</small></p>
     </div>
   </div>
 
@@ -103,7 +102,6 @@
             </div>
             <div class="mesBody">
                 <div id="listaLembretesHome" class="lista-lembretes-home"></div>
-                <button class="btn" id="btnIrCalendario">CALENDÁRIO</button>
             </div>
         </div>
       </div>
@@ -330,6 +328,19 @@
         <div class="notas-release-list">
           <h2 class="notas-grupo-titulo">Versão 4</h2>
           <div class="notas-release-card">
+            <p class="notas-kicker">MOBILE</p>
+            <h3>04/09/2026 - Versão 4.3.0</h3>
+            <p class="notas-intro">Nova experiência para celular, mantendo a identidade e os dados do app.</p>
+            <ul>
+              <li>Navegação inferior, campos maiores e suporte às áreas seguras do iPhone.</li>
+              <li>Home com resumos, despesa rápida e painéis recolhíveis.</li>
+              <li>Gastos com filtros recolhíveis, lista e resumo separados e edição com Salvar e Cancelar.</li>
+              <li>Agenda mobile com próximos lembretes agrupados por dia e ação fixa para adicionar.</li>
+              <li>Configurações e modais adaptados, incluindo o fluxo de parcelamento.</li>
+              <li>Leitura das notas salva neste navegador, sem depender do salvamento na nuvem.</li>
+            </ul>
+          </div>
+          <div class="notas-release-card">
             <p class="notas-kicker correcao">CORREÇÃO</p>
             <h3>22/06/2026 - Versão 4.2.20</h3>
             <p class="notas-intro">Correções nos fluxos de parcelamento e edição de lembretes, com atualização segura pelo mesmo identificador e renovação do cache do aplicativo.</p>
@@ -516,7 +527,7 @@
       <footer class="siteFooter">
           <div class="footer-container">
               <p>© 2026 <a href="http://planetario.framer.website/">Planetário Oficina Estúdio</a></p>
-              <spann><small>Versão 4.2.20</small></spann>
+              <span><small>Versão 4.3.0</small></span>
               <div class="theme-selector-footer">
                   <span>Tema:</span>
                   <select id="cfgTemaFooter" class="inputPadrao">
@@ -660,6 +671,6 @@
     <button id="salvarNuvemBtnFloating" class="btn">SALVAR</button>
 </div>
 
-<script type="module" src="src/main.js?v=4.2.20"></script>
+<script type="module" src="src/main.js?v=4.3.0"></script>
 </body>
 </html>

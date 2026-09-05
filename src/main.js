@@ -7,6 +7,7 @@ import { saveLocalSnapshot } from "./state/storage.js";
 import { getMesReferenciaAtivo as calcularMesReferenciaAtivo } from "./utils/dates.js";
 import { renderCalendario, calcularDiaSalarioConfigurado, obterFeriados } from "./modules/calendar.js";
 import { aplicarTema } from "./modules/themes.js";
+import { sincronizarMobileShell } from "./modules/mobile-shell.js";
 
 // ================= VARIAVEIS GLOBAIS =================
 let usuarioLogado = null;
@@ -55,7 +56,20 @@ let chartAnaliseComposicao = null;
 let pwaInstallPrompt = null;
 let pwaRecarregandoAposUpdate = false;
 
-const VERSAO_ATUAL_APP = "4.2.20";
+const VERSAO_ATUAL_APP = "4.3.0";
+const NOTAS_VISTAS_KEY = "contas:notas-vistas";
+let notasVistasNestaSessao = false;
+
+function notasJaVistasNoNavegador() {
+    try { return Boolean(localStorage.getItem(NOTAS_VISTAS_KEY)) || notasVistasNestaSessao; }
+    catch { return notasVistasNestaSessao; }
+}
+
+function marcarNotasComoVistas() {
+    notasVistasNestaSessao = true;
+    try { localStorage.setItem(NOTAS_VISTAS_KEY, VERSAO_ATUAL_APP); }
+    catch (erro) { console.warn("Nao foi possivel guardar a leitura das notas neste navegador.", erro); }
+}
 const coresCategoriasLembretes = ["#D78341", "#3C5558", "#586E5F", "#8E6F3E", "#7A4E7A"];
 const tiposExibicaoPadrao = {
     feriados: true,
@@ -647,15 +661,33 @@ function atualizarModoStandalonePwa() {
 }
 
 function atualizarBotoesInstalacaoPwa() {
-    const podeInstalar = Boolean(pwaInstallPrompt) && !appEstaEmModoStandalone();
+    const podeInstalar = (Boolean(pwaInstallPrompt) || pwaEhIos()) && !appEstaEmModoStandalone();
     document.querySelectorAll("[data-pwa-install]").forEach((botao) => {
         botao.hidden = !podeInstalar;
         botao.disabled = !podeInstalar;
     });
 }
 
+function pwaEhIos() {
+    return /iPad|iPhone|iPod/.test(navigator.userAgent)
+        || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+}
+
 async function solicitarInstalacaoPwa() {
-    if (!pwaInstallPrompt || appEstaEmModoStandalone()) return;
+    if (appEstaEmModoStandalone()) return;
+    if (!pwaInstallPrompt && pwaEhIos()) {
+        let dialog = document.getElementById("pwaIosInstall");
+        if (!dialog) {
+            dialog = document.createElement("dialog");
+            dialog.id = "pwaIosInstall";
+            dialog.className = "app-install-dialog";
+            dialog.innerHTML = `<form method="dialog"><h2>Instalar Contas</h2><p>No Safari, abra Compartilhar e escolha <strong>Adicionar \u00e0 Tela de In\u00edcio</strong>. Ative <strong>Abrir como App</strong>, se essa op\u00e7\u00e3o aparecer.</p><p>Depois, abra pelo \u00edcone na Tela de In\u00edcio para usar sem a barra do navegador.</p><button class="btn" autofocus>Entendi</button></form>`;
+            document.body.appendChild(dialog);
+        }
+        dialog.showModal();
+        return;
+    }
+    if (!pwaInstallPrompt) return;
     const promptEvent = pwaInstallPrompt;
     pwaInstallPrompt = null;
     atualizarBotoesInstalacaoPwa();
@@ -838,7 +870,7 @@ function getSaudacaoResumoHtml() {
     if (nomeSaudacao) saudacao = `${saudacao}, ${escapeHtml(nomeSaudacao)}`;
 
     const dataExtenso = agora.toLocaleDateString("pt-BR", { weekday: "long", day: "numeric", month: "long", year: "numeric" }).toLowerCase();
-    return `${saudacao}! Hoje &eacute; ${escapeHtml(dataExtenso)}. <span style="opacity: 0.7; font-weight: normal;">Aqui est&aacute; o seu resumo:</span>`;
+    return `<b class="app-greeting-name">${saudacao}!</b><span class="app-greeting-date"> Hoje &eacute; ${escapeHtml(dataExtenso)}.</span> <span class="app-greeting-context" style="opacity: 0.7; font-weight: normal;">Aqui est&aacute; o seu resumo:</span>`;
 }
 
 function renderMenuLateral(activeHash = "#resumo") {
@@ -906,11 +938,16 @@ function renderAppShell(activeHash = "#resumo") {
             <div class="app-topbar">
                 <div class="app-greeting" id="appShellSaudacao"></div>
                 <div class="app-user-actions home-user-actions">
+                    <button id="appShellSalvarBtn" class="btn" type="button" title="Salvar" aria-label="Salvar">${materialIcon("save")}<span class="app-action-label">SALVAR</span></button>
+                    <details class="app-account-menu">
+                    <summary title="Conta" aria-label="Abrir menu da conta">${materialIcon("account_circle")}</summary>
+                    <div class="app-account-actions">
                     <span id="appShellEmail"></span>
                     <button class="btn app-install-button" data-pwa-install title="Instalar o app" type="button" hidden>${materialIcon("download")}<span>INSTALAR APP</span></button>
                     <button id="appShellSettingsBtn" class="btn-icon-home app-icon-button" title="Configura\u00e7\u00f5es" type="button">${materialIcon("settings")}</button>
-                    <button id="appShellSalvarBtn" class="btn" type="button">SALVAR</button>
                     <button id="appShellLogoutBtn" class="btn sair" type="button">SAIR</button>
+                    </div>
+                    </details>
                 </div>
             </div>
             <div class="app-main">
@@ -1007,9 +1044,23 @@ function getOrCreateRouteContent(viewId, routeName) {
 }
 
 function sincronizarRotaNoAppShell(hash = "#resumo") {
+    if ((window.location.hash || "#resumo") !== hash) return;
     const activeHash = hash === "#notas" || hash === "#configuracoes" ? "#resumo" : hash;
     const slots = renderAppShell(activeHash);
     if (!slots) return;
+    // Prefer the fresh render over older fragments parked outside the visible shell.
+    const fragmentos = {
+        "#gastos": ["areaGastosMensais", ".gastos-filter-card", ".gastos-work-area"],
+        "#calendario": ["areaCalendario", ".calendar-filter-card", ".calendar-dashboard-area"],
+        "#analise": ["viewAnalise", ".analise-filter-card", ".analise-dashboard-area"]
+    }[hash];
+    const atuais = fragmentos?.slice(1).map(selector => {
+        const candidatos = Array.from(document.querySelectorAll(selector));
+        const atual = document.getElementById(fragmentos[0])?.querySelector(selector)
+            || slots.shell.querySelector(selector) || candidatos.at(-1);
+        candidatos.filter(el => el !== atual).forEach(el => el.remove());
+        return atual;
+    });
     limparAppSlot(slots.sidebarPanel);
     limparAppSlot(slots.content);
 
@@ -1017,20 +1068,21 @@ function sincronizarRotaNoAppShell(hash = "#resumo") {
         moverParaSlot(document.getElementById("homeLembretesMount"), slots.sidebarPanel);
         moverParaSlot(document.querySelector(".home-dashboard-area"), slots.content);
     } else if (hash === "#gastos") {
-        moverParaSlot(document.querySelector(".gastos-filter-card"), slots.sidebarPanel);
-        moverParaSlot(document.querySelector(".gastos-work-area"), slots.content);
+        moverParaSlot(atuais[0], slots.sidebarPanel);
+        moverParaSlot(atuais[1], slots.content);
     } else if (hash === "#calendario") {
-        moverParaSlot(document.querySelector(".calendar-filter-card"), slots.sidebarPanel);
-        moverParaSlot(document.querySelector(".calendar-dashboard-area"), slots.content);
+        moverParaSlot(atuais[0], slots.sidebarPanel);
+        moverParaSlot(atuais[1], slots.content);
     } else if (hash === "#configuracoes") {
         moverParaSlot(document.querySelector(".config-hub-nav"), slots.sidebarPanel);
         moverParaSlot(document.getElementById("configHubPanel"), slots.content);
     } else if (hash === "#analise") {
-        moverParaSlot(document.querySelector(".analise-filter-card"), slots.sidebarPanel);
-        moverParaSlot(document.querySelector(".analise-dashboard-area"), slots.content);
+        moverParaSlot(atuais[0], slots.sidebarPanel);
+        moverParaSlot(atuais[1], slots.content);
     } else if (hash === "#notas") {
         moverParaSlot(getOrCreateRouteContent("viewNotas", "notas"), slots.content);
     }
+    sincronizarMobileShell(slots.shell, hash);
 }
 
 async function rerenderRotaAtual() {
@@ -1096,7 +1148,13 @@ function salvarDadosLocal() {
 function atualizarTextoBotoesSalvar(texto) {
   ["salvarNuvemBtn", "salvarNuvemBtnFloating", "salvarNuvemBtnHome", "appShellSalvarBtn"].forEach(id => {
     const btn = document.getElementById(id);
-    if (btn) btn.innerText = texto;
+    if (btn?.id === "appShellSalvarBtn") {
+        const salvando = texto.toLowerCase().includes("salvando");
+        btn.innerHTML = materialIcon(salvando ? "sync" : "save") + `<span class="app-action-label">${escapeHtml(texto)}</span>`;
+        btn.setAttribute("aria-label", texto);
+        btn.setAttribute("aria-busy", String(salvando));
+        btn.disabled = salvando;
+    } else if (btn) btn.innerText = texto;
   });
 }
 
@@ -1967,7 +2025,6 @@ function calcularAlturaNaturalLembretesHome() {
     const card = document.getElementById("moduloLembretesHome");
     const body = card?.querySelector(":scope > .mesBody");
     const lista = document.getElementById("listaLembretesHome");
-    const botao = document.getElementById("btnIrCalendario");
     const header = card?.querySelector(":scope > .despHeader");
     if (!card || !body || !lista) return 0;
 
@@ -1976,8 +2033,7 @@ function calcularAlturaNaturalLembretesHome() {
     const gap = parseFloat(estiloBody.rowGap || estiloBody.gap) || 0;
     const alturaHeader = header?.getBoundingClientRect().height || 0;
     const alturaLista = lista.scrollHeight || lista.getBoundingClientRect().height || 0;
-    const alturaBotao = botao?.getBoundingClientRect().height || 0;
-    return Math.ceil(alturaHeader + paddingVertical + alturaLista + alturaBotao + gap);
+    return Math.ceil(alturaHeader + paddingVertical + alturaLista + gap);
 }
 
 function resetarAlturaCardsHome() {
@@ -3800,6 +3856,13 @@ function renderGastosLinha(item, contexto) {
     const card = row.querySelector(".gastos-row-card");
     const valor = row.querySelector(".gastos-row-value");
     const deletes = row.querySelectorAll(".gastos-row-delete");
+    const mobileActions = document.createElement("div");
+    mobileActions.className = "gastos-row-mobile-actions";
+    mobileActions.innerHTML = '<button class="btn" type="button" data-row-save>Salvar</button><button class="btn" type="button" data-row-cancel>Cancelar</button>';
+    editor.appendChild(mobileActions);
+    [[nome, "Nome"], [categoria, "Categoria"], [data, "Data da compra"], [card, "Cartao"], [valor, "Valor"]].forEach(([input, label]) => input.setAttribute("aria-label", label));
+    valor.inputMode = "decimal";
+    checks.forEach(check => check.setAttribute("aria-label", "Incluir " + item.nome + " no total"));
 
     aplicarCorCategoriaSelect(categoria);
     aplicarCorCartaoSelect(card);
@@ -3849,6 +3912,8 @@ function renderGastosLinha(item, contexto) {
         gastoLinhaExpandidaKey = null;
         rerenderRotaAtual();
     };
+    mobileActions.querySelector("[data-row-save]").onclick = salvarEdicao;
+    mobileActions.querySelector("[data-row-cancel]").onclick = cancelarEdicao;
 
     compact.onclick = (event) => {
         if (event.target.closest("input,button")) return;
@@ -4259,7 +4324,7 @@ document.getElementById("btnSalvarParcelaCartao").onclick = async () => {
         return;
     }
 
-    document.getElementById("modalParcelaCartao").style.display = "none";
+    fecharModalNoFluxoNovo("modalParcelaCartao");
     btnSalvar.disabled = false;
     btnSalvar.innerText = "Salvar Parcelas";
 };
@@ -4308,8 +4373,7 @@ window.abrirModalParcelamento = (mes, ano) => {
     atualizarCores(); // Define a cor inicial
 
     // 4. Abre o modal
-    modal.classList.add("modal-appshell");
-    modal.style.display = "flex";
+    abrirModalNoFluxoNovo("modalParcelaCartao");
 };
 
 function renderPizza(mesIdx, gastos) {
@@ -4776,8 +4840,8 @@ function renderConfiguracoesHub(tab = configHubTabAtiva) {
                     <option value="Crédito" ${cartao.tipo === "Crédito" ? "selected" : ""}>Crédito</option>
                     <option value="Débito" ${cartao.tipo === "Débito" ? "selected" : ""}>Débito</option>
                 </select>
-                <input type="number" class="inputPadrao hub-card-fech" value="${cartao.fechamento || 1}" min="1" max="31" title="Fechamento">
-                <input type="number" class="inputPadrao hub-card-venc" value="${cartao.vencimento || 10}" min="1" max="31" title="Vencimento">
+                <label class="app-responsive-field"><span>Fechamento</span><input type="number" class="inputPadrao hub-card-fech" value="${cartao.fechamento || 1}" min="1" max="31" title="Fechamento"></label>
+                <label class="app-responsive-field"><span>Vencimento</span><input type="number" class="inputPadrao hub-card-venc" value="${cartao.vencimento || 10}" min="1" max="31" title="Vencimento"></label>
                 <button class="removeItem hub-card-del">${materialIcon("close")}</button>
             `;
             row.querySelector(".hub-card-cor").onchange = (e) => { cartoes[index].color = e.target.value; salvarDadosLocal(); };
@@ -5019,7 +5083,7 @@ if (user) {
     renderContasFixas();
     renderReceitasFixas();
     renderLembretesHome();
-    if (configuracoes.notasVistasVersao !== VERSAO_ATUAL_APP) {
+    if (!notasJaVistasNoNavegador()) {
         window.location.hash = "#notas";
     }
     roteador();
@@ -5249,6 +5313,7 @@ async function roteador() {
         renderAnalise();
     }
     else if (hash === "#notas") {
+        marcarNotasComoVistas();
     }
     else if (hash === "#configuracoes") {
         renderConfiguracoesHub();
@@ -5274,9 +5339,9 @@ window.addEventListener("load", () => {
 
 const btnVoltarInicioNotas = document.getElementById("btnVoltarInicioNotas");
 if (btnVoltarInicioNotas) {
-    btnVoltarInicioNotas.onclick = async () => {
+    btnVoltarInicioNotas.onclick = () => {
+        marcarNotasComoVistas();
         configuracoes.notasVistasVersao = VERSAO_ATUAL_APP;
-        await salvarFirebase();
         window.location.hash = "#resumo";
     };
 }
@@ -5473,8 +5538,7 @@ document.getElementById("headerContasFixas").onclick = () => document.getElement
 document.getElementById("headerReceitasFixas").onclick = () => document.getElementById("moduloReceitasFixas").classList.toggle("collapsed");
 document.getElementById("showSignup").onclick = (e) => { e.preventDefault(); document.getElementById("loginActions").style.display = "none"; document.getElementById("signupActions").style.display = "block"; };
 document.getElementById("showLogin").onclick = (e) => { e.preventDefault(); document.getElementById("signupActions").style.display = "none"; document.getElementById("loginActions").style.display = "block"; };
-document.getElementById("btnFecharParcelaCartao").onclick = () => document.getElementById("modalParcelaCartao").style.display = "none";
-document.getElementById("btnIrCalendario").onclick = () => window.location.hash = "#calendario";
+document.getElementById("btnFecharParcelaCartao").onclick = () => fecharModalNoFluxoNovo("modalParcelaCartao");
 
 // Comentario removido por encoding corrompido.
 function atualizarSeletorAnos() {
