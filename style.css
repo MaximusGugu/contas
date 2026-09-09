@@ -1736,6 +1736,26 @@ input.conta { border-left: 5px solid #2ecc71 !important; color: #27ae60; }
     z-index: 5000 !important;
 }
 
+.modal-overlay {
+    height: 100dvh;
+    padding: 16px;
+    box-sizing: border-box;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+}
+
+.modal-overlay .modal-content {
+    box-sizing: border-box;
+    min-height: 0;
+    max-height: calc(100dvh - 32px);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+}
+
+.modal-overlay .modal-content > * {
+    flex-shrink: 0;
+}
+
 /* GASTOS DETALHADOS */
 .resumo-gastos-superior { display: flex; flex-direction: column; gap: 5px; margin-bottom: 20px; }
 .barra-resumo { display: flex; justify-content: space-between; padding: 12px 15px; color: white; font-weight: bold; border-radius: 8px; }
@@ -2952,8 +2972,8 @@ input.conta:focus {
   padding: 14px 15px;
   border-left: 2px solid var(--P04);
   border-radius: 6px;
-  background: var(--home-soft-card-bg, rgba(0, 0, 0, 0.18));
-  box-shadow: var(--home-soft-card-darken, none);
+  background: var(--P06);
+  box-shadow: none;
 }
 
 .analise-metric-card small,
@@ -2965,9 +2985,26 @@ input.conta:focus {
 }
 
 .analise-metric-card strong {
-  color: var(--P04);
-  font-size: clamp(18px, 1.5vw, 24px);
+  color: var(--P01);
+  font-size: 22px;
+  overflow-wrap: anywhere;
   line-height: 1.05;
+}
+
+#appShell :is(.analise-dashboard-area, .analise-filter-card) .app-card-header {
+  min-height: 45px;
+  padding: 10px 15px;
+  flex: 0 0 auto;
+}
+
+#appShell :is(.analise-dashboard-area, .analise-filter-card) .app-card-header h3 {
+  margin: 0;
+  font-size: 16px;
+  line-height: 24px;
+}
+
+.analise-dashboard-area > * {
+  flex-shrink: 0;
 }
 
 .analise-chart-grid,
@@ -4375,6 +4412,11 @@ input.home-row-value {
 .balanco-rapido-metricas > .metric-card-total-mes small,
 .balanco-rapido-metricas > .metric-card-total-mes strong {
   color: var(--P07);
+}
+
+body.theme-noite .balanco-rapido-metricas > .metric-card-total-mes small,
+body.theme-noite .balanco-rapido-metricas > .metric-card-total-mes strong {
+  color: var(--P01) !important;
 }
 
 .balanco-rapido-metricas small,
@@ -6577,6 +6619,7 @@ body.pwa-standalone {
 .gastos-row-mobile-actions,
 .mobile-card-toggle,
 .app-mobile-calendar-action,
+.app-mobile-expense-action,
 .app-mobile-tools,
 .calendar-mobile-days,
 .calendar-mobile-agenda,
@@ -6787,6 +6830,31 @@ body.theme-grayscale #appShell .home-finance-row.is-checked,
 body.theme-grayscale #appShell .item-lembrete-home.is-past,
 body.theme-grayscale #appShell .ultima-entrada.is-muted {
   opacity: 0.84;
+}
+
+/* Keep the desktop expense total away from the card edge. */
+body.route-resumo #appShell #moduloDespesaRapida .quick-expense-body {
+  padding-bottom: 24px !important;
+}
+
+body.route-resumo #appShell #moduloDespesaRapida .quick-expense-body > .home-total-row {
+  margin-bottom: 8px;
+}
+
+body.route-resumo #appShell #moduloDespesaRapida > .mesBody {
+  padding-bottom: 24px !important;
+}
+
+@media (min-width: 901px) {
+  body[class*="route-"] #appContainer > .container-central {
+    width: calc(100% - 48px);
+    max-width: none;
+  }
+
+  #appShell .app-mobile-expense-action,
+  #appShell .app-mobile-calendar-action {
+    display: none !important;
+  }
 }
 
 @media (max-width: 900px) {

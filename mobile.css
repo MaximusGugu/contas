@@ -61,7 +61,7 @@ body[class*="theme-"] #appShell .app-greeting {
 #appShellEmail { overflow-wrap: anywhere; font-size: 13px; }
 #appShellSettingsBtn { width: 100%; }
 #appShell .app-bottom-nav {
-  display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); flex: 0 0 auto; z-index: 10;
+  display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); flex: 0 0 auto; z-index: 10;
   padding: 5px max(8px, env(safe-area-inset-right)) calc(5px + env(safe-area-inset-bottom)) max(8px, env(safe-area-inset-left));
   border-top: 1px solid color-mix(in srgb, var(--P01) 18%, transparent); background: var(--P06);
 }

@@ -1,8 +1,8 @@
-const CACHE_VERSION = "contas-pwa-v7-mobile";
+const CACHE_VERSION = "contas-pwa-4.3.1";
 const STATIC_CACHE = `${CACHE_VERSION}-static`;
 const RUNTIME_CACHE = `${CACHE_VERSION}-runtime`;
 const OFFLINE_URL = "offline.html";
-const APP_ASSET_VERSION = "4.3.0";
+const APP_ASSET_VERSION = "4.3.1";
 
 const APP_SHELL_ASSETS = [
   "./",
@@ -35,13 +35,13 @@ const APP_SHELL_ASSETS = [
   "img/bg-site-doce.webp",
   "img/bg-site-dark.webp",
   "img/bg-site-ceu.webp",
-  "assets/icons/app-icon.svg",
-  "assets/icons/favicon.svg",
+  "assets/icons/app-icon.svg?v=2",
+  "assets/icons/favicon.svg?v=2",
   "assets/icons/loading-logo.svg",
-  "assets/icons/icon-192.png",
-  "assets/icons/icon-512.png",
-  "assets/icons/icon-maskable-192.png",
-  "assets/icons/icon-maskable-512.png"
+  "assets/icons/icon-192.png?v=2",
+  "assets/icons/icon-512.png?v=2",
+  "assets/icons/icon-maskable-192.png?v=2",
+  "assets/icons/icon-maskable-512.png?v=2"
 ];
 
 const STATIC_HOSTS = new Set([

@@ -1,8 +1,9 @@
 import { createServer } from "node:http";
 import { createReadStream, existsSync, statSync } from "node:fs";
 import { extname, join, normalize } from "node:path";
+import { fileURLToPath } from "node:url";
 
-const root = process.cwd();
+const root = fileURLToPath(new URL("../", import.meta.url));
 const port = Number(process.env.PORT || 8000);
 const host = process.env.HOST || "localhost";
 
@@ -31,4 +32,5 @@ createServer((req, res) => {
   createReadStream(filePath).pipe(res);
 }).listen(port, host, () => {
   console.log(`http://${host}:${port}/`);
+  console.log(`Serving: ${root}`);
 });

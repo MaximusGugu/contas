@@ -56,7 +56,7 @@ let chartAnaliseComposicao = null;
 let pwaInstallPrompt = null;
 let pwaRecarregandoAposUpdate = false;
 
-const VERSAO_ATUAL_APP = "4.3.0";
+const VERSAO_ATUAL_APP = "4.3.1";
 const NOTAS_VISTAS_KEY = "contas:notas-vistas";
 let notasVistasNestaSessao = false;
 
@@ -877,8 +877,8 @@ function renderMenuLateral(activeHash = "#resumo") {
     const itens = [
         ["#resumo", "sideNavResumo", "Dashboard"],
         ["#gastos", "sideNavGastos", "Gastos"],
-        ["#calendario", "sideNavCalendario", "Calend&aacute;rio"]
-        // ["#analise", "sideNavAnalise", "An&aacute;lise"]
+        ["#calendario", "sideNavCalendario", "Calend&aacute;rio"],
+        ["#analise", "sideNavAnalise", "An&aacute;lise"]
     ];
     return `
         <nav class="home-side-nav" aria-label="Navega&ccedil;&atilde;o principal">
@@ -1796,26 +1796,6 @@ function renderAnalise() {
                 ${renderAnaliseChartCard("Entradas vs despesas", "analiseChartFluxo", "wide")}
                 ${renderAnaliseChartCard("Composicao das despesas", "analiseChartComposicao", "wide")}
             </div>
-            <div class="analise-list-grid">
-                ${renderAnaliseLista("Top categorias", agregacao.categorias.slice(0, 5), item => item.nome, item => item.valor)}
-                ${renderAnaliseLista("Top cartoes", agregacao.cartoes.slice(0, 5), item => item.nome, item => item.valor)}
-                ${renderAnaliseLista("Maiores gastos", agregacao.maioresGastos, item => `${item.nome} - ${formatarDataCompactaGasto(item.data)}`, item => item.valor)}
-                ${renderAnaliseLista("Parcelas futuras", agregacao.parcelasFuturas, item => item.label, item => item.valor)}
-                ${renderAnaliseLista("Fixas mais pesadas", agregacao.fixasPesadas, item => item.nome, item => item.valor)}
-                ${renderAnaliseLista("Caixinhas", agregacao.caixinhas, item => `${item.nome} (${item.movimentacoes})`, item => item.saldo)}
-            </div>
-            <div class="analise-projecao">
-                <div class="app-card-header despHeader"><h3>Proximos meses</h3></div>
-                <div class="analise-projecao-grid">
-                    ${agregacao.previsoes.map(item => renderAnaliseMetrica(item.label, item.valor)).join("")}
-                </div>
-            </div>
-            <div class="analise-insights">
-                <div class="app-card-header despHeader"><h3>Insights automaticos</h3></div>
-                <div class="analise-insight-list">
-                    ${agregacao.insights.length ? agregacao.insights.map(texto => `<div class="analise-insight-card">${escapeHtml(texto)}</div>`).join("") : `<div class="home-empty-row">Sem dados suficientes para gerar insights.</div>`}
-                </div>
-            </div>
         </div>
     `;
 
@@ -2183,20 +2163,20 @@ function renderBalancoRapido() {
 
 function popularControlesDespesaRapida() {
     const selCategoria = document.getElementById("quickDespCategoria");
-    const selCartao = document.getElementById("quickDespCartao");
     const destino = document.getElementById("quickDespDestino");
     const boxParcelamento = document.getElementById("quickDespParcelamento");
     const selParcelar = document.getElementById("quickDespParcelar");
     const qtdParcelas = document.getElementById("quickDespQtdParcelas");
     const categoriaAtual = selCategoria?.value || "";
-    const cartaoAtual = selCartao?.value || "";
+    const destinoAtual = destino?.value || "dinheiro";
     if (selCategoria) popularSelectCategorias(selCategoria, categoriaAtual);
-    if (selCartao) {
-        selCartao.innerHTML = cartoes.map(c => `<option value="${c.id}" ${String(cartaoAtual) === String(c.id) ? "selected" : ""}>${c.nome}</option>`).join("");
+    if (destino) {
+        destino.replaceChildren(new Option("Dinheiro", "dinheiro"),
+            ...cartoes.map(c => new Option(c.nome, `cartao:${c.id}`)));
+        destino.value = [...destino.options].some(op => op.value === destinoAtual) ? destinoAtual : "dinheiro";
     }
-    const usandoCartao = destino?.value === "cartao";
+    const usandoCartao = destino?.value.startsWith("cartao:");
     const parcelando = selParcelar?.type === "checkbox" ? selParcelar.checked : selParcelar?.value === "sim";
-    if (destino && selCartao) selCartao.style.display = usandoCartao ? "block" : "none";
     if (boxParcelamento) boxParcelamento.style.display = usandoCartao ? "grid" : "none";
     if (qtdParcelas && selParcelar) qtdParcelas.style.display = usandoCartao && parcelando ? "block" : "none";
     if (selParcelar) selParcelar.onchange = popularControlesDespesaRapida;
@@ -5118,7 +5098,7 @@ if (btnDespesaRapida) {
         const valorEl = document.getElementById("quickDespValor");
         const categoriaEl = document.getElementById("quickDespCategoria");
         const destinoEl = document.getElementById("quickDespDestino");
-        const cartaoEl = document.getElementById("quickDespCartao");
+        const cartaoId = destinoEl?.value.startsWith("cartao:") ? destinoEl.value.slice(7) : null;
         const parcelarEl = document.getElementById("quickDespParcelar");
         const qtdParcelasEl = document.getElementById("quickDespQtdParcelas");
         const nome = nomeEl?.value.trim();
@@ -5133,8 +5113,8 @@ if (btnDespesaRapida) {
         const criadoEm = Date.now();
         const dataCriacao = isoHoje();
         const diaCompra = parseIsoData(dataCriacao)?.getDate() || new Date().getDate();
-        if (destinoEl?.value === "cartao") {
-            if (!cartaoEl?.value) {
+        if (cartaoId !== null) {
+            if (!cartoes.some(c => String(c.id) === cartaoId)) {
                 alert("Selecione um cartao.");
                 return;
             }
@@ -5159,7 +5139,7 @@ if (btnDespesaRapida) {
                         nome: `${nome} (${i}/${qtdParcelas})`,
                         valor: valorParcela,
                         categoria: categoriaEl?.value || "Essencial",
-                        cartaoId: cartaoEl.value,
+                        cartaoId,
                         parcelaId,
                         checked: true
                     });
@@ -5178,7 +5158,7 @@ if (btnDespesaRapida) {
                     nome,
                     valor,
                     categoria: categoriaEl?.value || "Essencial",
-                    cartaoId: cartaoEl.value,
+                    cartaoId,
                     mes: mesAt,
                     checked: true
                 });
@@ -5384,7 +5364,12 @@ document.getElementById("btnSalvarSenha").onclick = async () => {
 };
 // Comentario removido por encoding corrompido.
 
-document.getElementById("loginBtn").onclick = async () => {
+document.getElementById("authForm").onsubmit = async (event) => {
+    event.preventDefault();
+    if (document.getElementById("signupActions").style.display !== "none") {
+        document.getElementById("cadastroBtn").click();
+        return;
+    }
     const e = document.getElementById("email").value;
     const s = document.getElementById("senha").value;
     senhaDoUsuario = s;
@@ -5536,8 +5521,8 @@ const btnSalvarNuvemFloating = document.getElementById("salvarNuvemBtnFloating")
 if (btnSalvarNuvemFloating) btnSalvarNuvemFloating.onclick = salvarFirebase;
 document.getElementById("headerContasFixas").onclick = () => document.getElementById("moduloContasFixas").classList.toggle("collapsed");
 document.getElementById("headerReceitasFixas").onclick = () => document.getElementById("moduloReceitasFixas").classList.toggle("collapsed");
-document.getElementById("showSignup").onclick = (e) => { e.preventDefault(); document.getElementById("loginActions").style.display = "none"; document.getElementById("signupActions").style.display = "block"; };
-document.getElementById("showLogin").onclick = (e) => { e.preventDefault(); document.getElementById("signupActions").style.display = "none"; document.getElementById("loginActions").style.display = "block"; };
+document.getElementById("showSignup").onclick = (e) => { e.preventDefault(); document.getElementById("loginActions").style.display = "none"; document.getElementById("signupActions").style.display = "block"; document.getElementById("senha").autocomplete = "new-password"; };
+document.getElementById("showLogin").onclick = (e) => { e.preventDefault(); document.getElementById("signupActions").style.display = "none"; document.getElementById("loginActions").style.display = "block"; document.getElementById("senha").autocomplete = "current-password"; };
 document.getElementById("btnFecharParcelaCartao").onclick = () => fecharModalNoFluxoNovo("modalParcelaCartao");
 
 // Comentario removido por encoding corrompido.

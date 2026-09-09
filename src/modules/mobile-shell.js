@@ -35,6 +35,7 @@ export function sincronizarMobileShell(shell, hash) {
                 <a href="#resumo">${icon("home")}<span>In\u00edcio</span></a>
                 <a href="#gastos">${icon("receipt_long")}<span>Gastos</span></a>
                 <a href="#calendario">${icon("calendar_month")}<span>Calend\u00e1rio</span></a>
+                <a href="#analise">${icon("bar_chart")}<span>An&aacute;lise</span></a>
                 <a href="#configuracoes">${icon("settings")}<span>Ajustes</span></a>
             </nav>`);
         const toolbar = document.createElement("div");
