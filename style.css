@@ -3305,6 +3305,24 @@ input.conta:focus {
   margin: 10px 0 14px;
 }
 
+/* Configuração de lembretes da Home: leitura mais compacta entre seções. */
+.modal-exibicao-home {
+  gap: 8px;
+}
+
+.modal-exibicao-home h3 {
+  margin-bottom: 10px;
+}
+
+.modal-exibicao-home h4 {
+  margin: 4px 0 0;
+  font-size: 14px;
+}
+
+.modal-exibicao-home .config-exibicao-grid {
+  margin: 4px 0 8px;
+}
+
 .recorrencia-opcoes {
   flex-direction: column;
   gap: 8px;
@@ -6832,17 +6850,12 @@ body.theme-grayscale #appShell .ultima-entrada.is-muted {
   opacity: 0.84;
 }
 
-/* Keep the desktop expense total away from the card edge. */
-body.route-resumo #appShell #moduloDespesaRapida .quick-expense-body {
-  padding-bottom: 24px !important;
-}
-
-body.route-resumo #appShell #moduloDespesaRapida .quick-expense-body > .home-total-row {
-  margin-bottom: 8px;
-}
-
-body.route-resumo #appShell #moduloDespesaRapida > .mesBody {
-  padding-bottom: 24px !important;
+/* Os totais dos dois cards usam o mesmo espaçamento do rodapé. */
+@media (min-width: 901px) {
+  .figma-home-active #moduloDespesaRapida .home-total-row,
+  .figma-home-active #moduloEntradasHome .home-total-row {
+    margin-bottom: 0 !important;
+  }
 }
 
 @media (min-width: 901px) {

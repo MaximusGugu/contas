@@ -2452,7 +2452,7 @@ function abrirModalExibicao(escopo, modo = "editar") {
     ];
     const periodoHome = normalizarPeriodoHome(cfg.periodo);
     overlay.innerHTML = `
-        <div class="modal-content" style="max-width:520px;">
+        <div class="modal-content modal-exibicao-eventos ${editandoCalendario ? "modal-exibicao-calendario" : "modal-exibicao-home"}" style="max-width:520px;">
             <h3>${titulo}</h3>
             ${editandoCalendario ? `
                 <div class="config-view-identity">
@@ -3315,10 +3315,10 @@ function criarMesDOM(ano, index, data) {
           const dataCriacao = isoHoje();
           const diaCriacao = parseIsoData(dataCriacao)?.getDate() || new Date().getDate();
           if (cardId !== "") {
-              // Comentario removido por encoding corrompido.
-              const dataObj = parseIsoData(dataCriacao);
-              const anoDestino = dataObj?.getFullYear() || Number(ano);
-              const mesDestino = dataObj?.getMonth() ?? index;
+              const referenciaFatura = resolverFaturaCartaoPorData(cardId, dataCriacao);
+              const anoDestino = referenciaFatura.ano;
+              const mesDestino = referenciaFatura.mes;
+              garantirMesDados(anoDestino, mesDestino);
               if(!gastosDetalhes[anoDestino]) gastosDetalhes[anoDestino] = [];
               gastosDetalhes[anoDestino].push({
                   id: criadoEm + "-" + Math.random().toString(36).slice(2, 8),
@@ -3660,6 +3660,23 @@ function getCartaoById(id) {
     return cartoes.find(c => String(c.id) === String(id));
 }
 
+function resolverFaturaCartaoPorData(cartaoId, dataCompra = isoHoje()) {
+    const data = parseIsoData(dataCompra) || new Date();
+    const cartao = getCartaoById(cartaoId);
+    const fechamento = Math.max(1, Math.min(31, Number(cartao?.fechamento) || 1));
+    const referencia = new Date(data.getFullYear(), data.getMonth(), 1);
+
+    // Compras no fechamento ou depois dele pertencem à próxima fatura.
+    if (data.getDate() >= fechamento) referencia.setMonth(referencia.getMonth() + 1);
+
+    return {
+        ano: referencia.getFullYear(),
+        mes: referencia.getMonth(),
+        dia: data.getDate(),
+        data: dataCompra
+    };
+}
+
 function gastoCartaoContaNoTotal(gasto) {
     return gasto?.checked !== false;
 }
@@ -3975,22 +3992,26 @@ function abrirModalGastoDetalhado(mes, ano) {
         const nome = overlay.querySelector("#gdNomeRapido").value.trim();
         const valor = parseValor(overlay.querySelector("#gdValorRapido").value);
         if (!nome || valor <= 0) return alert("Preencha corretamente.");
-        if (!gastosDetalhes[ano]) gastosDetalhes[ano] = [];
         const criadoEm = Date.now();
-        gastosDetalhes[ano].push({
+        const dataCriacao = isoHoje();
+        const cartaoId = overlay.querySelector("#gdCartaoRapido").value;
+        const referenciaFatura = resolverFaturaCartaoPorData(cartaoId, dataCriacao);
+        garantirMesDados(referenciaFatura.ano, referenciaFatura.mes);
+        if (!gastosDetalhes[referenciaFatura.ano]) gastosDetalhes[referenciaFatura.ano] = [];
+        gastosDetalhes[referenciaFatura.ano].push({
             id: `${criadoEm}-${Math.random().toString(36).slice(2, 8)}`,
             criadoEm,
-            data: isoDataMes(ano, mes, new Date().getDate()),
-            dia: parseIsoData(isoDataMes(ano, mes, new Date().getDate()))?.getDate() || 1,
-            mes,
+            data: dataCriacao,
+            dia: referenciaFatura.dia,
+            mes: referenciaFatura.mes,
             nome,
             valor,
             categoria: overlay.querySelector("#gdCategoriaRapida").value,
-            cartaoId: overlay.querySelector("#gdCartaoRapido").value,
+            cartaoId,
             checked: true
         });
         overlay.remove();
-        await salvarERenderizarGastos(ano);
+        await salvarERenderizarGastos(referenciaFatura.ano);
     };
 }
 
@@ -4264,18 +4285,21 @@ document.getElementById("btnSalvarParcelaCartao").onclick = async () => {
 
     const pId = Date.now();
     const valP = Number((total / qtd).toFixed(2));
-    let mesC = contextParcelaCartao.mes;
-    let anoC = contextParcelaCartao.ano;
-    const diaCompra = new Date().getDate();
+    const dataCompra = isoHoje();
+    const referenciaFatura = resolverFaturaCartaoPorData(cartaoId, dataCompra);
+    let mesC = referenciaFatura.mes;
+    let anoC = referenciaFatura.ano;
+    const diaCompra = referenciaFatura.dia;
     const parcelasAdicionadas = [];
 
     for(let i = 1; i <= qtd; i++) {
+        garantirMesDados(anoC, mesC);
         if(!gastosDetalhes[anoC]) gastosDetalhes[anoC] = [];
 
         const parcela = {
             id: `${pId}-${i}`,
             criadoEm: pId + i,
-            data: isoDataMes(anoC, mesC, diaCompra),
+            data: i === 1 ? dataCompra : isoDataMes(anoC, mesC, diaCompra),
             mes: mesC,
             nome: `${nome} (${i}/${qtd})`,
             valor: valP,
@@ -4293,7 +4317,7 @@ document.getElementById("btnSalvarParcelaCartao").onclick = async () => {
 
     btnSalvar.disabled = true;
     btnSalvar.innerText = "Salvando...";
-    const salvou = await salvarERenderizarGastos(contextParcelaCartao.ano);
+    const salvou = await salvarERenderizarGastos(referenciaFatura.ano);
     if (!salvou) {
         parcelasAdicionadas.forEach(({ ano, parcela }) => {
             gastosDetalhes[ano] = (gastosDetalhes[ano] || []).filter(item => item !== parcela);
@@ -5108,8 +5132,6 @@ if (btnDespesaRapida) {
             return;
         }
         const { mesAt, anoAt } = document.querySelector(".home-figma-shell") ? getMesHomeAtivo() : getMesReferenciaAtivo();
-        if (!dados[anoAt]) dados[anoAt] = { meses: [] };
-        while (dados[anoAt].meses.length <= mesAt) dados[anoAt].meses.push({ despesas: [], empresa: [], cartoesPagos: {}, fixasDesativadas: {}, receitasDesativadas: {}, fixasEditadas: {} });
         const criadoEm = Date.now();
         const dataCriacao = isoHoje();
         const diaCompra = parseIsoData(dataCriacao)?.getDate() || new Date().getDate();
@@ -5118,6 +5140,7 @@ if (btnDespesaRapida) {
                 alert("Selecione um cartao.");
                 return;
             }
+            const referenciaFatura = resolverFaturaCartaoPorData(cartaoId, dataCriacao);
             const parcelar = parcelarEl?.type === "checkbox" ? parcelarEl.checked : parcelarEl?.value === "sim";
             const qtdParcelas = parseInt(qtdParcelasEl?.value || "1", 10);
             if (parcelar && (!qtdParcelas || qtdParcelas < 2)) {
@@ -5127,14 +5150,15 @@ if (btnDespesaRapida) {
             if (parcelar) {
                 const parcelaId = criadoEm;
                 const valorParcela = Number((valor / qtdParcelas).toFixed(2));
-                let mesParcela = mesAt;
-                let anoParcela = anoAt;
+                let mesParcela = referenciaFatura.mes;
+                let anoParcela = referenciaFatura.ano;
                 for (let i = 1; i <= qtdParcelas; i++) {
+                    garantirMesDados(anoParcela, mesParcela);
                     if (!gastosDetalhes[anoParcela]) gastosDetalhes[anoParcela] = [];
                     gastosDetalhes[anoParcela].push({
                         id: `${parcelaId}-${i}`,
                         criadoEm: criadoEm + i,
-                        data: isoDataMes(anoParcela, mesParcela, diaCompra),
+                        data: i === 1 ? dataCriacao : isoDataMes(anoParcela, mesParcela, diaCompra),
                         mes: mesParcela,
                         nome: `${nome} (${i}/${qtdParcelas})`,
                         valor: valorParcela,
@@ -5150,8 +5174,9 @@ if (btnDespesaRapida) {
                     }
                 }
             } else {
-                if (!gastosDetalhes[anoAt]) gastosDetalhes[anoAt] = [];
-                gastosDetalhes[anoAt].push({
+                garantirMesDados(referenciaFatura.ano, referenciaFatura.mes);
+                if (!gastosDetalhes[referenciaFatura.ano]) gastosDetalhes[referenciaFatura.ano] = [];
+                gastosDetalhes[referenciaFatura.ano].push({
                     id: criadoEm,
                     criadoEm,
                     data: dataCriacao,
@@ -5159,11 +5184,13 @@ if (btnDespesaRapida) {
                     valor,
                     categoria: categoriaEl?.value || "Essencial",
                     cartaoId,
-                    mes: mesAt,
+                    mes: referenciaFatura.mes,
                     checked: true
                 });
             }
         } else {
+            if (!dados[anoAt]) dados[anoAt] = { meses: [] };
+            while (dados[anoAt].meses.length <= mesAt) dados[anoAt].meses.push({ despesas: [], empresa: [], cartoesPagos: {}, fixasDesativadas: {}, receitasDesativadas: {}, fixasEditadas: {} });
             dados[anoAt].meses[mesAt].despesas.push({
                 id: criadoEm,
                 criadoEm,
