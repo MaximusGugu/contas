@@ -171,6 +171,7 @@ body.route-resumo #appShell :is(.entradas-home-body, .quick-expense-body, #modul
 #appShell .gastos-row-editor[hidden] { display: none; }
 #appShell .gastos-row-editor > :is(.gastos-row-name, .gastos-row-category, .gastos-row-date, .gastos-row-card, .gastos-row-value) { grid-column: 2; }
 #appShell .gastos-row-editor-check { grid-column: 1; grid-row: 1; }
+#appShell .gastos-row-invoice-field { grid-column: 2; flex-direction: column; align-items: stretch; }
 #appShell .gastos-row-editor > .gastos-row-delete { grid-column: 3; grid-row: 1; }
 #appShell .gastos-row-delete { width: 44px; height: 44px; }
 #appShell .gastos-row-mobile-actions { grid-column: 1 / -1; display: flex; gap: 8px; }

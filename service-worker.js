@@ -1,8 +1,8 @@
-const CACHE_VERSION = "contas-pwa-4.3.1-r2";
+const CACHE_VERSION = "contas-pwa-4.3.1-r3";
 const STATIC_CACHE = `${CACHE_VERSION}-static`;
 const RUNTIME_CACHE = `${CACHE_VERSION}-runtime`;
 const OFFLINE_URL = "offline.html";
-const APP_ASSET_VERSION = "4.3.1-r2";
+const APP_ASSET_VERSION = "4.3.1-r3";
 
 const APP_SHELL_ASSETS = [
   "./",

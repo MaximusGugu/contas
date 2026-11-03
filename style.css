@@ -3839,6 +3839,23 @@ input.conta:focus {
   display: none;
 }
 
+.gastos-row-invoice-field {
+  grid-column: 2 / -2;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  font-size: 12px;
+}
+
+.gastos-invoice-modal-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  font-size: 12px;
+}
+
 .gastos-work-row.is-expanded .gastos-row-compact {
   display: none;
 }

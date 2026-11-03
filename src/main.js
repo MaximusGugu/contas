@@ -3781,9 +3781,29 @@ function despesaPassaFiltrosGastos(item, filtros) {
     return true;
 }
 
+function opcoesFaturaGasto(ano, mes) {
+    const anos = [Number(ano), new Date().getFullYear(), ...Object.keys(dados).map(Number), ...Object.keys(gastosDetalhes).map(Number)]
+        .filter(Number.isInteger);
+    const inicio = Math.min(...anos) - 1;
+    const fim = Math.max(...anos) + 1;
+    const opcoes = [];
+    for (let a = inicio; a <= fim; a++) {
+        nomesMesesFull.forEach((nome, m) => {
+            opcoes.push(`<option value="${a}-${String(m + 1).padStart(2, "0")}" ${a === Number(ano) && m === Number(mes) ? "selected" : ""}>${nome} / ${a}</option>`);
+        });
+    }
+    return opcoes.join("");
+}
+
+function lerFaturaGasto(valor) {
+    const match = /^(\d{4})-(0[1-9]|1[0-2])$/.exec(String(valor || ""));
+    return match ? { ano: Number(match[1]), mes: Number(match[2]) - 1 } : null;
+}
+
 function moverGastoParaFatura(gasto, anoOrigem, novoMes, novoAno = anoOrigem) {
     const anoO = String(anoOrigem);
     const anoD = String(novoAno);
+    garantirMesDados(Number(novoAno), Number(novoMes));
     gasto.mes = Number(novoMes);
     if (anoO !== anoD) {
         gastosDetalhes[anoO] = (gastosDetalhes[anoO] || []).filter(item => item !== gasto);
@@ -3841,6 +3861,7 @@ function renderGastosLinha(item, contexto) {
             </select>
             <input class="gastos-row-value input-tabela-edit" value="${formatar(item.valor || 0)}">
             <button class="removeItem gastos-row-delete ${item.tipo === "fixa" ? "gastos-row-settings" : ""}" type="button" title="${item.tipo === "fixa" ? "Configurar despesas fixas" : "Excluir gasto"}" aria-label="${item.tipo === "fixa" ? "Configurar despesas fixas" : "Excluir gasto"}">${materialIcon(item.tipo === "fixa" ? "settings" : "close")}</button>
+            ${item.tipo === "manual" ? `<label class="gastos-row-invoice-field">Fatura<select class="gastos-row-invoice input-tabela-edit">${opcoesFaturaGasto(contexto.ano, item.ref.mes)}</select></label>` : ""}
         </div>
     `;
 
@@ -3852,6 +3873,7 @@ function renderGastosLinha(item, contexto) {
     const data = row.querySelector(".gastos-row-date");
     const card = row.querySelector(".gastos-row-card");
     const valor = row.querySelector(".gastos-row-value");
+    const fatura = row.querySelector(".gastos-row-invoice");
     const deletes = row.querySelectorAll(".gastos-row-delete");
     const mobileActions = document.createElement("div");
     mobileActions.className = "gastos-row-mobile-actions";
@@ -3876,6 +3898,8 @@ function renderGastosLinha(item, contexto) {
 
     const salvarEdicao = async () => {
         if (row.dataset.cancelada === "true" || row.dataset.salvando === "true") return;
+        const destinoFatura = fatura ? lerFaturaGasto(fatura.value) : null;
+        if (fatura && !destinoFatura) return;
         row.dataset.salvando = "true";
         if (item.tipo !== "fixa") {
             item.ref.nome = nome.value.trim() || item.ref.nome;
@@ -3892,6 +3916,7 @@ function renderGastosLinha(item, contexto) {
             if (item.tipo === "manual") {
                 item.ref.data = data.value;
                 item.ref.dia = parseIsoData(data.value)?.getDate() || item.ref.dia;
+                moverGastoParaFatura(item.ref, contexto.ano, destinoFatura.mes, destinoFatura.ano);
             } else {
                 moverDespesaMensalParaData(item.ref, contexto.ano, contexto.mes, data.value);
             }
@@ -3968,6 +3993,8 @@ function abrirModalGastoDetalhado(mes, ano) {
     const cartaoPadrao = filtrosGastosDetalhados.cartao !== "todos" && filtrosGastosDetalhados.cartao !== "agrupados"
         ? filtrosGastosDetalhados.cartao
         : (cartoes[0]?.id || "");
+    const dataInicial = isoHoje();
+    const faturaInicial = resolverFaturaCartaoPorData(cartaoPadrao, dataInicial);
     const overlay = document.createElement("div");
     overlay.id = "modalGastoDetalhadoRapido";
     overlay.className = "modal-overlay";
@@ -3978,6 +4005,8 @@ function abrirModalGastoDetalhado(mes, ano) {
             <input id="gdValorRapido" class="inputPadrao" placeholder="Valor">
             <select id="gdCategoriaRapida" class="inputPadrao">${categorias.map(c => `<option value="${c.name}">${c.name}</option>`).join("")}</select>
             <select id="gdCartaoRapido" class="inputPadrao">${cartoes.map(c => `<option value="${c.id}" ${String(c.id) === String(cartaoPadrao) ? "selected" : ""}>${escapeHtml(c.nome)}</option>`).join("")}</select>
+            <label class="gastos-invoice-modal-field">Data da compra<input type="date" id="gdDataRapida" class="inputPadrao" value="${dataInicial}" required></label>
+            <label class="gastos-invoice-modal-field">Fatura<select id="gdFaturaRapida" class="inputPadrao">${opcoesFaturaGasto(faturaInicial.ano, faturaInicial.mes)}</select></label>
             <div class="modal-actions">
                 <button class="btn" id="gdSalvarRapido">Salvar</button>
                 <button class="btn sair" id="gdFecharRapido">Fechar</button>
@@ -3986,6 +4015,18 @@ function abrirModalGastoDetalhado(mes, ano) {
     `;
     document.body.appendChild(overlay);
     popularSelectCategorias(overlay.querySelector("#gdCategoriaRapida"));
+    const dataInput = overlay.querySelector("#gdDataRapida");
+    const faturaInput = overlay.querySelector("#gdFaturaRapida");
+    const cartaoInput = overlay.querySelector("#gdCartaoRapido");
+    let faturaEscolhida = false;
+    faturaInput.onchange = () => { faturaEscolhida = true; };
+    const sugerirFatura = () => {
+        if (faturaEscolhida || !dataInput.value || !dataInput.validity.valid) return;
+        const ref = resolverFaturaCartaoPorData(cartaoInput.value, dataInput.value);
+        faturaInput.innerHTML = opcoesFaturaGasto(ref.ano, ref.mes);
+    };
+    dataInput.onchange = sugerirFatura;
+    cartaoInput.onchange = sugerirFatura;
     overlay.querySelector("#gdFecharRapido").onclick = () => overlay.remove();
     overlay.onclick = (e) => { if (e.target === overlay) overlay.remove(); };
     overlay.querySelector("#gdSalvarRapido").onclick = async () => {
@@ -3993,16 +4034,19 @@ function abrirModalGastoDetalhado(mes, ano) {
         const valor = parseValor(overlay.querySelector("#gdValorRapido").value);
         if (!nome || valor <= 0) return alert("Preencha corretamente.");
         const criadoEm = Date.now();
-        const dataCriacao = isoHoje();
-        const cartaoId = overlay.querySelector("#gdCartaoRapido").value;
-        const referenciaFatura = resolverFaturaCartaoPorData(cartaoId, dataCriacao);
+        if (!dataInput.reportValidity()) return;
+        const dataCriacao = dataInput.value;
+        const cartaoId = cartaoInput.value;
+        if (!getCartaoById(cartaoId)) return alert("Selecione um cartao.");
+        const referenciaFatura = lerFaturaGasto(faturaInput.value);
+        if (!referenciaFatura) return;
         garantirMesDados(referenciaFatura.ano, referenciaFatura.mes);
         if (!gastosDetalhes[referenciaFatura.ano]) gastosDetalhes[referenciaFatura.ano] = [];
         gastosDetalhes[referenciaFatura.ano].push({
             id: `${criadoEm}-${Math.random().toString(36).slice(2, 8)}`,
             criadoEm,
             data: dataCriacao,
-            dia: referenciaFatura.dia,
+            dia: parseIsoData(dataCriacao).getDate(),
             mes: referenciaFatura.mes,
             nome,
             valor,
