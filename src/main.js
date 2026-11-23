@@ -8,6 +8,7 @@ import { getMesReferenciaAtivo as calcularMesReferenciaAtivo } from "./utils/dat
 import { renderCalendario, calcularDiaSalarioConfigurado, obterFeriados } from "./modules/calendar.js";
 import { aplicarTema } from "./modules/themes.js";
 import { sincronizarMobileShell } from "./modules/mobile-shell.js";
+import { abrirOnboarding } from "./modules/onboarding.js";
 
 // ================= VARIAVEIS GLOBAIS =================
 let usuarioLogado = null;
@@ -55,6 +56,19 @@ let chartAnaliseFluxo = null;
 let chartAnaliseComposicao = null;
 let pwaInstallPrompt = null;
 let pwaRecarregandoAposUpdate = false;
+let cadastroEmAndamento = false;
+let sessaoInicializadaUid = null;
+const modoDemoOnboarding = ["localhost", "127.0.0.1"].includes(location.hostname)
+    && new URLSearchParams(location.search).get("demo") === "onboarding";
+const DEMO_ONBOARDING_KEY = "contas:demo-onboarding";
+const usuarioDemoOnboarding = { uid: "demo-onboarding", email: "teste@contas.local" };
+
+if (modoDemoOnboarding && new URLSearchParams(location.search).has("reset")) {
+    sessionStorage.removeItem(DEMO_ONBOARDING_KEY);
+    const url = new URL(location.href);
+    url.searchParams.delete("reset");
+    history.replaceState(null, "", url);
+}
 
 const VERSAO_ATUAL_APP = "4.3.1";
 const NOTAS_VISTAS_KEY = "contas:notas-vistas";
@@ -1129,6 +1143,7 @@ function controleAvisoPendente(mostrar) {
 }
 
 function salvarDadosLocal() {
+  if (modoDemoOnboarding) return;
   saveLocalSnapshot({
     financas: dados,
     parcelas: parcelasMemoria,
@@ -1159,12 +1174,12 @@ function atualizarTextoBotoesSalvar(texto) {
 }
 
 async function salvarFirebase() {
-  if (!usuarioLogado || !senhaDoUsuario) return false;
+  if (!usuarioLogado || (!modoDemoOnboarding && !senhaDoUsuario)) return false;
   try {
     normalizarDadosApp();
     atualizarTextoBotoesSalvar("SALVANDO...");
 
-    const pacote = await encryptData({
+    const estado = {
         dados,
         parcelasMemoria,
         lembretes,
@@ -1177,14 +1192,19 @@ async function salvarFirebase() {
         cartoes,
         gastosDetalhes,
         caixinhas
-    }, senhaDoUsuario);
+    };
 
-    await setDoc(doc(db, "financas", usuarioLogado.uid), pacote);
+    if (modoDemoOnboarding) {
+        sessionStorage.setItem(DEMO_ONBOARDING_KEY, JSON.stringify(estado));
+    } else {
+        const pacote = await encryptData(estado, senhaDoUsuario);
+        await setDoc(doc(db, "financas", usuarioLogado.uid), pacote);
+    }
 
     // Comentario removido por encoding corrompido.
     controleAvisoPendente(false);
-    atualizarTextoBotoesSalvar("SALVO NA NUVEM");
-    salvarDadosLocal();
+    atualizarTextoBotoesSalvar(modoDemoOnboarding ? "SALVO NA PRÉVIA" : "SALVO NA NUVEM");
+    if (!modoDemoOnboarding) salvarDadosLocal();
     const btn = { set innerText(valor) { atualizarTextoBotoesSalvar(valor.replace(/^.*SALVAR$/, "SALVAR")); } };
 
     setTimeout(() => { if(btn) btn.innerText = "SALVAR"; }, 2000);
@@ -5068,8 +5088,133 @@ function setAppCarregando(ativo) {
 
 inicializarPwa();
 
-onAuthStateChanged(auth, async (user) => {
+async function salvarEtapaOnboarding(etapa, payload, proxima) {
+    const anterior = structuredClone({ dados, salarioFixoBase, receitasFixas, cartoes, categorias, contasFixas, categoriasLembretes, lembretes, configuracoes });
+    const valor = value => Number(value) || 0;
+    const dia = value => Math.max(1, Math.min(31, Number(value) || 1));
+    const validarLinhas = rows => {
+        if (rows.some(item => !String(item.nome || "").trim())) throw new Error("Informe o nome de todos os itens.");
+    };
+    try {
+        if (payload) {
+            if (etapa === 0) {
+                if (!payload.nomeUsuario.trim()) throw new Error("Informe seu nome.");
+                configuracoes.nomeUsuario = payload.nomeUsuario.trim();
+            }
+            if (etapa === 1) {
+                configuracoes.referenciaMes = payload.referenciaMes;
+                configuracoes.diaVirada = dia(payload.diaVirada);
+            }
+            if (etapa === 2) {
+                salarioFixoBase = valor(payload.salario);
+                configuracoes.diaSalario = dia(payload.diaSalario);
+                configuracoes.tipoDiaSalario = payload.tipoDiaSalario;
+                const atual = new Date();
+                const primeiroMes = garantirMesHome(atual.getFullYear(), atual.getMonth());
+                primeiroMes.salario = salarioFixoBase;
+                primeiroMes.conta = valor(payload.conta);
+                primeiroMes.contaManual = true;
+                const ref = getMesReferenciaAtivo();
+                garantirMesHome(ref.anoAt, ref.mesAt);
+            }
+            if (etapa === 3) {
+                validarLinhas(payload.rows);
+                receitasFixas = payload.rows.map(item => ({ id: item.id || `r${crypto.randomUUID()}`, nome: item.nome.trim(), valor: valor(item.valor), dia: dia(item.dia), ativo: true }));
+            }
+            if (etapa === 4) {
+                validarLinhas(payload.rows);
+                cartoes = payload.rows.map(item => ({ id: item.id || crypto.randomUUID(), nome: item.nome.trim(), color: item.color, tipo: item.tipo, fechamento: dia(item.fechamento), vencimento: dia(item.vencimento) }));
+                contasFixas.forEach(item => {
+                    if (item.cartaoId && !cartoes.some(cartao => String(cartao.id) === String(item.cartaoId))) item.cartaoId = "";
+                });
+            }
+            if (etapa === 5) {
+                validarLinhas(payload.rows);
+                if (!payload.rows.length) throw new Error("Mantenha pelo menos uma categoria.");
+                const names = payload.rows.map(item => item.nome.trim());
+                if (new Set(names.map(name => name.toLowerCase())).size !== names.length) throw new Error("Há categorias com o mesmo nome.");
+                const renamed = new Map(payload.rows.map(item => [categorias.find(cat => cat.name === item.id)?.name, item.nome.trim()]).filter(([from, to]) => from && to && from !== to));
+                contasFixas.forEach(item => { item.categoria = renamed.get(item.categoria) || (names.includes(item.categoria) ? item.categoria : names[0]); });
+                categorias = payload.rows.map(item => ({ name: item.nome.trim(), color: item.color }));
+            }
+            if (etapa === 6 || etapa === 7) {
+                validarLinhas(payload.rows);
+                const tipo = etapa === 6 ? "fixa" : "assinatura";
+                contasFixas = contasFixas.filter(item => (item.tipo || "fixa") !== tipo).concat(payload.rows.map(item => ({ id: item.id || `${tipo === "fixa" ? "f" : "a"}${crypto.randomUUID()}`, nome: item.nome.trim(), valor: valor(item.valor), dia: dia(item.dia), categoria: item.categoria, cartaoId: item.cartaoId || "", ativo: true, tipo })));
+            }
+            if (etapa === 8) {
+                configuracoes.visaoCalendario = payload.visaoCalendario;
+                configuracoes.inicioSemanaCalendario = Number(payload.inicioSemanaCalendario);
+                configuracoes.horaViradaCalendario = Number(payload.horaViradaCalendario);
+                configuracoes.exibicaoHome = { ...configuracoes.exibicaoHome, periodo: { tipo: payload.periodoHome, inicio: "", fim: "" } };
+                const onboarding = configuracoes.onboarding || {};
+                const categoriaNome = payload.categoriaLembrete.trim();
+                if (categoriaNome) {
+                    const existing = categoriasLembretes.find(item => item.id === onboarding.categoriaLembreteId);
+                    if (existing) existing.nome = categoriaNome;
+                    else {
+                        const id = `lem-cat-${crypto.randomUUID()}`;
+                        categoriasLembretes.push({ id, nome: categoriaNome, cor: "#D78341" });
+                        onboarding.categoriaLembreteId = id;
+                    }
+                } else if (onboarding.categoriaLembreteId) {
+                    categoriasLembretes = categoriasLembretes.filter(item => item.id !== onboarding.categoriaLembreteId);
+                    delete onboarding.categoriaLembreteId;
+                }
+                const nomeLembrete = payload.lembreteNome.trim();
+                if (nomeLembrete && !payload.lembreteData) throw new Error("Escolha a data do primeiro lembrete.");
+                if (nomeLembrete) {
+                    const existing = lembretes.find(item => item.id === onboarding.lembreteId);
+                    if (existing) Object.assign(existing, { nome: nomeLembrete, data: payload.lembreteData, hora: payload.lembreteHora, categoriaId: onboarding.categoriaLembreteId || "geral" });
+                    else {
+                        const id = `lembrete-${crypto.randomUUID()}`;
+                        lembretes.push({ id, criadoEm: Date.now(), nome: nomeLembrete, data: payload.lembreteData, hora: payload.lembreteHora, categoriaId: onboarding.categoriaLembreteId || "geral", concluido: false, subtarefas: [], anotacoes: "" });
+                        onboarding.lembreteId = id;
+                    }
+                } else if (onboarding.lembreteId) {
+                    lembretes = lembretes.filter(item => item.id !== onboarding.lembreteId);
+                    delete onboarding.lembreteId;
+                }
+                configuracoes.onboarding = onboarding;
+            }
+            if (etapa === 9) {
+                configuracoes.tema = payload.tema;
+                aplicarTema(configuracoes.tema);
+            }
+        }
+        configuracoes.onboarding = { ...configuracoes.onboarding, step: proxima === "complete" ? 10 : proxima, status: proxima === "complete" ? "complete" : "pending" };
+        if (!await salvarFirebase()) throw new Error("Não foi possível salvar na nuvem. Tente novamente.");
+        if (proxima === "complete") {
+            sessionStorage.removeItem("contas:cadastro-pendente");
+            sessionStorage.removeItem("contas:cadastro-nome");
+        }
+        return true;
+    } catch (error) {
+        ({ dados, salarioFixoBase, receitasFixas, cartoes, categorias, contasFixas, categoriasLembretes, lembretes, configuracoes } = anterior);
+        aplicarTema(configuracoes.tema);
+        throw error;
+    }
+}
+
+function iniciarOnboarding() {
+    abrirOnboarding({
+        getState: () => ({ dados, salarioFixoBase, receitasFixas, cartoes, categorias, contasFixas, categoriasLembretes, lembretes, configuracoes }),
+        commit: salvarEtapaOnboarding,
+        onTheme: aplicarTema,
+        refresh: () => {
+            window.location.hash = "#resumo";
+            atualizarSeletorAnos();
+            carregarAno();
+            renderContasFixas();
+            renderReceitasFixas();
+            roteador();
+        }
+    });
+}
+
+async function iniciarSessaoUsuario(user) {
 if (user) {
+    if (sessaoInicializadaUid === user.uid) return;
     usuarioLogado = user;
     document.getElementById("displayEmail").textContent = user.email;
     const displayEmailHome = document.getElementById("displayEmailHome");
@@ -5080,13 +5225,16 @@ if (user) {
         senhaDoUsuario = sessionStorage.getItem("temp_key") || "";
     }
 
-    const snap = await getDoc(doc(db, "financas", user.uid));
+    const demoSalvo = modoDemoOnboarding ? sessionStorage.getItem(DEMO_ONBOARDING_KEY) : null;
+    const snap = modoDemoOnboarding
+        ? { exists: () => Boolean(demoSalvo), data: () => JSON.parse(demoSalvo) }
+        : await getDoc(doc(db, "financas", user.uid));
     if (snap.exists()) {
         try {
             // Comentario removido por encoding corrompido.
-            if (!senhaDoUsuario) throw new Error("Senha ausente");
+            if (!modoDemoOnboarding && !senhaDoUsuario) throw new Error("Senha ausente");
 
-            const res = await decryptData(snap.data(), senhaDoUsuario);
+            const res = modoDemoOnboarding ? snap.data() : await decryptData(snap.data(), senhaDoUsuario);
 
             // Comentario removido por encoding corrompido.
             dados = res.dados || {};
@@ -5104,16 +5252,23 @@ if (user) {
             normalizarDadosApp();
 
             // Comentario removido por encoding corrompido.
-            atualizarSeletorAnos();
             aplicarParcelas();
             renderCaixinhas(); // <--- RENDERIZANDO CAIXINHAS
         } catch (err) {
             console.error("Erro na descriptografia:", err);
             // Comentario removido por encoding corrompido.
-            signOut(auth);
+            if (!modoDemoOnboarding) signOut(auth);
             return;
         }
+    } else {
+        configuracoes.onboarding = { status: "pending", step: 0 };
+        configuracoes.nomeUsuario = modoDemoOnboarding ? "Usuário de teste" : sessionStorage.getItem("contas:cadastro-nome") || configuracoes.nomeUsuario || user.displayName || user.email?.split("@")[0] || "";
+        const agora = new Date();
+        garantirMesHome(agora.getFullYear(), agora.getMonth());
+        if (!await salvarFirebase()) throw new Error("Não foi possível iniciar o cadastro na nuvem.");
     }
+
+    atualizarSeletorAnos();
 
     // Comentario removido por encoding corrompido.
     atualizarSaudacao();
@@ -5131,21 +5286,38 @@ if (user) {
     renderContasFixas();
     renderReceitasFixas();
     renderLembretesHome();
-    if (!notasJaVistasNoNavegador()) {
+    const onboardingPendente = configuracoes.onboarding?.status === "pending";
+    if (onboardingPendente) {
+        window.location.hash = "#resumo";
+    } else if (!notasJaVistasNoNavegador() && configuracoes.onboarding?.status !== "complete") {
         window.location.hash = "#notas";
     }
     roteador();
     setAppCarregando(false);
+    if (onboardingPendente) iniciarOnboarding();
+    sessaoInicializadaUid = user.uid;
 
     const seletorTemaFooter = document.getElementById("cfgTemaFooter");
     if(seletorTemaFooter) seletorTemaFooter.value = configuracoes.tema || "planetario";
 
   } else {
+      sessaoInicializadaUid = null;
+      usuarioLogado = null;
+      document.getElementById("onboardingOverlay")?.remove();
       // Comentario removido por encoding corrompido.
       document.getElementById("authContainer").style.display = "flex";
       document.getElementById("appContainer").style.display = "none";
       setAppCarregando(false);
   }
+}
+
+onAuthStateChanged(auth, user => {
+    if (modoDemoOnboarding) return;
+    if (cadastroEmAndamento) return;
+    iniciarSessaoUsuario(user).catch(error => {
+        console.error("Erro ao iniciar sessão:", error);
+        setAppCarregando(false);
+    });
 });
 
 const seletorTemaFooter = document.getElementById("cfgTemaFooter");
@@ -5455,6 +5627,7 @@ document.getElementById("authForm").onsubmit = async (event) => {
     }
 };
 document.getElementById("cadastroBtn").onclick = async () => {
+    if (cadastroEmAndamento) return;
     const n = document.getElementById("cadastroNome").value.trim();
     const e = document.getElementById("email").value;
     const s = document.getElementById("senha").value;
@@ -5465,23 +5638,39 @@ document.getElementById("cadastroBtn").onclick = async () => {
     }
 
     try {
+        cadastroEmAndamento = true;
         senhaDoUsuario = s;
         setAppCarregando(true);
-        await createUserWithEmailAndPassword(auth, e, s);
+        const credencial = auth.currentUser && sessionStorage.getItem("contas:cadastro-pendente") === auth.currentUser.uid
+            ? { user: auth.currentUser }
+            : await createUserWithEmailAndPassword(auth, e, s);
         sessionStorage.setItem("temp_key", s);
+        sessionStorage.setItem("contas:cadastro-pendente", credencial.user.uid);
+        sessionStorage.setItem("contas:cadastro-nome", n);
 
-        // Comentario removido por encoding corrompido.
         configuracoes.nomeUsuario = n;
+        configuracoes.onboarding = { status: "pending", step: 0 };
         atualizarTituloSite();
 
-        await salvarFirebase();
+        usuarioLogado = credencial.user;
+        if (!await salvarFirebase()) throw new Error("Não foi possível salvar o cadastro.");
+        await iniciarSessaoUsuario(credencial.user);
     } catch (err) {
-        senhaDoUsuario = sessionStorage.getItem("temp_key") || "";
+        console.error("Erro ao cadastrar:", err);
         setAppCarregando(false);
-        alert("Erro ao cadastrar. Verifique os dados.");
+        alert("Não foi possível concluir o cadastro. Tente novamente.");
+    } finally {
+        cadastroEmAndamento = false;
     }
 };
-document.getElementById("logoutBtn").onclick = () => { signOut(auth); sessionStorage.clear(); location.reload(); };
+document.getElementById("logoutBtn").onclick = () => {
+    if (modoDemoOnboarding) {
+        sessionStorage.removeItem(DEMO_ONBOARDING_KEY);
+        location.href = location.pathname;
+        return;
+    }
+    signOut(auth); sessionStorage.clear(); location.reload();
+};
 document.getElementById("btnSettings").onclick = () => {
     window.location.hash = "#configuracoes";
     return;
@@ -6373,4 +6562,11 @@ if (btnSalvarCx) {
         document.getElementById("cxNome").value = "";
         document.getElementById("cxMeta").value = "";
     };
+}
+
+if (modoDemoOnboarding) {
+    iniciarSessaoUsuario(usuarioDemoOnboarding).catch(error => {
+        console.error("Erro ao abrir a prévia do onboarding:", error);
+        setAppCarregando(false);
+    });
 }

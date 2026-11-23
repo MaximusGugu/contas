@@ -281,3 +281,9 @@ body.theme-noite .calendar-mobile-range, body.theme-grayscale .calendar-mobile-r
 @media (prefers-reduced-motion: reduce) {
   #appShell *, .modal-overlay * { scroll-behavior: auto !important; transition: none !important; }
 }
+.onboarding-overlay .onboarding-dialog { max-width: 540px !important; }
+.onboarding-overlay .onboarding-fields { max-height: min(52dvh, 460px); }
+.onboarding-overlay .onboarding-row { flex-direction: column; align-items: stretch; }
+.onboarding-overlay .onboarding-row .onboarding-field { width: 100%; flex: none; }
+.onboarding-overlay .onboarding-remove { align-self: flex-end; }
+.onboarding-overlay .onboarding-actions button { flex: 1 1 auto; }

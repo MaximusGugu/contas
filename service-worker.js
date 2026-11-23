@@ -1,8 +1,8 @@
-const CACHE_VERSION = "contas-pwa-4.3.1-r3";
+const CACHE_VERSION = "contas-pwa-4.3.1-r4";
 const STATIC_CACHE = `${CACHE_VERSION}-static`;
 const RUNTIME_CACHE = `${CACHE_VERSION}-runtime`;
 const OFFLINE_URL = "offline.html";
-const APP_ASSET_VERSION = "4.3.1-r3";
+const APP_ASSET_VERSION = "4.3.1-r4";
 
 const APP_SHELL_ASSETS = [
   "./",
@@ -24,6 +24,7 @@ const APP_SHELL_ASSETS = [
   "src/modules/calendar.js",
   "src/modules/themes.js",
   "src/modules/mobile-shell.js",
+  "src/modules/onboarding.js",
   "src/state/state.js",
   "src/state/storage.js",
   "src/utils/dates.js",
